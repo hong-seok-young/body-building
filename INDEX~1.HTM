@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>식단 트래커</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1a1d21; --sub: #6b7280;
+    --line: #e5e7eb; --accent: #2563eb; --green: #16a34a; --red: #dc2626;
+    --kcal: #2563eb; --protein: #ef4444; --carb: #f59e0b; --fat: #8b5cf6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; background: var(--bg); color: var(--text); padding: 14px; max-width: 720px; margin: 0 auto; padding-bottom: 40px; }
+  h1 { font-size: 19px; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  h1 .status { font-size: 12px; font-weight: 500; color: var(--sub); }
+  h1 .gear { margin-left: auto; cursor: pointer; font-size: 18px; background: none; border: none; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .card h3 { font-size: 14px; margin-bottom: 10px; }
+  /* tabs */
+  .tabs { display: flex; background: #eceef1; border-radius: 10px; padding: 3px; margin-bottom: 12px; }
+  .tabs button { flex: 1; border: none; background: none; padding: 8px; font-size: 14px; border-radius: 8px; cursor: pointer; color: var(--sub); }
+  .tabs button.on { background: var(--card); color: var(--text); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  /* nav */
+  .nav { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px; }
+  .nav button { border: 1px solid var(--line); background: var(--card); border-radius: 8px; width: 32px; height: 32px; font-size: 15px; cursor: pointer; }
+  .nav .label { font-size: 15px; font-weight: 700; min-width: 150px; text-align: center; }
+  .nav input[type=date] { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 14px; background: var(--card); }
+  /* macro bars */
+  .macro { margin-bottom: 11px; }
+  .macro:last-child { margin-bottom: 0; }
+  .macro .row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+  .bar { height: 10px; background: #eef0f3; border-radius: 5px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 5px; transition: width .3s; }
+  .over { color: var(--red); font-weight: 700; }
+  .good { color: var(--green); font-weight: 700; }
+  .remain { color: var(--sub); }
+  /* ratio */
+  .ratio-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; font-size: 11px; color: #fff; margin-bottom: 6px; }
+  .ratio-bar div { display: flex; align-items: center; justify-content: center; min-width: 0; white-space: nowrap; }
+  .ratio-legend { font-size: 12px; color: var(--sub); }
+  /* form */
+  .addform { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 6px; }
+  .addform input { border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 14px; width: 100%; min-width: 0; }
+  .addform input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .addform button { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 0 14px; font-size: 14px; cursor: pointer; }
+  .hint { font-size: 11px; color: var(--sub); margin-top: 6px; }
+  @media (max-width: 560px) {
+    .addform { grid-template-columns: 1fr 1fr 1fr 1fr; }
+    .addform input:first-child { grid-column: 1 / -1; }
+    .addform button { grid-column: 1 / -1; padding: 10px; }
+  }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { border: 1px solid var(--line); background: var(--bg); border-radius: 16px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip .x { color: var(--sub); margin-left: 4px; }
+  /* table */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: right; font-size: 12px; color: var(--sub); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  td { padding: 8px 6px; text-align: right; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: none; }
+  td .del { border: none; background: none; color: var(--sub); cursor: pointer; font-size: 14px; }
+  td .del:hover { color: var(--red); }
+  .empty { text-align: center; color: var(--sub); padding: 18px 0; font-size: 14px; }
+  tfoot td { font-weight: 700; border-top: 2px solid var(--text); }
+  /* stats grid */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat { background: var(--bg); border-radius: 10px; padding: 10px; text-align: center; }
+  .stat b { display: block; font-size: 17px; margin-top: 2px; }
+  .stat span { font-size: 11px; color: var(--sub); }
+  @media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  /* modal */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: flex-start; justify-content: center; padding: 30px 14px; z-index: 10; overflow-y: auto; }
+  .overlay.show { display: flex; }
+  .modal { background: var(--card); border-radius: 14px; padding: 20px; width: 100%; max-width: 480px; }
+  .modal h2 { font-size: 17px; margin-bottom: 4px; }
+  .modal p { font-size: 13px; color: var(--sub); margin-bottom: 14px; }
+  .modal label { font-size: 12px; color: var(--sub); display: block; margin: 10px 0 4px; }
+  .modal input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 9px; font-size: 14px; }
+  .goalgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .modal .btns { display: flex; gap: 8px; margin-top: 16px; }
+  .modal .btns button { flex: 1; border-radius: 8px; padding: 10px; font-size: 14px; cursor: pointer; border: 1px solid var(--line); background: var(--card); }
+  .modal .btns .primary { background: var(--accent); color: #fff; border: none; }
+  .msg { font-size: 12px; margin-top: 8px; min-height: 16px; }
+  .msg.ok { color: var(--green); } .msg.err { color: var(--red); }
+  canvas { max-height: 260px; }
+  .syncbtn { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--sub); }
+</style>
+</head>
+<body>
+
+<h1>🥗 식단 트래커
+  <span class="status" id="statusEl"></span>
+  <button class="gear" onclick="openSettings()">⚙️</button>
+</h1>
+
+<div class="tabs">
+  <button id="tab-day" class="on" onclick="setView('day')">일간</button>
+  <button id="tab-week" onclick="setView('week')">주간</button>
+  <button id="tab-month" onclick="setView('month')">월간</button>
+</div>
+
+<!-- ===== 일간 ===== -->
+<div id="view-day">
+  <div class="nav">
+    <button onclick="moveDay(-1)">‹</button>
+    <input type="date" id="datePicker" onchange="curDate=this.value;render()">
+    <button onclick="moveDay(1)">›</button>
+  </div>
+
+  <div class="card" id="summaryCard"></div>
+
+  <div class="card">
+    <h3>탄단지 비율 <span style="font-weight:400;color:var(--sub);font-size:12px">(칼로리 기준)</span></h3>
+    <div id="ratioBox"></div>
+  </div>
+
+  <div class="card">
+    <form class="addform" onsubmit="addFood(event)">
+      <input id="fName" placeholder="음식명" required>
+      <input id="fKcal" type="number" step="any" min="0" placeholder="kcal" required>
+      <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
+      <input id="fC" type="number" step="any" min="0" placeholder="탄수g">
+      <input id="fF" type="number" step="any" min="0" placeholder="지방g">
+      <button type="submit">추가</button>
+    </form>
+    <div class="hint">새로 입력한 음식은 자주 먹는 음식에 자동 등록됩니다. 칩 클릭 = 바로 기록, × = 삭제</div>
+    <div class="presets" id="presetsEl"></div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>음식</th><th>kcal</th><th>단백질</th><th>탄수</th><th>지방</th><th></th></tr></thead>
+      <tbody id="logBody"></tbody>
+      <tfoot id="logFoot"></tfoot>
+    </table>
+    <div class="empty" id="emptyMsg">기록이 없어요</div>
+  </div>
+</div>
+
+<!-- ===== 주간 ===== -->
+<div id="view-week" style="display:none">
+  <div class="nav">
+    <button onclick="moveWeek(-1)">‹</button>
+    <span class="label" id="weekLabel"></span>
+    <button onclick="moveWeek(1)">›</button>
+  </div>
+  <div class="card"><canvas id="weekChart"></canvas></div>
+  <div class="card">
+    <h3>주간 평균 <span style="font-weight:400;color:var(--sub);font-size:12px">(기록한 날 기준)</span></h3>
+    <div class="stats" id="weekStats"></div>
+  </div>
+</div>
+
+<!-- ===== 월간 ===== -->
+<div id="view-month" style="display:none">
+  <div class="nav">
+    <button onclick="moveMonth(-1)">‹</button>
+    <span class="label" id="monthLabel"></span>
+    <button onclick="moveMonth(1)">›</button>
+  </div>
+  <div class="card"><canvas id="monthChart"></canvas></div>
+  <div class="card">
+    <h3>월간 요약</h3>
+    <div class="stats" id="monthStats"></div>
+  </div>
+</div>
+
+<!-- ===== 설정 모달 ===== -->
+<div class="overlay" id="settingsOverlay">
+  <div class="modal">
+    <h2>⚙️ 설정</h2>
+    <p>Google 시트에 연결하면 폰·컴퓨터 어디서든 같은 데이터를 봅니다.</p>
+    <label>Apps Script 웹앱 URL</label>
+    <input id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    <label>비밀키 (Code.gs의 SECRET과 동일하게)</label>
+    <input id="cfgSecret" placeholder="비밀키">
+    <label style="margin-top:16px">목표 (저장하면 모든 기기에 적용)</label>
+    <div class="goalgrid">
+      <div><label>kcal</label><input type="number" id="gKcal"></div>
+      <div><label>단백질g</label><input type="number" id="gP"></div>
+      <div><label>탄수g</label><input type="number" id="gC"></div>
+      <div><label>지방g</label><input type="number" id="gF"></div>
+    </div>
+    <div class="msg" id="cfgMsg"></div>
+    <div class="btns">
+      <button onclick="closeSettings()">닫기</button>
+      <button class="primary" onclick="saveSettings()">저장 & 연결 테스트</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================= 상태 =================
+const DEFAULT_GOALS = { kcal: 3100, p: 180, c: 390, f: 90 }; // 리컴프 기준
+const DEFAULT_PRESETS = [
+  { name: "현미밥 130g", kcal: 210, p: 3, c: 45, f: 1.8 },
+  { name: "닭다리살 100g", kcal: 115, p: 16, c: 8, f: 2.1 },
+  { name: "단백질쉐이크", kcal: 175, p: 18, c: 21, f: 1.9 },
+];
+function load(k, fb) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? fb; } catch { return fb; } }
+function save(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
+
+let cfg = load("dt_cfg", null);              // {url, secret}
+let cache = load("dt_cache", {});            // {"YYYY-MM-DD": [items]} — 키 존재 = 서버에서 받아옴
+let goals = load("dt_goals", DEFAULT_GOALS);
+let presets = load("dt_presets", DEFAULT_PRESETS);
+let pending = load("dt_pending", []);        // 오프라인 중 추가된 항목
+let view = "day";
+let curDate = todayStr();
+let curMonth = curDate.slice(0, 7);
+let weekChart = null, monthChart = null;
+
+// ================= 날짜 유틸 =================
+function todayStr(d = new Date()) {
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function addDays(ds, n) { const d = new Date(ds + "T00:00:00"); d.setDate(d.getDate() + n); return todayStr(d); }
+function weekStart(ds) { const d = new Date(ds + "T00:00:00"); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return todayStr(d); }
+function monthRange(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return [ym + "-01", ym + "-" + String(last).padStart(2, "0")];
+}
+function moveMonthStr(ym, n) { const [y, m] = ym.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); }
+
+// ================= API =================
+async function api(params) {
+  if (!cfg) throw new Error("no-config");
+  const res = await fetch(cfg.url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ ...params, secret: cfg.secret }),
+  });
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error || "api-error");
+  return j;
+}
+
+function setStatus(txt, color) {
+  statusEl.textContent = txt;
+  statusEl.style.color = color || "var(--sub)";
+}
+
+async function syncRange(from, to) {
+  const r = await api({ action: "list", from, to });
+  // 범위 내 모든 날짜를 '받아옴' 처리
+  for (let d = from; d <= to; d = addDays(d, 1)) cache[d] = [];
+  r.items.forEach(it => { (cache[it.date] = cache[it.date] || []).push(it); });
+  if (r.goals) { goals = r.goals; save("dt_goals", goals); }
+  if (r.presets) { presets = r.presets; save("dt_presets", presets); }
+  save("dt_cache", cache);
+}
+
+async function ensureRange(from, to) {
+  let missing = false;
+  for (let d = from; d <= to; d = addDays(d, 1)) if (!(d in cache)) { missing = true; break; }
+  if (missing) await syncRange(from, to);
+}
+
+async function flushPending() {
+  while (pending.length) {
+    const it = pending[0];
+    const r = await api({ action: "add", item: it });
+    // 임시 id를 실제 id로 교체
+    const list = cache[it.date] || [];
+    const idx = list.findIndex(x => x.id === it.tmpId);
+    if (idx >= 0) list[idx] = r.item;
+    pending.shift();
+    save("dt_pending", pending); save("dt_cache", cache);
+  }
+}
+
+async function fullSync() {
+  if (!cfg) { setStatus("설정 필요 → ⚙️", "var(--red)"); return; }
+  try {
+    setStatus("동기화 중…");
+    await flushPending();
+    await syncRange(addDays(todayStr(), -92), todayStr());
+    setStatus("● 동기화됨", "var(--green)");
+  } catch (e) {
+    setStatus("● 오프라인" + (pending.length ? ` (대기 ${pending.length}건)` : ""), "var(--red)");
+  }
+  render();
+}
+
+// ================= 기록 =================
+function dayLog(ds) { return cache[ds] || []; }
+const fmt = n => Math.round(n * 10) / 10;
+function totals(list) { return list.reduce((a, x) => ({ kcal:a.kcal+x.kcal, p:a.p+x.p, c:a.c+x.c, f:a.f+x.f }), {kcal:0,p:0,c:0,f:0}); }
+
+async function addFood(e) {
+  e.preventDefault();
+  const item = { date: curDate, name: fName.value.trim(), kcal:+fKcal.value||0, p:+fP.value||0, c:+fC.value||0, f:+fF.value||0 };
+  e.target.reset(); fName.focus();
+  await pushItem(item);
+  // 프리셋 자동 등록
+  if (!presets.some(x => x.name === item.name)) {
+    presets.unshift({ name:item.name, kcal:item.kcal, p:item.p, c:item.c, f:item.f });
+    if (presets.length > 14) presets.pop();
+    save("dt_presets", presets);
+    api({ action:"setMeta", key:"presets", value:presets }).catch(()=>{});
+  }
+  render();
+}
+
+async function pushItem(item) {
+  const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random()*1e5);
+  const local = { ...item, id: tmpId };
+  (cache[item.date] = cache[item.date] || []).push(local);
+  save("dt_cache", cache);
+  render();
+  try {
+    const r = await api({ action: "add", item });
+    const list = cache[item.date];
+    const idx = list.findIndex(x => x.id === tmpId);
+    if (idx >= 0) list[idx] = r.item;
+    save("dt_cache", cache);
+    setStatus("● 동기화됨", "var(--green)");
+  } catch (e) {
+    pending.push({ ...item, tmpId });
+    save("dt_pending", pending);
+    setStatus(`● 오프라인 (대기 ${pending.length}건)`, "var(--red)");
+  }
+}
+
+async function delItem(ds, id) {
+  const list = cache[ds] || [];
+  const idx = list.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  list.splice(idx, 1);
+  save("dt_cache", cache);
+  render();
+  if (String(id).startsWith("tmp-")) {
+    const pi = pending.findIndex(x => x.tmpId === id);
+    if (pi >= 0) { pending.splice(pi, 1); save("dt_pending", pending); }
+  } else {
+    api({ action: "del", id }).catch(() => setStatus("● 삭제 동기화 실패 — 새로고침 후 재시도", "var(--red)"));
+  }
+}
+
+function addPreset(i) { pushItem({ ...presets[i], date: curDate }); }
+function delPreset(i) {
+  presets.splice(i, 1); save("dt_presets", presets);
+  api({ action:"setMeta", key:"presets", value:presets }).catch(()=>{});
+  render();
+}
+
+// ================= 이동 =================
+function setView(v) {
+  view = v;
+  ["day","week","month"].forEach(x => {
+    document.getElementById("view-"+x).style.display = x === v ? "" : "none";
+    document.getElementById("tab-"+x).classList.toggle("on", x === v);
+  });
+  render();
+}
+function moveDay(n) { curDate = addDays(curDate, n); render(); }
+function moveWeek(n) { curDate = addDays(curDate, n * 7); render(); }
+async function moveMonth(n) {
+  curMonth = moveMonthStr(curMonth, n);
+  const [from, to] = monthRange(curMonth);
+  try { await ensureRange(from, to > todayStr() ? todayStr() : to); } catch(e) {}
+  render();
+}
+
+// ================= 렌더 =================
+function render() {
+  if (view === "day") renderDay();
+  else if (view === "week") renderWeek();
+  else renderMonth();
+}
+
+function renderDay() {
+  datePicker.value = curDate;
+  const t = totals(dayLog(curDate));
+
+  // 매크로 바
+  const rows = [
+    { label:"칼로리", val:t.kcal, goal:goals.kcal, unit:"kcal", color:"var(--kcal)", proteinLike:false },
+    { label:"단백질", val:t.p, goal:goals.p, unit:"g", color:"var(--protein)", proteinLike:true },
+    { label:"탄수화물", val:t.c, goal:goals.c, unit:"g", color:"var(--carb)", proteinLike:false },
+    { label:"지방", val:t.f, goal:goals.f, unit:"g", color:"var(--fat)", proteinLike:false },
+  ];
+  summaryCard.innerHTML = rows.map(r => {
+    const pct = r.goal ? Math.min(100, r.val / r.goal * 100) : 0;
+    const over = r.val - r.goal;
+    const status = over > 0
+      ? (r.proteinLike ? `<span class="good">달성 +${fmt(over)}${r.unit}</span>` : `<span class="over">${fmt(over)}${r.unit} 초과</span>`)
+      : `<span class="remain">${fmt(r.goal - r.val)}${r.unit} 남음</span>`;
+    const barColor = (over > 0 && !r.proteinLike) ? "var(--red)" : r.color;
+    return `<div class="macro">
+      <div class="row"><span><b>${r.label}</b> &nbsp;${fmt(r.val)} / ${r.goal}${r.unit}</span>${status}</div>
+      <div class="bar"><div style="width:${pct}%;background:${barColor}"></div></div>
+    </div>`;
+  }).join("");
+
+  // 탄단지 비율
+  const gk = goals.p*4 + goals.c*4 + goals.f*9;
+  const ideal = { p: goals.p*4/gk*100, c: goals.c*4/gk*100, f: goals.f*9/gk*100 };
+  const ak = t.p*4 + t.c*4 + t.f*9;
+  let actualBar;
+  if (ak > 0) {
+    const a = { p: t.p*4/ak*100, c: t.c*4/ak*100, f: t.f*9/ak*100 };
+    actualBar = `<div class="ratio-bar">
+      <div style="width:${a.c}%;background:var(--carb)">${a.c>=12?"탄 "+Math.round(a.c)+"%":""}</div>
+      <div style="width:${a.p}%;background:var(--protein)">${a.p>=12?"단 "+Math.round(a.p)+"%":""}</div>
+      <div style="width:${a.f}%;background:var(--fat)">${a.f>=12?"지 "+Math.round(a.f)+"%":""}</div>
+    </div>`;
+  } else {
+    actualBar = `<div class="ratio-bar" style="background:#eef0f3;color:var(--sub);align-items:center;justify-content:center">기록 없음</div>`;
+  }
+  ratioBox.innerHTML = actualBar +
+    `<div class="ratio-legend">목표 비율 — 탄 ${Math.round(ideal.c)}% : 단 ${Math.round(ideal.p)}% : 지 ${Math.round(ideal.f)}%</div>`;
+
+  // 프리셋
+  presetsEl.innerHTML = presets.map((x, i) =>
+    `<span class="chip" onclick="addPreset(${i})">${x.name} ${x.kcal}kcal<span class="x" onclick="event.stopPropagation();delPreset(${i})">×</span></span>`
+  ).join("");
+
+  // 기록 테이블
+  const list = dayLog(curDate);
+  emptyMsg.style.display = list.length ? "none" : "block";
+  logBody.innerHTML = list.map(x =>
+    `<tr><td>${x.name}</td><td>${fmt(x.kcal)}</td><td>${fmt(x.p)}</td><td>${fmt(x.c)}</td><td>${fmt(x.f)}</td>
+     <td><button class="del" onclick="delItem('${curDate}','${x.id}')">✕</button></td></tr>`
+  ).join("");
+  logFoot.innerHTML = list.length
+    ? `<tr><td>합계</td><td>${fmt(t.kcal)}</td><td>${fmt(t.p)}</td><td>${fmt(t.c)}</td><td>${fmt(t.f)}</td><td></td></tr>` : "";
+}
+
+function renderWeek() {
+  const start = weekStart(curDate);
+  const days = Array.from({length:7}, (_, i) => addDays(start, i));
+  weekLabel.textContent = `${start.slice(5).replace("-","/")} ~ ${days[6].slice(5).replace("-","/")}`;
+
+  const names = ["월","화","수","목","금","토","일"];
+  const kcals = days.map(d => totals(dayLog(d)).kcal);
+
+  if (weekChart) weekChart.destroy();
+  weekChart = new Chart(document.getElementById("weekChart"), {
+    type: "bar",
+    data: {
+      labels: names,
+      datasets: [{ label: "kcal", data: kcals.map(Math.round), backgroundColor: "#2563eb", borderRadius: 6 }],
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        annotation: undefined,
+      },
+      scales: { y: { beginAtZero: true, suggestedMax: goals.kcal * 1.2, grid: { color: "#eef0f3" } }, x: { grid: { display: false } } },
+    },
+  });
+
+  const logged = days.map(d => totals(dayLog(d))).filter(t => t.kcal > 0);
+  const n = logged.length || 1;
+  const avg = k => Math.round(logged.reduce((a, t) => a + t[k], 0) / n);
+  weekStats.innerHTML = logged.length ? `
+    <div class="stat"><span>평균 칼로리</span><b>${avg("kcal")}</b></div>
+    <div class="stat"><span>평균 단백질</span><b>${avg("p")}g</b></div>
+    <div class="stat"><span>평균 탄수</span><b>${avg("c")}g</b></div>
+    <div class="stat"><span>평균 지방</span><b>${avg("f")}g</b></div>
+  ` : `<div class="stat" style="grid-column:1/-1"><span>이번 주 기록 없음</span></div>`;
+}
+
+function renderMonth() {
+  const [from, to] = monthRange(curMonth);
+  monthLabel.textContent = curMonth.replace("-", "년 ") + "월";
+  const days = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
+  const dayTotals = days.map(d => totals(dayLog(d)));
+  const kcals = dayTotals.map(t => t.kcal ? Math.round(t.kcal) : null);
+
+  if (monthChart) monthChart.destroy();
+  monthChart = new Chart(document.getElementById("monthChart"), {
+    type: "line",
+    data: {
+      labels: days.map(d => +d.slice(8)),
+      datasets: [
+        { label: "kcal", data: kcals, borderColor: "#2563eb", backgroundColor: "#2563eb", spanGaps: true, tension: .3, pointRadius: 3 },
+        { label: "목표", data: days.map(() => goals.kcal), borderColor: "#d1d5db", borderDash: [6,4], pointRadius: 0 },
+      ],
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, grid: { color: "#eef0f3" } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } } },
+    },
+  });
+
+  const logged = dayTotals.filter(t => t.kcal > 0);
+  const n = logged.length || 1;
+  const avg = k => Math.round(logged.reduce((a, t) => a + t[k], 0) / n);
+  const onTarget = logged.filter(t => Math.abs(t.kcal - goals.kcal) <= goals.kcal * 0.1).length;
+  const proteinOk = logged.filter(t => t.p >= goals.p).length;
+  monthStats.innerHTML = logged.length ? `
+    <div class="stat"><span>기록한 날</span><b>${logged.length}일</b></div>
+    <div class="stat"><span>평균 칼로리</span><b>${avg("kcal")}</b></div>
+    <div class="stat"><span>칼로리 목표 ±10%</span><b>${onTarget}일</b></div>
+    <div class="stat"><span>단백질 목표 달성</span><b>${proteinOk}일</b></div>
+  ` : `<div class="stat" style="grid-column:1/-1"><span>이 달 기록 없음</span></div>`;
+}
+
+// ================= 설정 =================
+function openSettings() {
+  cfgUrl.value = cfg?.url || "";
+  cfgSecret.value = cfg?.secret || "";
+  gKcal.value = goals.kcal; gP.value = goals.p; gC.value = goals.c; gF.value = goals.f;
+  cfgMsg.textContent = ""; cfgMsg.className = "msg";
+  settingsOverlay.classList.add("show");
+}
+function closeSettings() { settingsOverlay.classList.remove("show"); }
+
+async function saveSettings() {
+  const newGoals = { kcal:+gKcal.value||0, p:+gP.value||0, c:+gC.value||0, f:+gF.value||0 };
+  goals = newGoals; save("dt_goals", goals);
+  const url = cfgUrl.value.trim(), secret = cfgSecret.value.trim();
+  if (!url) { cfgMsg.textContent = "URL을 입력하세요 (로컬 목표만 저장됨)"; cfgMsg.className = "msg err"; render(); return; }
+  cfg = { url, secret }; save("dt_cfg", cfg);
+  cfgMsg.textContent = "연결 테스트 중…"; cfgMsg.className = "msg";
+  try {
+    await api({ action: "setMeta", key: "goals", value: goals });
+    cfgMsg.textContent = "✓ 연결 성공! 데이터를 불러옵니다."; cfgMsg.className = "msg ok";
+    cache = {}; save("dt_cache", cache); // 전체 재동기화
+    await fullSync();
+    setTimeout(closeSettings, 800);
+  } catch (e) {
+    cfgMsg.textContent = "✗ 연결 실패: URL과 비밀키를 확인하세요. (" + e.message + ")"; cfgMsg.className = "msg err";
+  }
+  render();
+}
+
+// ================= 시작 =================
+render();
+if (!cfg) { setStatus("설정 필요 → ⚙️", "var(--red)"); openSettings(); }
+else fullSync();
+</script>
+</body>
+</html>
