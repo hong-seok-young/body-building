@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>식단 트래커</title>
+<title>바디빌딩 트래커</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root {
@@ -87,15 +87,34 @@
   .msg.ok { color: var(--green); } .msg.err { color: var(--red); }
   canvas { max-height: 260px; }
   .syncbtn { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--sub); }
+  /* section toggle */
+  .sections { display: flex; gap: 8px; margin-bottom: 12px; }
+  .sections button { flex: 1; border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 11px; font-size: 15px; font-weight: 700; color: var(--sub); cursor: pointer; }
+  .sections button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  /* inbody form */
+  .inform { display: flex; flex-direction: column; gap: 10px; }
+  .inrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .inrow label { font-size: 11px; color: var(--sub); display: flex; flex-direction: column; gap: 3px; }
+  .inrow input, .inform > input { border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 14px; width: 100%; min-width: 0; }
+  .inrow input:focus, .inform > input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .inform button { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 11px; font-size: 14px; cursor: pointer; }
+  @media (max-width: 560px) { .inrow { grid-template-columns: repeat(2, 1fr); } }
 </style>
 </head>
 <body>
 
-<h1>🥗 식단 트래커
+<h1>🏋️ 바디빌딩 트래커
   <span class="status" id="statusEl"></span>
   <button class="gear" onclick="openSettings()">⚙️</button>
 </h1>
 
+<div class="sections">
+  <button id="sec-diet" class="on" onclick="setSection('diet')">🥗 식단</button>
+  <button id="sec-inbody" onclick="setSection('inbody')">📊 인바디</button>
+</div>
+
+<!-- ===== 식단 섹션 ===== -->
+<div id="section-diet">
 <div class="tabs">
   <button id="tab-day" class="on" onclick="setView('day')">일간</button>
   <button id="tab-week" onclick="setView('week')">주간</button>
@@ -167,6 +186,50 @@
     <div class="stats" id="monthStats"></div>
   </div>
 </div>
+</div><!-- /section-diet -->
+
+<!-- ===== 인바디 섹션 ===== -->
+<div id="section-inbody" style="display:none">
+  <div class="card">
+    <h3>인바디 기록 추가</h3>
+    <form class="inform" onsubmit="addInbody(event)">
+      <div class="inrow">
+        <label>날짜<input type="date" id="ibDate"></label>
+        <label>체중 (kg)<input type="number" step="any" min="0" id="ibW" placeholder="필수" required></label>
+        <label>골격근량 (kg)<input type="number" step="any" min="0" id="ibS" placeholder="SMM"></label>
+        <label>체지방량 (kg)<input type="number" step="any" min="0" id="ibBfm"></label>
+        <label>체지방률 (%)<input type="number" step="any" min="0" id="ibPbf"></label>
+        <label>BMI<input type="number" step="any" min="0" id="ibBmi"></label>
+        <label>기초대사량<input type="number" step="any" min="0" id="ibBmr" placeholder="kcal·선택"></label>
+        <label>인바디 점수<input type="number" step="any" min="0" id="ibScore" placeholder="선택"></label>
+      </div>
+      <input id="ibNote" placeholder="메모 (선택)">
+      <button type="submit">기록 추가</button>
+    </form>
+    <div class="hint">인바디 측정할 때마다 한 줄씩 기록하면 아래에 변화 추세가 그래프로 보여요. 체중만 필수, 나머지는 있는 것만 입력해도 돼요.</div>
+  </div>
+
+  <div class="card" id="ibLatest"></div>
+
+  <div class="card">
+    <h3>체성분 추세 <span style="font-weight:400;color:var(--sub);font-size:12px">(체중·골격근량·체지방량 kg)</span></h3>
+    <canvas id="ibChart1"></canvas>
+    <div class="empty" id="ibChartEmpty">기록이 없어요</div>
+  </div>
+
+  <div class="card">
+    <h3>체지방률 · BMI 추세</h3>
+    <canvas id="ibChart2"></canvas>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방</th><th>체지방률</th><th>BMI</th><th></th></tr></thead>
+      <tbody id="ibBody"></tbody>
+    </table>
+    <div class="empty" id="ibTableEmpty">기록이 없어요</div>
+  </div>
+</div>
 
 <!-- ===== 설정 모달 ===== -->
 <div class="overlay" id="settingsOverlay">
@@ -212,6 +275,10 @@ let view = "day";
 let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
 let weekChart = null, monthChart = null;
+let inbody = load("dt_inbody", []);          // 인바디 기록 배열
+let ibPending = load("dt_ib_pending", []);   // 오프라인 중 추가된 인바디
+let section = "diet";
+let ibChart1 = null, ibChart2 = null;
 
 // ================= 날짜 유틸 =================
 function todayStr(d = new Date()) {
@@ -278,13 +345,36 @@ async function fullSync() {
   try {
     setStatus("동기화 중…");
     await flushPending();
+    await flushIbPending();
     await syncRange(addDays(todayStr(), -92), todayStr());
+    await syncInbody();
     setStatus("● 동기화됨", "var(--green)");
   } catch (e) {
-    setStatus("● 오프라인" + (pending.length ? ` (대기 ${pending.length}건)` : ""), "var(--red)");
+    const waiting = pending.length + ibPending.length;
+    setStatus("● 오프라인" + (waiting ? ` (대기 ${waiting}건)` : ""), "var(--red)");
   }
   render();
 }
+
+// ================= 인바디 동기화 =================
+async function syncInbody() {
+  const r = await api({ action: "list", type: "inbody", from: "2000-01-01", to: todayStr() });
+  inbody = (r.items || []).slice().sort(cmpDate);
+  save("dt_inbody", inbody);
+}
+
+async function flushIbPending() {
+  while (ibPending.length) {
+    const it = ibPending[0];
+    const r = await api({ action: "add", type: "inbody", item: it });
+    const idx = inbody.findIndex(x => x.id === it.tmpId);
+    if (idx >= 0) inbody[idx] = r.item; else inbody.push(r.item);
+    ibPending.shift();
+    save("dt_ib_pending", ibPending); save("dt_inbody", inbody);
+  }
+}
+
+function cmpDate(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }
 
 // ================= 기록 =================
 function dayLog(ds) { return cache[ds] || []; }
@@ -349,6 +439,14 @@ function delPreset(i) {
 }
 
 // ================= 이동 =================
+function setSection(s) {
+  section = s;
+  document.getElementById("section-diet").style.display = s === "diet" ? "" : "none";
+  document.getElementById("section-inbody").style.display = s === "inbody" ? "" : "none";
+  document.getElementById("sec-diet").classList.toggle("on", s === "diet");
+  document.getElementById("sec-inbody").classList.toggle("on", s === "inbody");
+  render();
+}
 function setView(v) {
   view = v;
   ["day","week","month"].forEach(x => {
@@ -368,6 +466,7 @@ async function moveMonth(n) {
 
 // ================= 렌더 =================
 function render() {
+  if (section === "inbody") { renderInbody(); return; }
   if (view === "day") renderDay();
   else if (view === "week") renderWeek();
   else renderMonth();
@@ -501,6 +600,140 @@ function renderMonth() {
     <div class="stat"><span>칼로리 목표 ±10%</span><b>${onTarget}일</b></div>
     <div class="stat"><span>단백질 목표 달성</span><b>${proteinOk}일</b></div>
   ` : `<div class="stat" style="grid-column:1/-1"><span>이 달 기록 없음</span></div>`;
+}
+
+// ================= 인바디 =================
+async function addInbody(e) {
+  e.preventDefault();
+  const item = {
+    date: ibDate.value || todayStr(),
+    weight: +ibW.value || 0, smm: +ibS.value || 0, bfm: +ibBfm.value || 0,
+    pbf: +ibPbf.value || 0, bmi: +ibBmi.value || 0, bmr: +ibBmr.value || 0,
+    score: +ibScore.value || 0, note: ibNote.value.trim(),
+  };
+  ibW.value = ibS.value = ibBfm.value = ibPbf.value = ibBmi.value = ibBmr.value = ibScore.value = ibNote.value = "";
+  const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5);
+  inbody.push({ ...item, id: tmpId });
+  inbody.sort(cmpDate);
+  save("dt_inbody", inbody);
+  render();
+  try {
+    const r = await api({ action: "add", type: "inbody", item });
+    const idx = inbody.findIndex(x => x.id === tmpId);
+    if (idx >= 0) inbody[idx] = r.item;
+    save("dt_inbody", inbody);
+    setStatus("● 동기화됨", "var(--green)");
+  } catch (err) {
+    ibPending.push({ ...item, tmpId });
+    save("dt_ib_pending", ibPending);
+    setStatus(`● 오프라인 (대기 ${pending.length + ibPending.length}건)`, "var(--red)");
+  }
+}
+
+async function delInbodyRec(id) {
+  const idx = inbody.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  inbody.splice(idx, 1);
+  save("dt_inbody", inbody);
+  render();
+  if (String(id).startsWith("tmp-")) {
+    const pi = ibPending.findIndex(x => x.tmpId === id);
+    if (pi >= 0) { ibPending.splice(pi, 1); save("dt_ib_pending", ibPending); }
+  } else {
+    api({ action: "del", type: "inbody", id }).catch(() => setStatus("● 삭제 동기화 실패 — 새로고침 후 재시도", "var(--red)"));
+  }
+}
+
+function renderInbody() {
+  if (!ibDate.value) ibDate.value = todayStr();
+  const recs = inbody.slice().sort(cmpDate);
+
+  // 최근 측정 요약 (직전 대비 증감)
+  if (recs.length) {
+    const cur = recs[recs.length - 1], prev = recs[recs.length - 2];
+    const tiles = [
+      { key: "weight", label: "체중", unit: "kg", dir: "neutral" },
+      { key: "smm", label: "골격근량", unit: "kg", dir: "up" },
+      { key: "bfm", label: "체지방량", unit: "kg", dir: "down" },
+      { key: "pbf", label: "체지방률", unit: "%", dir: "down" },
+      { key: "bmi", label: "BMI", unit: "", dir: "down" },
+      { key: "score", label: "인바디점수", unit: "", dir: "up" },
+    ].filter(t => cur[t.key] > 0 || t.key === "weight");
+    ibLatest.innerHTML =
+      `<h3>최근 측정 <span style="font-weight:400;color:var(--sub);font-size:12px">(${cur.date}${prev ? " · 직전 대비" : ""})</span></h3>
+       <div class="stats">` +
+      tiles.map(t => {
+        let delta = "";
+        if (prev && prev[t.key] > 0 && cur[t.key] > 0) {
+          const d = fmt(cur[t.key] - prev[t.key]);
+          if (d !== 0) {
+            const good = t.dir === "up" ? d > 0 : t.dir === "down" ? d < 0 : null;
+            const color = good === null ? "var(--sub)" : good ? "var(--green)" : "var(--red)";
+            delta = `<span style="font-size:11px;font-weight:700;color:${color}"> ${d > 0 ? "▲" : "▼"}${fmt(Math.abs(d))}</span>`;
+          }
+        }
+        return `<div class="stat"><span>${t.label}</span><b>${fmt(cur[t.key])}${t.unit}${delta}</b></div>`;
+      }).join("") + `</div>`;
+  } else {
+    ibLatest.innerHTML = `<div class="empty">아직 인바디 기록이 없어요. 위에서 첫 기록을 추가해봐요.</div>`;
+  }
+
+  // 그래프
+  const labels = recs.map(r => r.date.slice(5).replace("-", "/"));
+  ibChartEmpty.style.display = recs.length ? "none" : "block";
+  document.getElementById("ibChart1").style.display = recs.length ? "" : "none";
+  document.getElementById("ibChart2").style.display = recs.length ? "" : "none";
+  drawIbChart1(labels, recs);
+  drawIbChart2(labels, recs);
+
+  // 표 (최근순)
+  const rev = recs.slice().reverse();
+  ibTableEmpty.style.display = rev.length ? "none" : "block";
+  ibBody.innerHTML = rev.map(r => `<tr>
+    <td>${r.date.slice(2)}</td>
+    <td>${r.weight ? fmt(r.weight) : "-"}</td>
+    <td>${r.smm ? fmt(r.smm) : "-"}</td>
+    <td>${r.bfm ? fmt(r.bfm) : "-"}</td>
+    <td>${r.pbf ? fmt(r.pbf) : "-"}</td>
+    <td>${r.bmi ? fmt(r.bmi) : "-"}</td>
+    <td><button class="del" onclick="delInbodyRec('${r.id}')">✕</button></td></tr>`).join("");
+}
+
+function ibDataset(recs, key, color) {
+  return { label: key, data: recs.map(r => r[key] || null), borderColor: color, backgroundColor: color, spanGaps: true, tension: .3, pointRadius: 3 };
+}
+
+function drawIbChart1(labels, recs) {
+  if (ibChart1) { ibChart1.destroy(); ibChart1 = null; }
+  if (!recs.length) return;
+  ibChart1 = new Chart(document.getElementById("ibChart1"), {
+    type: "line",
+    data: { labels, datasets: [
+      { ...ibDataset(recs, "weight", "#2563eb"), label: "체중" },
+      { ...ibDataset(recs, "smm", "#16a34a"), label: "골격근량" },
+      { ...ibDataset(recs, "bfm", "#f59e0b"), label: "체지방량" },
+    ] },
+    options: {
+      plugins: { legend: { display: true, position: "bottom" } },
+      scales: { y: { grid: { color: "#eef0f3" } }, x: { grid: { display: false } } },
+    },
+  });
+}
+
+function drawIbChart2(labels, recs) {
+  if (ibChart2) { ibChart2.destroy(); ibChart2 = null; }
+  if (!recs.length) return;
+  ibChart2 = new Chart(document.getElementById("ibChart2"), {
+    type: "line",
+    data: { labels, datasets: [
+      { ...ibDataset(recs, "pbf", "#ef4444"), label: "체지방률(%)" },
+      { ...ibDataset(recs, "bmi", "#8b5cf6"), label: "BMI" },
+    ] },
+    options: {
+      plugins: { legend: { display: true, position: "bottom" } },
+      scales: { y: { grid: { color: "#eef0f3" } }, x: { grid: { display: false } } },
+    },
+  });
 }
 
 // ================= 설정 =================
