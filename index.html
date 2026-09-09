@@ -292,27 +292,36 @@
           <input id="fC" type="number" step="any" min="0" placeholder="탄수g">
           <input id="fF" type="number" step="any" min="0" placeholder="지방g">
           <input id="fNa" type="number" step="any" min="0" placeholder="나트륨mg">
-          <input id="fFib" type="number" step="any" min="0" placeholder="섬유g">
+          <input id="fSug" type="number" step="any" min="0" placeholder="당류g">
         </div>
+        <div class="nums" id="fMore" style="display:none">
+          <input id="fFib" type="number" step="any" min="0" placeholder="식이섬유g">
+          <input id="fSat" type="number" step="any" min="0" placeholder="포화지방g">
+          <input id="fTrans" type="number" step="any" min="0" placeholder="트랜스지방g">
+          <input id="fChol" type="number" step="any" min="0" placeholder="콜레스테롤mg">
+        </div>
+        <button type="button" class="btn" id="fMoreBtn" style="grid-column:1/-1" onclick="toggleMore()">＋ 상세 (식이섬유·포화·트랜스·콜레스테롤)</button>
         <button type="submit">추가</button>
       </form>
-      <div class="fields" style="margin-top:11px">
-        <input id="dbQ" placeholder="🔍 식약처 DB에서 제품 검색 (예: 닭가슴살)"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();dbSearch();}">
-      </div>
       <div class="btns mt">
-        <button class="btn" type="button" onclick="dbSearch()">식약처 검색</button>
-        <button class="btn" type="button" onclick="foodPhoto.click()">📷 영양정보표 촬영</button>
+        <button class="btn" type="button" onclick="dbSearch()">🌐 인터넷에서 찾기</button>
+        <button class="btn" type="button" onclick="foodPhoto.click()">📷 라벨 촬영</button>
+        <button class="btn" type="button" onclick="barPhoto.click()">📷 바코드</button>
+      </div>
+      <div class="btns" style="margin-top:7px">
+        <button class="btn dash" type="button" onclick="openImport()">📋 다른 앱에서 음식 목록 한꺼번에 가져오기</button>
       </div>
       <input type="file" id="foodPhoto" accept="image/*" capture="environment" hidden onchange="readPhoto(this,'label')">
+      <input type="file" id="barPhoto" accept="image/*" capture="environment" hidden onchange="readBarcode(this)">
       <div class="msg" id="foodOcrMsg"></div>
-      <div class="presets" id="dbResults"></div>
       <div class="hint">새로 넣은 음식은 아래에 자동 등록됩니다. 칩을 누르면 위에서 고른 끼니로 바로 기록돼요.</div>
       <div class="fields" style="margin-top:11px">
-        <input id="presetQ" placeholder="🔍 등록한 음식 검색 (제품명)" oninput="presetQ=this.value;renderPresets()">
+        <input id="foodQ" placeholder="🔍 음식 검색 — 아몬드, 계란, 현미밥…" oninput="presetQ=this.value;renderPresets()"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();dbSearch();}">
       </div>
       <div class="presets" id="presetsEl"></div>
       <div class="hint" id="presetCount"></div>
+      <div class="presets" id="dbResults"></div>
     </div>
   </div>
 
@@ -462,6 +471,28 @@
   <button id="sec-inbody" onclick="setSection('inbody')"><i>📊</i>인바디</button>
 </nav>
 
+<!-- 음식 목록 가져오기 -->
+<div class="overlay" id="importOverlay">
+  <div class="modal">
+    <h2>📋 음식 목록 가져오기</h2>
+    <p>팻시크릿 같은 앱에 이미 등록해둔 음식을 한 번에 옮깁니다. 화면을 캡처해서 올리거나, 텍스트를 그대로 붙여넣으세요.</p>
+    <div class="btns">
+      <button class="btn" onclick="impPhoto.click()">📷 화면 캡처 올리기</button>
+    </div>
+    <input type="file" id="impPhoto" accept="image/*" hidden onchange="runImport(this)">
+    <label style="margin-top:14px">또는 텍스트 붙여넣기</label>
+    <textarea id="impText" rows="7" placeholder="서동물산 서동 맛에반했닭 양념치킨맛  x3 = 678&#10;양반 현미밥  x3 = 630&#10;고등어구이 300g  569&#10;..."
+      style="width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--card);color:var(--text);font-family:inherit"></textarea>
+    <div class="btns mt"><button class="btn pri" onclick="runImport()">텍스트에서 읽기</button></div>
+    <div class="msg" id="impMsg"></div>
+    <div class="presets" id="impResults"></div>
+    <div class="btns mt">
+      <button class="btn" onclick="closeImport()">닫기</button>
+      <button class="btn ok" id="impSaveBtn" onclick="saveImported()" style="display:none">전부 등록</button>
+    </div>
+  </div>
+</div>
+
 <!-- 설정 -->
 <div class="overlay" id="settingsOverlay">
   <div class="modal">
@@ -479,6 +510,10 @@
       <label>지방g<input type="number" id="gF"></label>
       <label>나트륨mg 상한<input type="number" id="gNa"></label>
       <label>식이섬유g 하한<input type="number" id="gFib"></label>
+      <label>당류g 상한<input type="number" id="gSug"></label>
+      <label>포화지방g 상한<input type="number" id="gSat"></label>
+      <label>트랜스지방g 상한<input type="number" id="gTrans"></label>
+      <label>콜레스테롤mg 상한<input type="number" id="gChol"></label>
     </div>
     <label style="margin-top:16px">다른 기기로 옮기기 — 링크를 열면 위 두 칸이 자동으로 채워집니다</label>
     <div class="btns">
@@ -500,7 +535,8 @@
 
 <script>
 // ═════════ 기본값 ═════════
-const KEYS = ["kcal", "p", "c", "f", "na", "fib", "sug"];
+// 한국 영양성분표 의무 9종 + 식이섬유
+const KEYS = ["kcal", "p", "c", "f", "na", "fib", "sug", "sat", "trans", "chol"];
 const MEALS = ["아침", "점심", "저녁", "간식"];
 const MEAL_COLOR = { "아침": "#f59e0b", "점심": "#2563eb", "저녁": "#fb923c", "간식": "#8b5cf6" };
 const MEAL_ICON = { "아침": "🌅", "점심": "☀️", "저녁": "🌆", "간식": "🌙" };
@@ -511,7 +547,9 @@ const STEP_K = 0.0004;                              // kcal / 보 / 체중kg  (3
 const LIFT_K = 2.75;                                // kcal / 체중kg / 시간 (1.5h·99kg ≈ 408kcal)
 const CARDIO_K = { "저": 4.0, "중": 6.0, "고": 8.0 };  // kcal / 체중kg / 시간 (0.5h·99kg 중강도 ≈ 297kcal)
 
-const DEFAULT_GOALS = { kcal: 2600, p: 195, c: 293, f: 72, na: 2000, fib: 30 };
+// na/sug/sat/trans/chol 은 상한, fib 는 하한 (1일 영양성분 기준치 기반)
+const DEFAULT_GOALS = { kcal: 2600, p: 195, c: 293, f: 72,
+                        na: 2000, fib: 30, sug: 50, sat: 15, trans: 2, chol: 300 };
 const DEFAULT_CALC = {
   af: 1.18, steps: 3000,
   wH: 2, wD: 5,
@@ -532,6 +570,68 @@ const DEFAULT_PRESETS = [
   { name: "귀리 80g", kcal: 304, p: 10.4, c: 52.8, f: 5.6, na: 2, fib: 8, sug: 0.8 },
   { name: "고구마 200g", kcal: 172, p: 2, c: 40, f: 0.2, na: 20, fib: 4.6, sug: 8 },
 ];
+// 자연식품·기본식품 성분표 (국가표준식품성분표·USDA 기준 평균값)
+// [이름, kcal, 단백질g, 탄수g, 지방g, 나트륨mg, 식이섬유g, 당g]
+// 가공식품은 제품마다 다르므로 여기 넣지 않는다 — 라벨 촬영/바코드를 쓴다
+const FOOD_DB_RAW = [
+  ["── 단백질"],
+  ["닭가슴살 100g (생)",        165, 31.0,  0,    3.6,  74,  0,   0],
+  ["닭다리살 순살 100g (생)",    119, 19.7,  0,    4.1,  86,  0,   0],
+  ["소고기 우둔살 100g (생)",    135, 22.0,  0,    4.6,  55,  0,   0],
+  ["돼지 안심 100g (생)",        143, 21.0,  0,    5.5,  50,  0,   0],
+  ["계란 1개 (50g)",             72,  6.3,  0.4,  4.8,  71,  0,   0.2],
+  ["계란 흰자 1개 (33g)",        17,  3.6,  0.2,  0.1,  55,  0,   0.2],
+  ["고등어 100g (생)",           205, 18.6,  0,   13.9, 83,  0,   0],
+  ["연어 100g (생)",             208, 20.4,  0,   13.4, 59,  0,   0],
+  ["참치캔 기름제거 100g",       116, 25.5,  0,    0.8, 320, 0,   0],
+  ["두부 100g",                  76,  8.1,  1.9,  4.8,  12,  0.4, 0.6],
+  ["그릭요거트 무가당 100g",      59, 10.2,  3.6,  0.4,  36,  0,   3.2],
+  ["우유 200ml",                122,  6.6,  9.6,  6.6,  90,  0,   9.6],
+  ["── 탄수화물"],
+  ["백미밥 100g (익힌)",        130,  2.7, 28.2,  0.3,   1,  0.4, 0],
+  ["백미밥 210g (공기)",        273,  5.7, 59.2,  0.6,   2,  0.8, 0],
+  ["현미밥 100g (익힌)",        112,  2.6, 23.0,  0.9,   3,  1.8, 0],
+  ["고구마 100g (생)",           86,  1.6, 20.1,  0.1,  55,  3.0, 4.2],
+  ["감자 100g (생)",             77,  2.0, 17.5,  0.1,   6,  2.2, 0.8],
+  ["귀리 오트밀 100g (건조)",   379, 13.2, 67.7,  6.5,   6, 10.1, 0.8],
+  ["식빵 1장 (30g)",             79,  2.7, 14.7,  1.0, 147,  0.8, 1.5],
+  ["바나나 1개 (118g)",         105,  1.3, 27.0,  0.4,   1,  3.1, 14.4],
+  ["── 지방·견과"],
+  ["아몬드 1알 (1.2g)",           7,  0.25, 0.26, 0.60,  0,  0.15, 0.05],
+  ["아몬드 100g",               579, 21.2, 21.6, 49.9,   1, 12.5, 4.4],
+  ["호두 1알 (4g)",              26,  0.6,  0.5,  2.6,   0,  0.3,  0.1],
+  ["땅콩 100g",                 567, 25.8, 16.1, 49.2,  18,  8.5,  4.7],
+  ["땅콩버터 1큰술 (16g)",       94,  3.6,  3.2,  8.0,  76,  0.8,  1.5],
+  ["올리브유 1큰술 (14g)",      119,  0,    0,   13.5,   0,  0,    0],
+  ["아보카도 1개 (136g)",       227,  2.7, 11.7, 20.9,  10,  9.2,  0.9],
+  ["── 내가 먹는 제품 (팻시크릿 기록에서 옮김)"],
+  ["서동 반했닭 양념치킨맛 1개 100g",  113, 16.0,  7.0,  2.3, 552, 0,   1],
+  ["서동 반했닭 왕갈비맛 1개 100g",    115, 16.0,  8.0,  2.1, 552, 0,   1],
+  ["양반 현미밥 130g",                210,  3.0, 45.0,  1.8,  15, 1.5, 0],
+  ["BSN 아이솔레이트 1스쿱 38g",       140, 25.0,  6.0,  2.0, 135, 0,   2],
+  ["BSN 신타6 엣지 스트로베리 1스쿱",   156, 24.0,  6.0,  4.0, 135, 0,   3],
+  ["커클랜드 프로틴바 쿠키도우 1개 60g", 220, 21.0, 24.0,  7.0, 140, 8,   2],
+  ["풀무원 요프로 블루베리 1개 150g",   105, 13.5, 12.0,  0.0,  60, 0,   8],
+  ["치킨마요 132g",                   205,  9.9, 26.4,  6.6, 500, 1,   3],
+  ["쌀국수 600g",                     580, 40.0, 40.0, 15.0, 1800, 2,  4],
+  ["고등어구이 300g",                 569, 52.8,  1.1, 37.8, 400, 0,   0],
+  ["잡곡밥 200g",                     325,  8.4, 70.2,  1.9,   5, 3.0, 0],
+  ["아몬드 15개",                     104,  3.8,  3.6,  9.1,   0, 2.3, 0.8],
+  ["── 채소·과일"],
+  ["브로콜리 100g",              34,  2.8,  6.6,  0.4,  33,  2.6,  1.7],
+  ["양배추 100g",                25,  1.3,  5.8,  0.1,  18,  2.5,  3.2],
+  ["파프리카 100g",              31,  1.0,  6.0,  0.3,   4,  2.1,  4.2],
+  ["시금치 100g",                23,  2.9,  3.6,  0.4,  79,  2.2,  0.4],
+  ["토마토 1개 (123g)",          22,  1.1,  4.8,  0.2,   6,  1.5,  3.2],
+  ["방울토마토 100g",            18,  0.9,  3.9,  0.2,   5,  1.2,  2.6],
+  ["오이 1개 (200g)",            30,  1.3,  7.2,  0.2,   4,  1.0,  3.4],
+  ["김치 100g",                  15,  1.1,  2.4,  0.5, 600,  1.6,  1.1],
+  ["사과 1개 (200g)",           104,  0.5, 27.6,  0.3,   2,  4.8, 20.8],
+  ["블루베리 100g",              57,  0.7, 14.5,  0.3,   1,  2.4, 10.0],
+];
+const FOOD_DB = FOOD_DB_RAW.filter(r => r.length > 1).map(r =>
+  ({ name: r[0], kcal: r[1], p: r[2], c: r[3], f: r[4], na: r[5], fib: r[6], sug: r[7] }));
+
 const MEAL_SET = [
   { name: "서동 닭다리살 1개", kcal: 115, p: 16, c: 8, f: 2.1, na: 552, fib: 0, sug: 1 },
   { name: "서동 닭다리살 1개", kcal: 115, p: 16, c: 8, f: 2.1, na: 552, fib: 0, sug: 1 },
@@ -697,11 +797,17 @@ function totals(list) {
   list.forEach(x => KEYS.forEach(k => a[k] += (+x[k] || 0)));
   return a;
 }
+function toggleMore() {
+  const on = fMore.style.display === "none";
+  fMore.style.display = on ? "grid" : "none";
+  fMoreBtn.textContent = on ? "− 상세 접기" : "＋ 상세 (식이섬유·포화·트랜스·콜레스테롤)";
+}
 async function addFood(e) {
   e.preventDefault();
   const meal = fMeal.value;
   const item = { date: curDate, meal, name: fName.value.trim(), kcal: +fKcal.value || 0, p: +fP.value || 0,
-    c: +fC.value || 0, f: +fF.value || 0, na: +fNa.value || 0, fib: +fFib.value || 0, sug: 0 };
+    c: +fC.value || 0, f: +fF.value || 0, na: +fNa.value || 0, sug: +fSug.value || 0,
+    fib: +fFib.value || 0, sat: +fSat.value || 0, trans: +fTrans.value || 0, chol: +fChol.value || 0 };
   e.target.reset(); fMeal.value = meal; fName.focus();
   await pushItem(item);
   if (!presets.some(x => x.name === item.name)) {
@@ -955,7 +1061,7 @@ function renderDay() {
       </div>
       ${items.length ? `<div class="meal-sub">지방 <b>${fmt(mt.f)}</b> · 탄수 <b>${fmt(mt.c)}</b> · 단백질 <b>${fmt(mt.p)}</b> · 나트륨 <b>${num(mt.na)}</b>mg</div>` : ""}
       ${open ? items.map(x => `<div class="mrow">
-        <span class="nm">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · 나트륨 " + num(x.na) + "mg" : ""}</small></span>
+        <span class="nm">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · Na " + num(x.na) : ""}${+x.sug ? " · 당 " + fmt(x.sug) : ""}${+x.sat ? " · 포화 " + fmt(x.sat) : ""}</small></span>
         <span class="kc">${num(x.kcal)}</span>
         <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button></div>`).join("")
         + `<div class="meal-act">
@@ -985,15 +1091,21 @@ function renderDay() {
 
   // 영양소
   const cls = s => s === "bad" ? ' class="over"' : s === "good" ? ' class="good"' : "";
+  const cap = (k, unit, dec) => [t[k] > goals[k] ? "bad" : t[k] ? "good" : null,
+    `${dec ? fmt(t[k]) : num(t[k])} / ${dec ? goals[k] : num(goals[k])} ${unit}`];
+  const naR = cap("na", "mg"), sugR = cap("sug", "g", 1), satR = cap("sat", "g", 1),
+        trR = cap("trans", "g", 1), chR = cap("chol", "mg");
   nutEl.innerHTML = [
     ["칼로리", `${num(t.kcal)} / ${num(g.kcal)} kcal`, null],
     ["단백질", `${fmt(t.p)} / ${g.p} g`, t.p >= g.p ? "good" : null],
     ["탄수화물", `${fmt(t.c)} / ${g.c} g`, null],
     ["지방", `${fmt(t.f)} / ${g.f} g`, null],
-    ["나트륨 (상한)", `${num(t.na)} / ${num(goals.na)} mg`, t.na > goals.na ? "bad" : t.na ? "good" : null],
+    ["나트륨 (상한)", naR[1], naR[0]],
+    ["당류 (상한)", sugR[1], sugR[0]],
+    ["포화지방 (상한)", satR[1], satR[0]],
+    ["트랜스지방 (상한)", trR[1], trR[0]],
+    ["콜레스테롤 (상한)", chR[1], chR[0]],
     ["식이섬유 (하한)", `${fmt(t.fib)} / ${goals.fib} g`, t.fib >= goals.fib ? "good" : t.fib ? "bad" : null],
-    ["당", `${fmt(t.sug)} g`, null],
-    ["기록 항목", `${list.length}개`, null],
   ].map(([l, v, s]) => `<div><span class="lbl">${l}</span><span${cls(s)}>${v}</span></div>`).join("");
 
   if (!fMeal.options.length) fMeal.innerHTML = MEALS.map(m => `<option>${m}</option>`).join("");
@@ -1003,12 +1115,21 @@ function renderDay() {
 }
 function renderPresets() {
   const q = presetQ.trim().toLowerCase();
-  const hit = presets.map((x, i) => [x, i]).filter(([x]) => !q || x.name.toLowerCase().includes(q));
-  presetsEl.innerHTML = hit.slice(0, 60).map(([x, i]) =>
-    `<span class="chip" onclick="addPreset(${i})">${esc(x.name)} ${x.kcal}<span class="x" onclick="event.stopPropagation();delPreset(${i})">×</span></span>`).join("")
-    || `<span class="hint">검색 결과 없음 — 위에서 직접 추가하면 자동 등록됩니다.</span>`;
-  presetCount.textContent = q ? `${hit.length}개 / 전체 ${presets.length}개` : `등록된 음식 ${presets.length}개`;
+  const mine = presets.map((x, i) => [x, i]).filter(([x]) => !q || x.name.toLowerCase().includes(q));
+  // 검색어가 있을 때만 내장 DB 를 같이 보여준다 (평소엔 자주 먹는 것만 깔끔하게)
+  const db = q ? FOOD_DB.map((x, i) => [x, i]).filter(([x]) => x.name.toLowerCase().includes(q)) : [];
+  presetsEl.innerHTML =
+    mine.slice(0, 40).map(([x, i]) =>
+      `<span class="chip" onclick="addPreset(${i})">${esc(x.name)} ${x.kcal}<span class="x" onclick="event.stopPropagation();delPreset(${i})">×</span></span>`).join("")
+    + db.slice(0, 40).map(([x, i]) =>
+      `<span class="chip" style="border-style:dashed" onclick="fillFromDbFood(${i})">${esc(x.name)} · ${x.kcal}</span>`).join("")
+    || `<span class="hint">결과 없음 — [🌐 인터넷에서 찾기] 나 [📷 라벨 촬영] 을 써보세요.</span>`;
+  presetCount.textContent = q
+    ? `내 음식 ${mine.length}개 · 기본 성분표 ${db.length}개 (점선 = 성분표, 누르면 칸에 채워짐)`
+    : `자주 먹는 음식 ${presets.length}개 · 검색하면 기본 성분표 ${FOOD_DB.length}개도 같이 나옵니다`;
 }
+// 내장 성분표는 바로 기록하지 않고 칸에 채운다 — 양을 조절해야 하는 경우가 많다
+function fillFromDbFood(i) { fillForm(FOOD_DB[i]); }
 function toggleMeal(m) { mealOpen[m] = (mealOpen[m] === false); render(); }
 function pickMeal(m) { fMeal.value = m; fName.focus(); fName.scrollIntoView({ behavior: "smooth", block: "center" }); }
 function renderStreak() {
@@ -1361,14 +1482,17 @@ function renderPlan() {
 function openSettings() {
   cfgUrl.value = cfg?.url || ""; cfgSecret.value = cfg?.secret || "";
   gKcal.value = goals.kcal; gP.value = goals.p; gC.value = goals.c; gF.value = goals.f;
-  gNa.value = goals.na; gFib.value = goals.fib;
+  gNa.value = goals.na; gFib.value = goals.fib; gSug.value = goals.sug;
+  gSat.value = goals.sat; gTrans.value = goals.trans; gChol.value = goals.chol;
   cfgMsg.textContent = ""; cfgMsg.className = "msg";
   settingsOverlay.classList.add("show");
 }
 function closeSettings() { settingsOverlay.classList.remove("show"); }
 async function saveSettings() {
   goals = { kcal: +gKcal.value || 0, p: +gP.value || 0, c: +gC.value || 0, f: +gF.value || 0,
-    na: +gNa.value || DEFAULT_GOALS.na, fib: +gFib.value || DEFAULT_GOALS.fib };
+    na: +gNa.value || DEFAULT_GOALS.na, fib: +gFib.value || DEFAULT_GOALS.fib,
+    sug: +gSug.value || DEFAULT_GOALS.sug, sat: +gSat.value || DEFAULT_GOALS.sat,
+    trans: +gTrans.value || DEFAULT_GOALS.trans, chol: +gChol.value || DEFAULT_GOALS.chol };
   save("dt_goals", goals);
   const url = cfgUrl.value.trim(), secret = cfgSecret.value.trim();
   if (!url) { cfgMsg.textContent = "URL이 없어 목표만 저장했습니다"; cfgMsg.className = "msg err"; render(); return; }
@@ -1400,7 +1524,7 @@ function copyCfgLink() {
 // ═════════ 식약처 제품 검색 ═════════
 let dbHits = [];
 async function dbSearch() {
-  const q = dbQ.value.trim();
+  const q = foodQ.value.trim();
   const show = (t, c) => { foodOcrMsg.textContent = t; foodOcrMsg.className = "msg" + (c ? " " + c : ""); };
   if (!q) { dbQ.focus(); return; }
   if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요 — 검색은 백엔드를 거칩니다.", "err"); return; }
@@ -1414,14 +1538,45 @@ async function dbSearch() {
       `<span class="chip" onclick="fillFromDb(${i})">${esc(x.name)} · ${Math.round(x.kcal)}kcal/${esc(x.serving)}</span>`).join("");
   } catch (e) { show("✗ " + e.message, "err"); }
 }
-function fillFromDb(i) {
-  const x = dbHits[i];
-  fName.value = `${x.name} ${x.serving}`.slice(0, 60);
-  ["kcal", "p", "c", "f", "na", "fib"].forEach(k => {
-    const el = { kcal: fKcal, p: fP, c: fC, f: fF, na: fNa, fib: fFib }[k];
-    el.value = +x[k] ? +x[k] : "";
-  });
+function fillFromDb(i) { fillForm(dbHits[i]); }
+function fillForm(x) {
+  fName.value = (x.serving ? `${x.name} ${x.serving}` : x.name).slice(0, 60);
+  const map = { kcal: fKcal, p: fP, c: fC, f: fF, na: fNa, sug: fSug, fib: fFib, sat: fSat, trans: fTrans, chol: fChol };
+  Object.keys(map).forEach(k => { map[k].value = +x[k] ? +x[k] : ""; });
+  // 상세값이 하나라도 있으면 접힌 칸을 펴서 눈에 보이게
+  if ((+x.fib || +x.sat || +x.trans || +x.chol) && fMore.style.display === "none") toggleMore();
   fName.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// 바코드 사진 → 숫자 추출 → 백엔드 조회. 시중 제품에 가장 확실한 경로
+async function readBarcode(input) {
+  const file = input.files && input.files[0];
+  input.value = "";
+  if (!file) return;
+  const show = (t, c) => { foodOcrMsg.textContent = t; foodOcrMsg.className = "msg" + (c ? " " + c : ""); };
+  if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요.", "err"); return; }
+  if (!("BarcodeDetector" in window)) {
+    const t = prompt("이 브라우저는 바코드 인식을 지원하지 않습니다.\n제품 뒷면 바코드 숫자를 직접 입력해주세요:");
+    if (t) return lookupBarcode(t.trim(), show);
+    return;
+  }
+  show("바코드 읽는 중…");
+  try {
+    const bmp = await createImageBitmap(file);
+    const det = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
+    const found = await det.detect(bmp);
+    bmp.close && bmp.close();
+    if (!found.length) { show("✗ 바코드를 찾지 못했습니다. 바코드가 화면을 채우게 다시 찍어주세요.", "err"); return; }
+    await lookupBarcode(found[0].rawValue, show);
+  } catch (e) { show("✗ " + e.message, "err"); }
+}
+async function lookupBarcode(code, show) {
+  show(`${code} 조회 중…`);
+  try {
+    const r = await api({ action: "barcode", code });
+    fillForm(r.data);
+    show(`✓ ${r.data.name} — 100g 기준입니다. 실제 먹은 양으로 고쳐서 추가하세요.`, "ok");
+  } catch (e) { show("✗ " + e.message, "err"); }
 }
 
 // ═════════ 사진 판독 ═════════
@@ -1478,6 +1633,49 @@ function fillFoodForm(d) {
   return n;
 }
 
+// ═════════ 음식 목록 가져오기 ═════════
+let impHits = [];
+function openImport() { impMsg.textContent = ""; impResults.innerHTML = ""; impHits = []; impSaveBtn.style.display = "none"; importOverlay.classList.add("show"); }
+function closeImport() { importOverlay.classList.remove("show"); }
+
+async function runImport(input) {
+  const show = (t, c) => { impMsg.textContent = t; impMsg.className = "msg" + (c ? " " + c : ""); };
+  if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요 — 판독은 백엔드를 거칩니다.", "err"); return; }
+  const file = input && input.files && input.files[0];
+  if (input) input.value = "";
+  const text = impText.value.trim();
+  if (!file && !text) { show("사진을 올리거나 텍스트를 붙여넣어 주세요.", "err"); return; }
+  show("읽는 중… 10~20초 걸립니다");
+  impResults.innerHTML = ""; impSaveBtn.style.display = "none";
+  try {
+    const payload = { action: "ocr", kind: "list" };
+    if (file) payload.image = await shrink(file, 1800); else payload.text = text;
+    const r = await api(payload);
+    const arr = Array.isArray(r.data) ? r.data : (r.data ? [r.data] : []);
+    // 이름 없거나 열량 없는 건 버린다. 이미 등록된 것도 건너뛴다
+    impHits = arr.filter(x => x && x.name && +x.kcal)
+      .map(x => ({ name: String(x.name).slice(0, 60), kcal: +x.kcal || 0, p: +x.p || 0, c: +x.c || 0,
+                   f: +x.f || 0, na: +x.na || 0, sug: +x.sug || 0, fib: +x.fib || 0,
+                   sat: +x.sat || 0, trans: +x.trans || 0, chol: +x.chol || 0 }))
+      .filter(x => !presets.some(pz => pz.name === x.name));
+    if (!impHits.length) { show("새로 등록할 음식을 찾지 못했습니다. (이미 등록된 것은 건너뜁니다)", "err"); return; }
+    show(`${impHits.length}개를 찾았습니다. 값을 확인하고 [전부 등록]을 누르세요.`, "ok");
+    impResults.innerHTML = impHits.map((x, i) =>
+      `<span class="chip" onclick="dropImported(${i})">${esc(x.name)} · ${Math.round(x.kcal)}kcal P${fmt(x.p)}<span class="x">×</span></span>`).join("");
+    impSaveBtn.style.display = "";
+  } catch (e) { show("✗ " + e.message, "err"); }
+}
+function dropImported(i) { impHits.splice(i, 1); impResults.innerHTML = impHits.map((x, k) =>
+  `<span class="chip" onclick="dropImported(${k})">${esc(x.name)} · ${Math.round(x.kcal)}kcal P${fmt(x.p)}<span class="x">×</span></span>`).join("");
+  impMsg.textContent = `${impHits.length}개 남음`; }
+function saveImported() {
+  presets = impHits.concat(presets).slice(0, 300);
+  save("dt_presets", presets); setMeta("presets", presets);
+  impMsg.textContent = `✓ ${impHits.length}개를 자주 먹는 음식에 등록했습니다.`; impMsg.className = "msg ok";
+  impHits = []; impResults.innerHTML = ""; impSaveBtn.style.display = "none"; impText.value = "";
+  render();
+}
+
 // ═════════ 내보내기 ═════════
 function download(name, text, mime) {
   const a = document.createElement("a");
@@ -1496,7 +1694,7 @@ function exportCsv(kind) {
     cols = ["date", "weight", "smm", "bfm", "pbf", "bmi", "bmr", "score", "note"];
     rows = inbody.slice().sort(cmpDate);
   } else {
-    cols = ["date", "meal", "name", "kcal", "p", "c", "f", "na", "fib", "sug"];
+    cols = ["date", "meal", "name", "kcal", "p", "c", "f", "na", "sug", "fib", "sat", "trans", "chol"];
     rows = Object.keys(cache).sort().flatMap(d => dayLog(d));
   }
   const csv = [cols.join(",")].concat(rows.map(r => cols.map(c => csvCell(r[c])).join(","))).join("\n");
