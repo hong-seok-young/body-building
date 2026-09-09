@@ -99,6 +99,43 @@
   .inrow input:focus, .inform > input:focus { outline: 2px solid var(--accent); border-color: transparent; }
   .inform button { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 11px; font-size: 14px; cursor: pointer; }
   @media (max-width: 560px) { .inrow { grid-template-columns: repeat(2, 1fr); } }
+  /* 끼니 카드 */
+  .meal { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+  .meal-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; cursor: pointer; }
+  .meal-head .nm { font-weight: 700; font-size: 14px; }
+  .meal-head .kc { margin-left: auto; font-weight: 700; font-size: 15px; }
+  .meal-head .pct { font-size: 11px; color: var(--sub); min-width: 34px; text-align: right; }
+  .meal-head .arw { color: var(--sub); font-size: 11px; }
+  .meal-sub { display: flex; gap: 12px; padding: 0 14px 11px; font-size: 11px; color: var(--sub); }
+  .meal-sub b { color: var(--text); font-weight: 600; }
+  .mrow { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-top: 1px solid var(--line); }
+  .mrow .nm { flex: 1; min-width: 0; font-size: 13px; }
+  .mrow .nm small { display: block; color: var(--sub); font-size: 11px; margin-top: 2px; }
+  .mrow .kc { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .mrow .del { border: none; background: none; color: var(--sub); cursor: pointer; font-size: 13px; padding: 0 2px; }
+  .mrow .del:hover { color: var(--red); }
+  .meal-act { display: flex; gap: 6px; padding: 9px 14px; background: var(--bg); border-top: 1px solid var(--line); }
+  .meal-act button { flex: 1; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 7px; font-size: 12px; color: var(--sub); cursor: pointer; }
+  .meal-act button:hover { border-color: var(--accent); color: var(--accent); }
+  /* 남은 칼로리 */
+  .remain-big { display: flex; align-items: baseline; gap: 9px; padding-bottom: 13px; margin-bottom: 13px; border-bottom: 1px solid var(--line); }
+  .remain-big b { font-size: 29px; line-height: 1; }
+  .remain-big em { font-size: 12px; color: var(--sub); font-style: normal; }
+  .remain-big .r { margin-left: auto; font-size: 12px; color: var(--sub); text-align: right; line-height: 1.5; }
+  /* 영양소 상세 */
+  .nut { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  .nut > div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .nut .lbl { color: var(--sub); }
+  @media (max-width: 560px) { .nut { grid-template-columns: 1fr; } }
+  /* 기록 연속 */
+  .streak { display: inline-flex; align-items: center; gap: 5px; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; border-radius: 14px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
+  /* 추가 폼 (끼니 + 수치) */
+  .addform2 { display: grid; grid-template-columns: auto 1fr; gap: 6px; }
+  .addform2 select, .addform2 input { border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 14px; width: 100%; min-width: 0; background: var(--card); font-family: inherit; color: var(--text); }
+  .addform2 select:focus, .addform2 input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .addform2 .nums { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .addform2 > button { grid-column: 1 / -1; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px; font-size: 14px; cursor: pointer; }
+  @media (max-width: 560px) { .addform2 .nums { grid-template-columns: repeat(3, 1fr); } }
   /* 식단 계획 */
   .plan-meal { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 13px; margin-bottom: 10px; }
   .plan-meal.done { border-color: var(--green); }
@@ -127,6 +164,7 @@
 <body>
 
 <h1>🏋️ 바디빌딩 트래커
+  <span class="streak" id="streakEl" style="display:none"></span>
   <span class="status" id="statusEl"></span>
   <button class="gear" onclick="openSettings()">⚙️</button>
 </h1>
@@ -155,31 +193,36 @@
 
   <div class="card" id="summaryCard"></div>
 
+  <div id="mealsEl"></div>
+
   <div class="card">
     <h3>탄단지 비율 <span style="font-weight:400;color:var(--sub);font-size:12px">(칼로리 기준)</span></h3>
+    <canvas id="ratioChart" style="max-height:170px"></canvas>
     <div id="ratioBox"></div>
   </div>
 
   <div class="card">
-    <form class="addform" onsubmit="addFood(event)">
-      <input id="fName" placeholder="음식명" required>
-      <input id="fKcal" type="number" step="any" min="0" placeholder="kcal" required>
-      <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
-      <input id="fC" type="number" step="any" min="0" placeholder="탄수g">
-      <input id="fF" type="number" step="any" min="0" placeholder="지방g">
-      <button type="submit">추가</button>
-    </form>
-    <div class="hint">새로 입력한 음식은 자주 먹는 음식에 자동 등록됩니다. 칩 클릭 = 바로 기록, × = 삭제</div>
-    <div class="presets" id="presetsEl"></div>
+    <h3>영양소</h3>
+    <div class="nut" id="nutEl"></div>
   </div>
 
   <div class="card">
-    <table>
-      <thead><tr><th>음식</th><th>kcal</th><th>단백질</th><th>탄수</th><th>지방</th><th></th></tr></thead>
-      <tbody id="logBody"></tbody>
-      <tfoot id="logFoot"></tfoot>
-    </table>
-    <div class="empty" id="emptyMsg">기록이 없어요</div>
+    <h3>음식 추가</h3>
+    <form class="addform2" onsubmit="addFood(event)">
+      <select id="fMeal"></select>
+      <input id="fName" placeholder="음식명" required>
+      <div class="nums">
+        <input id="fKcal" type="number" step="any" min="0" placeholder="kcal" required>
+        <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
+        <input id="fC" type="number" step="any" min="0" placeholder="탄수g">
+        <input id="fF" type="number" step="any" min="0" placeholder="지방g">
+        <input id="fNa" type="number" step="any" min="0" placeholder="나트륨mg">
+        <input id="fFib" type="number" step="any" min="0" placeholder="식이섬유g">
+      </div>
+      <button type="submit">추가</button>
+    </form>
+    <div class="hint">새로 입력한 음식은 아래 자주 먹는 음식에 자동 등록됩니다. 칩 클릭 = 선택한 끼니에 바로 기록, × = 삭제</div>
+    <div class="presets" id="presetsEl"></div>
   </div>
 </div>
 
@@ -190,10 +233,23 @@
     <span class="label" id="weekLabel"></span>
     <button onclick="moveWeek(1)">›</button>
   </div>
-  <div class="card"><canvas id="weekChart"></canvas></div>
+  <div class="card">
+    <h3>끼니별 칼로리 <span style="font-weight:400;color:var(--sub);font-size:12px">(점선 = 목표)</span></h3>
+    <canvas id="weekChart"></canvas>
+    <div id="weekMealBreak" style="margin-top:12px"></div>
+  </div>
   <div class="card">
     <h3>주간 평균 <span style="font-weight:400;color:var(--sub);font-size:12px">(기록한 날 기준)</span></h3>
     <div class="stats" id="weekStats"></div>
+  </div>
+  <div class="card">
+    <h3>섭취한 음식</h3>
+    <table class="freq">
+      <thead><tr><th>음식</th><th>섭취 회수</th><th>Cal</th></tr></thead>
+      <tbody id="freqBody"></tbody>
+      <tfoot id="freqFoot"></tfoot>
+    </table>
+    <div class="empty" id="freqEmpty">이번 주 기록 없음</div>
   </div>
 </div>
 
@@ -291,6 +347,10 @@
       <div><label>탄수g</label><input type="number" id="gC"></div>
       <div><label>지방g</label><input type="number" id="gF"></div>
     </div>
+    <div class="goalgrid" style="margin-top:8px">
+      <div><label>나트륨mg 상한</label><input type="number" id="gNa"></div>
+      <div><label>식이섬유g 하한</label><input type="number" id="gFib"></div>
+    </div>
     <div class="msg" id="cfgMsg"></div>
     <div class="btns">
       <button onclick="closeSettings()">닫기</button>
@@ -301,43 +361,50 @@
 
 <script>
 // ================= 상태 =================
-const DEFAULT_GOALS = { kcal: 2224, p: 212, c: 72, f: 128 }; // 감량기·저탄수 (TDEE 약 2850 − 626)
+// na = 나트륨 상한(mg), fib = 식이섬유 하한(g)
+const DEFAULT_GOALS = { kcal: 2224, p: 212, c: 72, f: 128, na: 2000, fib: 30 };
+const KEYS = ["kcal", "p", "c", "f", "na", "fib", "sug"];
+const MEALS = ["아침", "점심", "저녁", "간식"];
+const MEAL_COLOR = { "아침": "#f59e0b", "점심": "#2563eb", "저녁": "#fb923c", "간식": "#8b5cf6" };
+const MEAL_ICON = { "아침": "🌅", "점심": "☀️", "저녁": "🌆", "간식": "🌙" };
+function slotOf(t) { const h = +String(t).slice(0, 2) || 0; return h < 11 ? "아침" : h < 16 ? "점심" : h < 22 ? "저녁" : "간식"; }
 const DEFAULT_PRESETS = [
   // 아래 3개는 제품 영양정보표 실측값 (사진 확인, 2026-09-09)
-  { name: "서동 닭다리살 1개", kcal: 115, p: 16, c: 8, f: 2.1 },      // 100g/개, 나트륨 552mg
-  { name: "BSN 아이솔레이트 1스쿱", kcal: 140, p: 25, c: 6, f: 2 },    // 38g/스쿱, 나트륨 135mg
-  { name: "양반 현미밥 130g", kcal: 210, p: 3, c: 45, f: 1.8 },       // 나트륨 15mg
-  { name: "아몬드 65g", kcal: 376, p: 13.8, c: 14, f: 32.4 },        // 약 54알
-  { name: "아몬드 15알", kcal: 105, p: 4, c: 4, f: 9 },
-  { name: "채소 한 접시 150g", kcal: 45, p: 3, c: 8, f: 0.3 },
-  { name: "계란 1개", kcal: 72, p: 6.3, c: 0.4, f: 5 },
-  { name: "귀리 80g", kcal: 304, p: 10.4, c: 52.8, f: 5.6 },
-  { name: "고구마 200g", kcal: 172, p: 2, c: 40, f: 0.2 },
+  { name: "서동 닭다리살 1개", kcal: 115, p: 16, c: 8, f: 2.1, na: 552, fib: 0, sug: 1 },
+  { name: "BSN 아이솔레이트 1스쿱", kcal: 140, p: 25, c: 6, f: 2, na: 135, fib: 0, sug: 2 },
+  { name: "양반 현미밥 130g", kcal: 210, p: 3, c: 45, f: 1.8, na: 15, fib: 1.5, sug: 0 },
+  { name: "아몬드 65g", kcal: 376, p: 13.8, c: 14, f: 32.4, na: 1, fib: 8.1, sug: 2.8 },
+  { name: "아몬드 15알", kcal: 105, p: 4, c: 4, f: 9, na: 0, fib: 2.3, sug: 0.8 },
+  { name: "채소 한 접시 150g", kcal: 45, p: 3, c: 8, f: 0.3, na: 30, fib: 3, sug: 2 },
+  { name: "계란 1개", kcal: 72, p: 6.3, c: 0.4, f: 5, na: 70, fib: 0, sug: 0.2 },
+  { name: "귀리 80g", kcal: 304, p: 10.4, c: 52.8, f: 5.6, na: 2, fib: 8, sug: 0.8 },
+  { name: "고구마 200g", kcal: 172, p: 2, c: 40, f: 0.2, na: 20, fib: 4.6, sug: 8 },
 ];
 // 하루 계획 — 시간대별 끼니. 언제든 화면에서 수정/추가/삭제 가능
-const MEAL = [
-  { name: "아몬드 65g", kcal: 376, p: 13.8, c: 14, f: 32.4 },
-  { name: "닭다리살 200g", kcal: 240, p: 38, c: 0, f: 9 },
-  { name: "채소 한 접시 150g", kcal: 45, p: 3, c: 8, f: 0.3 },
+const MEAL_SET = [
+  { name: "아몬드 65g", kcal: 376, p: 13.8, c: 14, f: 32.4, na: 1, fib: 8.1, sug: 2.8 },
+  { name: "닭다리살 200g", kcal: 240, p: 38, c: 0, f: 9, na: 130, fib: 0, sug: 0 },
+  { name: "채소 한 접시 150g", kcal: 45, p: 3, c: 8, f: 0.3, na: 30, fib: 3, sug: 2 },
 ];
 const DEFAULT_PLAN = [
-  { time: "09:00", name: "기상 후", items: [{ name: "프로틴 2스쿱", kcal: 240, p: 48, c: 6, f: 3 }] },
-  { time: "10:30", name: "1식", items: MEAL.map(x => ({ ...x })) },
-  { time: "15:30", name: "2식", items: MEAL.map(x => ({ ...x })) },
-  { time: "21:30", name: "3식", items: MEAL.map(x => ({ ...x })) },
+  { time: "09:00", name: "기상 후", items: [{ name: "프로틴 2스쿱", kcal: 240, p: 48, c: 6, f: 3, na: 270, fib: 0, sug: 4 }] },
+  { time: "10:30", name: "1식", items: MEAL_SET.map(x => ({ ...x })) },
+  { time: "15:30", name: "2식", items: MEAL_SET.map(x => ({ ...x })) },
+  { time: "21:30", name: "3식", items: MEAL_SET.map(x => ({ ...x })) },
 ];
 function load(k, fb) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? fb; } catch { return fb; } }
 function save(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
 
 let cfg = load("dt_cfg", null);              // {url, secret}
 let cache = load("dt_cache", {});            // {"YYYY-MM-DD": [items]} — 키 존재 = 서버에서 받아옴
-let goals = load("dt_goals", DEFAULT_GOALS);
+let goals = { ...DEFAULT_GOALS, ...load("dt_goals", {}) };  // 예전 저장본에 없는 키는 기본값으로 채움
 let presets = load("dt_presets", DEFAULT_PRESETS);
 let pending = load("dt_pending", []);        // 오프라인 중 추가된 항목
 let view = "day";
 let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
-let weekChart = null, monthChart = null;
+let weekChart = null, monthChart = null, ratioChart = null;
+let mealOpen = {};                          // 끼니 카드 접힘 상태
 let inbody = load("dt_inbody", []);          // 인바디 기록 배열
 let ibPending = load("dt_ib_pending", []);   // 오프라인 중 추가된 인바디
 let section = "diet";
@@ -440,22 +507,38 @@ async function flushIbPending() {
   }
 }
 
+// Chart.js 가 못 올라와도(오프라인·CDN 차단) 화면이 죽지 않게 감싼다
+function newChart(el, cfg) {
+  if (typeof Chart !== "function") { el.style.display = "none"; return null; }
+  el.style.display = "";
+  return new Chart(el, cfg);
+}
+
 function cmpDate(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }
 
 // ================= 기록 =================
 function dayLog(ds) { return cache[ds] || []; }
 const fmt = n => Math.round(n * 10) / 10;
-function totals(list) { return list.reduce((a, x) => ({ kcal:a.kcal+x.kcal, p:a.p+x.p, c:a.c+x.c, f:a.f+x.f }), {kcal:0,p:0,c:0,f:0}); }
+function totals(list) {
+  const a = {}; KEYS.forEach(k => a[k] = 0);
+  list.forEach(x => KEYS.forEach(k => a[k] += (+x[k] || 0)));
+  return a;
+}
+function mealLog(ds, meal) { return dayLog(ds).filter(x => (x.meal || "간식") === meal); }
+function guessMeal() { return slotOf(String(new Date().getHours()).padStart(2, "0")); }
 
 async function addFood(e) {
   e.preventDefault();
-  const item = { date: curDate, name: fName.value.trim(), kcal:+fKcal.value||0, p:+fP.value||0, c:+fC.value||0, f:+fF.value||0 };
-  e.target.reset(); fName.focus();
+  const meal = fMeal.value;
+  const item = { date: curDate, meal, name: fName.value.trim(), kcal:+fKcal.value||0,
+                 p:+fP.value||0, c:+fC.value||0, f:+fF.value||0, na:+fNa.value||0, fib:+fFib.value||0, sug:0 };
+  e.target.reset(); fMeal.value = meal; fName.focus();
   await pushItem(item);
   // 프리셋 자동 등록
   if (!presets.some(x => x.name === item.name)) {
-    presets.unshift({ name:item.name, kcal:item.kcal, p:item.p, c:item.c, f:item.f });
-    if (presets.length > 14) presets.pop();
+    const { date, meal: _m, ...food } = item;
+    presets.unshift(food);
+    if (presets.length > 16) presets.pop();
     save("dt_presets", presets);
     api({ action:"setMeta", key:"presets", value:presets }).catch(()=>{});
   }
@@ -472,7 +555,8 @@ async function pushItem(item) {
     const r = await api({ action: "add", item });
     const list = cache[item.date];
     const idx = list.findIndex(x => x.id === tmpId);
-    if (idx >= 0) list[idx] = r.item;
+    // 백엔드가 meal/na/fib 컬럼을 아직 모르면 응답에서 빠지므로 로컬 값을 덮어쓰지 않는다
+    if (idx >= 0) list[idx] = { ...item, ...r.item };
     save("dt_cache", cache);
     setStatus("● 동기화됨", "var(--green)");
   } catch (e) {
@@ -497,7 +581,7 @@ async function delItem(ds, id) {
   }
 }
 
-function addPreset(i) { pushItem({ ...presets[i], date: curDate }); }
+function addPreset(i) { pushItem({ ...presets[i], date: curDate, meal: fMeal ? fMeal.value : guessMeal() }); }
 function delPreset(i) {
   presets.splice(i, 1); save("dt_presets", presets);
   api({ action:"setMeta", key:"presets", value:presets }).catch(()=>{});
@@ -541,95 +625,204 @@ function render() {
 
 function renderDay() {
   datePicker.value = curDate;
-  const t = totals(dayLog(curDate));
+  const list = dayLog(curDate);
+  const t = totals(list);
 
-  // 매크로 바
+  // ── 요약: 남은 칼로리 + 매크로 바
+  const left = goals.kcal - t.kcal;
   const rows = [
-    { label:"칼로리", val:t.kcal, goal:goals.kcal, unit:"kcal", color:"var(--kcal)", proteinLike:false },
-    { label:"단백질", val:t.p, goal:goals.p, unit:"g", color:"var(--protein)", proteinLike:true },
-    { label:"탄수화물", val:t.c, goal:goals.c, unit:"g", color:"var(--carb)", proteinLike:false },
-    { label:"지방", val:t.f, goal:goals.f, unit:"g", color:"var(--fat)", proteinLike:false },
+    { label:"칼로리", val:t.kcal, goal:goals.kcal, unit:"kcal", color:"var(--kcal)", more:false },
+    { label:"단백질", val:t.p, goal:goals.p, unit:"g", color:"var(--protein)", more:true },
+    { label:"탄수화물", val:t.c, goal:goals.c, unit:"g", color:"var(--carb)", more:false },
+    { label:"지방", val:t.f, goal:goals.f, unit:"g", color:"var(--fat)", more:false },
   ];
-  summaryCard.innerHTML = rows.map(r => {
-    const pct = r.goal ? Math.min(100, r.val / r.goal * 100) : 0;
-    const over = r.val - r.goal;
-    const status = over > 0
-      ? (r.proteinLike ? `<span class="good">달성 +${fmt(over)}${r.unit}</span>` : `<span class="over">${fmt(over)}${r.unit} 초과</span>`)
-      : `<span class="remain">${fmt(r.goal - r.val)}${r.unit} 남음</span>`;
-    const barColor = (over > 0 && !r.proteinLike) ? "var(--red)" : r.color;
-    return `<div class="macro">
-      <div class="row"><span><b>${r.label}</b> &nbsp;${fmt(r.val)} / ${r.goal}${r.unit}</span>${status}</div>
-      <div class="bar"><div style="width:${pct}%;background:${barColor}"></div></div>
+  summaryCard.innerHTML = `
+    <div class="remain-big">
+      <b style="color:${left < 0 ? "var(--red)" : "var(--text)"}">${Math.abs(Math.round(left))}</b>
+      <em>kcal ${left < 0 ? "초과" : "남음"}</em>
+      <span class="r">섭취 ${Math.round(t.kcal)} / 목표 ${goals.kcal}<br>일일권장 ${goals.kcal ? Math.round(t.kcal / goals.kcal * 100) : 0}%</span>
+    </div>` +
+    rows.map(r => {
+      const pct = r.goal ? Math.min(100, r.val / r.goal * 100) : 0;
+      const over = r.val - r.goal;
+      const status = over > 0
+        ? (r.more ? `<span class="good">달성 +${fmt(over)}${r.unit}</span>` : `<span class="over">${fmt(over)}${r.unit} 초과</span>`)
+        : `<span class="remain">${fmt(r.goal - r.val)}${r.unit} 남음</span>`;
+      return `<div class="macro">
+        <div class="row"><span><b>${r.label}</b> &nbsp;${fmt(r.val)} / ${r.goal}${r.unit}</span>${status}</div>
+        <div class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.color}"></div></div>
+      </div>`;
+    }).join("") +
+    `<div class="plan-btns"><button onclick="copyDay(-1)">어제 식단 전체 복사</button></div>`;
+
+  // ── 끼니별 카드
+  mealsEl.innerHTML = MEALS.map(m => {
+    const items = mealLog(curDate, m);
+    const mt = totals(items);
+    const open = mealOpen[m] !== false;
+    return `<div class="meal">
+      <div class="meal-head" onclick="toggleMeal('${m}')">
+        <span>${MEAL_ICON[m]}</span>
+        <span class="nm">${m === "간식" ? "간식/기타" : m + " 식사"}</span>
+        <span class="kc">${items.length ? Math.round(mt.kcal) : "-"}</span>
+        <span class="pct">${items.length && goals.kcal ? Math.round(mt.kcal / goals.kcal * 100) + "%" : ""}</span>
+        <span class="arw">${open ? "▲" : "▼"}</span>
+      </div>
+      ${items.length ? `<div class="meal-sub">지방 <b>${fmt(mt.f)}</b> · 탄수 <b>${fmt(mt.c)}</b> · 단백질 <b>${fmt(mt.p)}</b> · 나트륨 <b>${Math.round(mt.na)}</b>mg</div>` : ""}
+      ${open ? items.map(x => `<div class="mrow">
+        <span class="nm">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · 나트륨 " + Math.round(x.na) + "mg" : ""}</small></span>
+        <span class="kc">${Math.round(x.kcal)}</span>
+        <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button>
+      </div>`).join("") + `<div class="meal-act">
+        <button onclick="pickMeal('${m}')">＋ 음식</button>
+        <button onclick="copyMealFrom('${m}')">전날 복사</button>
+      </div>` : ""}
     </div>`;
   }).join("");
 
-  // 탄단지 비율
-  const gk = goals.p*4 + goals.c*4 + goals.f*9;
-  const ideal = { p: goals.p*4/gk*100, c: goals.c*4/gk*100, f: goals.f*9/gk*100 };
-  const ak = t.p*4 + t.c*4 + t.f*9;
-  let actualBar;
+  // ── 탄단지 도넛
+  const ak = t.p * 4 + t.c * 4 + t.f * 9;
+  if (ratioChart) { ratioChart.destroy(); ratioChart = null; }
+  const ratioEl = document.getElementById("ratioChart");
+  ratioEl.style.display = "none";
   if (ak > 0) {
-    const a = { p: t.p*4/ak*100, c: t.c*4/ak*100, f: t.f*9/ak*100 };
-    actualBar = `<div class="ratio-bar">
-      <div style="width:${a.c}%;background:var(--carb)">${a.c>=12?"탄 "+Math.round(a.c)+"%":""}</div>
-      <div style="width:${a.p}%;background:var(--protein)">${a.p>=12?"단 "+Math.round(a.p)+"%":""}</div>
-      <div style="width:${a.f}%;background:var(--fat)">${a.f>=12?"지 "+Math.round(a.f)+"%":""}</div>
-    </div>`;
-  } else {
-    actualBar = `<div class="ratio-bar" style="background:#eef0f3;color:var(--sub);align-items:center;justify-content:center">기록 없음</div>`;
+    ratioChart = newChart(ratioEl, {
+      type: "doughnut",
+      data: { labels: ["탄수화물", "단백질", "지방"], datasets: [{
+        data: [t.c * 4, t.p * 4, t.f * 9], backgroundColor: ["#f59e0b", "#ef4444", "#8b5cf6"], borderWidth: 0 }] },
+      options: { cutout: "58%", plugins: {
+        legend: { position: "right", labels: { boxWidth: 12, font: { size: 12 } } },
+        tooltip: { callbacks: { label: c => `${c.label} ${Math.round(c.parsed / ak * 100)}%` } } } },
+    });
   }
-  ratioBox.innerHTML = actualBar +
-    `<div class="ratio-legend">목표 비율 — 탄 ${Math.round(ideal.c)}% : 단 ${Math.round(ideal.p)}% : 지 ${Math.round(ideal.f)}%</div>`;
+  const gk = goals.p * 4 + goals.c * 4 + goals.f * 9;
+  ratioBox.innerHTML = (ak > 0
+      ? `<div class="ratio-legend" style="margin-top:8px">실제 — 탄 ${Math.round(t.c*4/ak*100)}% : 단 ${Math.round(t.p*4/ak*100)}% : 지 ${Math.round(t.f*9/ak*100)}%</div>`
+      : `<div class="empty">기록 없음</div>`) +
+    `<div class="ratio-legend">목표 — 탄 ${Math.round(goals.c*4/gk*100)}% : 단 ${Math.round(goals.p*4/gk*100)}% : 지 ${Math.round(goals.f*9/gk*100)}%</div>`;
 
-  // 프리셋
+  // ── 영양소 상세 (나트륨은 상한, 식이섬유는 하한)
+  const cls = st => st === "bad" ? ' class="over"' : st === "good" ? ' class="good"' : "";
+  nutEl.innerHTML = [
+    ["칼로리", `${Math.round(t.kcal)} / ${goals.kcal} kcal`, null],
+    ["단백질", `${fmt(t.p)} / ${goals.p} g`, t.p >= goals.p ? "good" : null],
+    ["탄수화물", `${fmt(t.c)} / ${goals.c} g`, null],
+    ["지방", `${fmt(t.f)} / ${goals.f} g`, null],
+    ["나트륨 (상한)", `${Math.round(t.na)} / ${goals.na} mg`, t.na > goals.na ? "bad" : t.na ? "good" : null],
+    ["식이섬유 (하한)", `${fmt(t.fib)} / ${goals.fib} g`, t.fib >= goals.fib ? "good" : t.fib ? "bad" : null],
+    ["당", `${fmt(t.sug)} g`, null],
+    ["기록 항목", `${list.length}개`, null],
+  ].map(([lbl, val, st]) => `<div><span class="lbl">${lbl}</span><span${cls(st)}>${val}</span></div>`).join("");
+
+  // ── 끼니 선택 + 프리셋
+  if (!fMeal.options.length) fMeal.innerHTML = MEALS.map(m => `<option>${m}</option>`).join("");
+  if (!fMeal.value) fMeal.value = guessMeal();
   presetsEl.innerHTML = presets.map((x, i) =>
-    `<span class="chip" onclick="addPreset(${i})">${x.name} ${x.kcal}kcal<span class="x" onclick="event.stopPropagation();delPreset(${i})">×</span></span>`
+    `<span class="chip" onclick="addPreset(${i})">${esc(x.name)} ${x.kcal}kcal<span class="x" onclick="event.stopPropagation();delPreset(${i})">×</span></span>`
   ).join("");
 
-  // 기록 테이블
-  const list = dayLog(curDate);
-  emptyMsg.style.display = list.length ? "none" : "block";
-  logBody.innerHTML = list.map(x =>
-    `<tr><td>${x.name}</td><td>${fmt(x.kcal)}</td><td>${fmt(x.p)}</td><td>${fmt(x.c)}</td><td>${fmt(x.f)}</td>
-     <td><button class="del" onclick="delItem('${curDate}','${x.id}')">✕</button></td></tr>`
-  ).join("");
-  logFoot.innerHTML = list.length
-    ? `<tr><td>합계</td><td>${fmt(t.kcal)}</td><td>${fmt(t.p)}</td><td>${fmt(t.c)}</td><td>${fmt(t.f)}</td><td></td></tr>` : "";
+  renderStreak();
+}
+
+function toggleMeal(m) { mealOpen[m] = (mealOpen[m] === false); render(); }
+function pickMeal(m) {
+  fMeal.value = m; fName.focus();
+  fName.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function copyMealFrom(m) {
+  const src = mealLog(addDays(curDate, -1), m);
+  if (!src.length) { alert(`전날 ${m} 식사 기록이 없어요`); return; }
+  for (const x of src) { const { id, date, ...rest } = x; await pushItem({ ...rest, date: curDate, meal: m }); }
+  render();
+}
+async function copyDay(n) {
+  const from = addDays(curDate, n), src = dayLog(from);
+  if (!src.length) { alert(`${from} 기록이 없어요`); return; }
+  for (const x of src) { const { id, date, ...rest } = x; await pushItem({ ...rest, date: curDate }); }
+  render();
+}
+
+// 오늘(또는 어제)부터 거꾸로 기록이 끊기지 않은 날수
+function renderStreak() {
+  let d = todayStr(), n = 0;
+  if (!dayLog(d).length) d = addDays(d, -1);
+  while (dayLog(d).length && n < 400) { n++; d = addDays(d, -1); }
+  streakEl.style.display = n >= 2 ? "" : "none";
+  streakEl.textContent = `🔥 ${n}일 연속 기록`;
 }
 
 function renderWeek() {
   const start = weekStart(curDate);
-  const days = Array.from({length:7}, (_, i) => addDays(start, i));
-  weekLabel.textContent = `${start.slice(5).replace("-","/")} ~ ${days[6].slice(5).replace("-","/")}`;
+  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  weekLabel.textContent = `${start.slice(5).replace("-", "/")} ~ ${days[6].slice(5).replace("-", "/")}`;
+  const names = ["월", "화", "수", "목", "금", "토", "일"];
 
-  const names = ["월","화","수","목","금","토","일"];
-  const kcals = days.map(d => totals(dayLog(d)).kcal);
-
-  if (weekChart) weekChart.destroy();
-  weekChart = new Chart(document.getElementById("weekChart"), {
+  // ── 끼니별 누적 막대 (목표선은 별도 stack 이라 자기 값에 그려짐)
+  if (weekChart) { weekChart.destroy(); weekChart = null; }
+  weekChart = newChart(document.getElementById("weekChart"), {
     type: "bar",
     data: {
-      labels: names,
-      datasets: [{ label: "kcal", data: kcals.map(Math.round), backgroundColor: "#2563eb", borderRadius: 6 }],
+      labels: names.map((n, i) => `${n} ${+days[i].slice(8)}`),
+      datasets: MEALS.map(m => ({
+        label: m, stack: "eaten", backgroundColor: MEAL_COLOR[m], borderRadius: 3,
+        data: days.map(d => Math.round(totals(mealLog(d, m)).kcal)),
+      })).concat([{
+        label: "목표", type: "line", stack: "goal", data: days.map(() => goals.kcal),
+        borderColor: "#9ca3af", borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5,
+      }]),
     },
     options: {
-      plugins: {
-        legend: { display: false },
-        annotation: undefined,
+      plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        y: { stacked: true, beginAtZero: true, suggestedMax: goals.kcal * 1.2, grid: { color: "#eef0f3" } },
+        x: { stacked: true, grid: { display: false } },
       },
-      scales: { y: { beginAtZero: true, suggestedMax: goals.kcal * 1.2, grid: { color: "#eef0f3" } }, x: { grid: { display: false } } },
     },
   });
 
-  const logged = days.map(d => totals(dayLog(d))).filter(t => t.kcal > 0);
+  // ── 끼니별 주간 합계·비중
+  const weekAll = days.flatMap(d => dayLog(d));
+  const weekKcal = totals(weekAll).kcal;
+  weekMealBreak.innerHTML = MEALS.map(m => {
+    const mk = totals(days.flatMap(d => mealLog(d, m))).kcal;
+    return `<div class="mrow" style="padding:8px 0">
+      <span style="width:11px;height:11px;border-radius:3px;background:${MEAL_COLOR[m]};flex:none"></span>
+      <span class="nm">${m === "간식" ? "간식/기타" : m + " 식사"}</span>
+      <span style="color:var(--sub);font-size:12px">(${weekKcal ? Math.round(mk / weekKcal * 100) : 0}%)</span>
+      <span class="kc" style="color:var(--green)">${mk ? Math.round(mk) : "-"}</span>
+    </div>`;
+  }).join("");
+
+  // ── 주간 평균
+  const logged = days.map(d => totals(dayLog(d))).filter(x => x.kcal > 0);
   const n = logged.length || 1;
-  const avg = k => Math.round(logged.reduce((a, t) => a + t[k], 0) / n);
+  const avg = k => Math.round(logged.reduce((a, x) => a + x[k], 0) / n);
   weekStats.innerHTML = logged.length ? `
     <div class="stat"><span>평균 칼로리</span><b>${avg("kcal")}</b></div>
     <div class="stat"><span>평균 단백질</span><b>${avg("p")}g</b></div>
     <div class="stat"><span>평균 탄수</span><b>${avg("c")}g</b></div>
     <div class="stat"><span>평균 지방</span><b>${avg("f")}g</b></div>
+    <div class="stat"><span>평균 나트륨</span><b style="color:${avg("na") > goals.na ? "var(--red)" : "var(--text)"}">${avg("na")}mg</b></div>
+    <div class="stat"><span>평균 식이섬유</span><b style="color:${avg("fib") < goals.fib ? "var(--red)" : "var(--green)"}">${avg("fib")}g</b></div>
+    <div class="stat"><span>기록한 날</span><b>${logged.length}일</b></div>
+    <div class="stat"><span>주간 총합</span><b>${Math.round(weekKcal)}</b></div>
   ` : `<div class="stat" style="grid-column:1/-1"><span>이번 주 기록 없음</span></div>`;
+
+  // ── 섭취한 음식 (빈도·칼로리 집계)
+  const freq = {};
+  weekAll.forEach(x => {
+    const f = freq[x.name] || (freq[x.name] = { n: 0, kcal: 0 });
+    f.n++; f.kcal += (+x.kcal || 0);
+  });
+  const fr = Object.entries(freq).sort((a, b) => b[1].kcal - a[1].kcal);
+  freqEmpty.style.display = fr.length ? "none" : "block";
+  freqBody.innerHTML = fr.map(([nm, v]) =>
+    `<tr><td>${esc(nm)}</td><td>x${v.n} =</td><td>${Math.round(v.kcal)}</td></tr>`).join("");
+  freqFoot.innerHTML = fr.length
+    ? `<tr><td>총</td><td>x${fr.reduce((a, [, v]) => a + v.n, 0)} =</td><td>${Math.round(weekKcal)}</td></tr>` : "";
+
+  renderStreak();
 }
 
 function renderMonth() {
@@ -640,8 +833,8 @@ function renderMonth() {
   const dayTotals = days.map(d => totals(dayLog(d)));
   const kcals = dayTotals.map(t => t.kcal ? Math.round(t.kcal) : null);
 
-  if (monthChart) monthChart.destroy();
-  monthChart = new Chart(document.getElementById("monthChart"), {
+  if (monthChart) { monthChart.destroy(); monthChart = null; }
+  monthChart = newChart(document.getElementById("monthChart"), {
     type: "line",
     data: {
       labels: days.map(d => +d.slice(8)),
@@ -661,11 +854,17 @@ function renderMonth() {
   const avg = k => Math.round(logged.reduce((a, t) => a + t[k], 0) / n);
   const onTarget = logged.filter(t => Math.abs(t.kcal - goals.kcal) <= goals.kcal * 0.1).length;
   const proteinOk = logged.filter(t => t.p >= goals.p).length;
+  const naOver = logged.filter(t => t.na > goals.na).length;
+  const fibOk = logged.filter(t => t.fib >= goals.fib).length;
   monthStats.innerHTML = logged.length ? `
     <div class="stat"><span>기록한 날</span><b>${logged.length}일</b></div>
     <div class="stat"><span>평균 칼로리</span><b>${avg("kcal")}</b></div>
     <div class="stat"><span>칼로리 목표 ±10%</span><b>${onTarget}일</b></div>
     <div class="stat"><span>단백질 목표 달성</span><b>${proteinOk}일</b></div>
+    <div class="stat"><span>나트륨 상한 초과</span><b style="color:${naOver ? "var(--red)" : "var(--green)"}">${naOver}일</b></div>
+    <div class="stat"><span>식이섬유 달성</span><b style="color:${fibOk ? "var(--green)" : "var(--red)"}">${fibOk}일</b></div>
+    <div class="stat"><span>평균 나트륨</span><b>${avg("na")}mg</b></div>
+    <div class="stat"><span>평균 식이섬유</span><b>${avg("fib")}g</b></div>
   ` : `<div class="stat" style="grid-column:1/-1"><span>이 달 기록 없음</span></div>`;
 }
 
@@ -773,7 +972,7 @@ function ibDataset(recs, key, color) {
 function drawIbChart1(labels, recs) {
   if (ibChart1) { ibChart1.destroy(); ibChart1 = null; }
   if (!recs.length) return;
-  ibChart1 = new Chart(document.getElementById("ibChart1"), {
+  ibChart1 = newChart(document.getElementById("ibChart1"), {
     type: "line",
     data: { labels, datasets: [
       { ...ibDataset(recs, "weight", "#2563eb"), label: "체중" },
@@ -790,7 +989,7 @@ function drawIbChart1(labels, recs) {
 function drawIbChart2(labels, recs) {
   if (ibChart2) { ibChart2.destroy(); ibChart2 = null; }
   if (!recs.length) return;
-  ibChart2 = new Chart(document.getElementById("ibChart2"), {
+  ibChart2 = newChart(document.getElementById("ibChart2"), {
     type: "line",
     data: { labels, datasets: [
       { ...ibDataset(recs, "pbf", "#ef4444"), label: "체지방률(%)" },
@@ -831,8 +1030,9 @@ function planLoggedFlags(ds) {
 }
 
 async function logMeal(i) {
-  const m = plan[i];
-  for (const it of m.items) await pushItem({ date: curDate, name: it.name, kcal: it.kcal, p: it.p, c: it.c, f: it.f });
+  const m = plan[i], meal = slotOf(m.time);
+  for (const it of m.items) await pushItem({ date: curDate, meal, name: it.name,
+    kcal: it.kcal, p: it.p, c: it.c, f: it.f, na: +it.na || 0, fib: +it.fib || 0, sug: +it.sug || 0 });
   render();
 }
 async function logAllPlan() {
@@ -843,7 +1043,8 @@ async function logAllPlan() {
 
 function applyPlanAsGoals() {
   const t = planTotals();
-  goals = { kcal: Math.round(t.kcal), p: Math.round(t.p), c: Math.round(t.c), f: Math.round(t.f) };
+  // 나트륨 상한·식이섬유 하한은 건강 기준이므로 계획값으로 덮어쓰지 않는다
+  goals = { ...goals, kcal: Math.round(t.kcal), p: Math.round(t.p), c: Math.round(t.c), f: Math.round(t.f) };
   save("dt_goals", goals);
   api({ action: "setMeta", key: "goals", value: goals }).catch(() => {});
   render();
@@ -861,11 +1062,12 @@ function addPlanMeal() { const m = { time: "12:00", name: "새 끼니", items: [
 function delPlanMeal(i) { plan.splice(i, 1); planFormOpen = -1; savePlan(); render(); }
 function delPlanItem(i, j) { plan[i].items.splice(j, 1); savePlan(); render(); }
 function togglePlanForm(i) { planFormOpen = planFormOpen === i ? -1 : i; render(); }
-function addPlanPreset(i, k) { const x = presets[k]; plan[i].items.push({ name: x.name, kcal: x.kcal, p: x.p, c: x.c, f: x.f }); savePlan(); render(); }
+function addPlanPreset(i, k) { const x = presets[k]; plan[i].items.push({ ...x }); savePlan(); render(); }
 function addPlanItem(e, i) {
   e.preventDefault();
   const f = e.target;
-  plan[i].items.push({ name: f.pname.value.trim(), kcal: +f.pkcal.value || 0, p: +f.pp.value || 0, c: +f.pc.value || 0, f: +f.pf.value || 0 });
+  plan[i].items.push({ name: f.pname.value.trim(), kcal: +f.pkcal.value || 0, p: +f.pp.value || 0,
+    c: +f.pc.value || 0, f: +f.pf.value || 0, na: +f.pna.value || 0, fib: +f.pfib.value || 0, sug: 0 });
   f.reset();
   savePlan(); render();
 }
@@ -884,11 +1086,15 @@ function renderPlan() {
       <div class="stat"><span>단백질</span><b>${fmt(t.p)}g</b></div>
       <div class="stat"><span>탄수</span><b>${fmt(t.c)}g</b></div>
       <div class="stat"><span>지방</span><b>${fmt(t.f)}g</b></div>
+      <div class="stat"><span>나트륨</span><b style="color:${t.na > goals.na ? "var(--red)" : "var(--text)"}">${Math.round(t.na)}mg</b></div>
+      <div class="stat"><span>식이섬유</span><b style="color:${t.fib < goals.fib ? "var(--red)" : "var(--green)"}">${fmt(t.fib)}g</b></div>
     </div>
     <div class="diff">목표(${goals.kcal}kcal · P${goals.p} · C${goals.c} · F${goals.f}) 대비 &nbsp;
       칼로리 ${sign(t.kcal - goals.kcal)} · 단백질 ${sign(t.p - goals.p)}g · 탄수 ${sign(t.c - goals.c)}g · 지방 ${sign(t.f - goals.f)}g</div>
     ${bmr && t.kcal < bmr ? `<div class="warn">⚠️ 계획 열량 ${Math.round(t.kcal)}kcal 이 최근 인바디 기초대사량 ${bmr}kcal 보다 낮습니다. 근손실·대사 적응 위험이 커요.</div>` : ""}
     ${t.f < minFat ? `<div class="warn">⚠️ 지방이 하루 ${fmt(t.f)}g 뿐이에요. 체중 kg당 0.6g 기준 최소 ${minFat}g 은 채우는 걸 권장합니다. (견과류·계란·등푸른생선)</div>` : ""}
+    ${t.na > goals.na ? `<div class="warn">⚠️ 나트륨이 하루 ${Math.round(t.na)}mg 입니다. 상한 ${goals.na}mg 의 ${(t.na / goals.na).toFixed(1)}배 — 혈압·수분 저류로 체중 추세가 왜곡됩니다. 양념 제품을 무양념으로 바꾸는 게 가장 빠릅니다.</div>` : ""}
+    ${t.fib < goals.fib ? `<div class="warn">⚠️ 식이섬유가 하루 ${fmt(t.fib)}g 입니다. 목표 ${goals.fib}g — 내장지방·포만감에 직접 영향이 있으니 채소를 끼니마다 넣으세요.</div>` : ""}
     ${t.c < minCarb ? `<div class="warn">⚠️ 탄수가 하루 ${fmt(t.c)}g 입니다. 체중 kg당 1g(${minCarb}g) 아래면 근력운동 중 글리코겐이 비어 세트 볼륨이 떨어지고 골격근 유지가 어려워요. 운동일만이라도 고구마·귀리로 보충하세요.</div>` : ""}
     <div class="plan-btns">
       <button onclick="applyPlanAsGoals()">이 계획을 목표로 설정</button>
@@ -902,12 +1108,12 @@ function renderPlan() {
       <div class="plan-head">
         <input type="time" value="${esc(m.time)}" onchange="setPlanTime(${i}, this.value)">
         <input class="pname" value="${esc(m.name)}" onchange="setPlanName(${i}, this.value)">
-        <span class="kc">${Math.round(mt.kcal)}kcal · P${fmt(mt.p)}</span>
+        <span class="kc">${MEAL_ICON[slotOf(m.time)]}${slotOf(m.time)} · ${Math.round(mt.kcal)}kcal</span>
         <button class="del" title="끼니 삭제" onclick="delPlanMeal(${i})">✕</button>
       </div>
       ${m.items.length ? m.items.map((it, j) => `<div class="plan-item">
         <span class="nm">${esc(it.name)}</span>
-        <span class="mc">${Math.round(it.kcal)}kcal · P${fmt(it.p)} C${fmt(it.c)} F${fmt(it.f)}</span>
+        <span class="mc">${Math.round(it.kcal)}kcal · P${fmt(it.p)} C${fmt(it.c)} F${fmt(it.f)}${+it.na ? " · Na" + Math.round(it.na) : ""}</span>
         <button class="del" onclick="delPlanItem(${i},${j})">✕</button>
       </div>`).join("") : `<div class="empty" style="padding:10px 0">음식을 추가해주세요</div>`}
       <div class="plan-btns">
@@ -921,6 +1127,8 @@ function renderPlan() {
           <input name="pp" type="number" step="any" min="0" placeholder="단백질g">
           <input name="pc" type="number" step="any" min="0" placeholder="탄수g">
           <input name="pf" type="number" step="any" min="0" placeholder="지방g">
+          <input name="pna" type="number" step="any" min="0" placeholder="나트륨mg">
+          <input name="pfib" type="number" step="any" min="0" placeholder="식이섬유g">
           <button type="submit">추가</button>
         </form>
         <div class="presets">${presets.map((x, k) => `<span class="chip" onclick="addPlanPreset(${i},${k})">${esc(x.name)}</span>`).join("")}</div>
@@ -934,13 +1142,15 @@ function openSettings() {
   cfgUrl.value = cfg?.url || "";
   cfgSecret.value = cfg?.secret || "";
   gKcal.value = goals.kcal; gP.value = goals.p; gC.value = goals.c; gF.value = goals.f;
+  gNa.value = goals.na; gFib.value = goals.fib;
   cfgMsg.textContent = ""; cfgMsg.className = "msg";
   settingsOverlay.classList.add("show");
 }
 function closeSettings() { settingsOverlay.classList.remove("show"); }
 
 async function saveSettings() {
-  const newGoals = { kcal:+gKcal.value||0, p:+gP.value||0, c:+gC.value||0, f:+gF.value||0 };
+  const newGoals = { kcal:+gKcal.value||0, p:+gP.value||0, c:+gC.value||0, f:+gF.value||0,
+                     na:+gNa.value||DEFAULT_GOALS.na, fib:+gFib.value||DEFAULT_GOALS.fib };
   goals = newGoals; save("dt_goals", goals);
   const url = cfgUrl.value.trim(), secret = cfgSecret.value.trim();
   if (!url) { cfgMsg.textContent = "URL을 입력하세요 (로컬 목표만 저장됨)"; cfgMsg.className = "msg err"; render(); return; }
