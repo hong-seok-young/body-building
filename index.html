@@ -296,6 +296,11 @@
         </div>
         <button type="submit">추가</button>
       </form>
+      <div class="btns mt">
+        <button class="btn" type="button" onclick="foodPhoto.click()">📷 영양정보표 촬영</button>
+      </div>
+      <input type="file" id="foodPhoto" accept="image/*" capture="environment" hidden onchange="readPhoto(this,'label')">
+      <div class="msg" id="foodOcrMsg"></div>
       <div class="hint">새로 넣은 음식은 아래에 자동 등록됩니다. 칩을 누르면 위에서 고른 끼니로 바로 기록돼요.</div>
       <div class="fields" style="margin-top:11px">
         <input id="presetQ" placeholder="🔍 등록한 음식 검색 (제품명)" oninput="presetQ=this.value;renderPresets()">
@@ -418,9 +423,15 @@
         <label>인바디 점수<input type="number" step="any" min="0" id="ibScore"></label>
       </div>
       <div class="fields" style="margin-top:9px"><label>메모<input id="ibNote" placeholder="선택"></label></div>
-      <div class="btns mt"><button class="btn pri" type="submit">기록 추가</button></div>
+      <div class="btns mt">
+        <button class="btn" type="button" onclick="ibPhoto.click()">📷 결과지 사진에서 읽기</button>
+        <button class="btn pri" type="submit">기록 추가</button>
+      </div>
     </form>
-    <div class="hint">기초대사량과 체중을 넣으면 <b>열량 탭이 자동으로 다시 계산됩니다.</b> 체중만 필수예요.</div>
+    <input type="file" id="ibPhoto" accept="image/*" capture="environment" hidden onchange="readPhoto(this,'inbody')">
+    <div class="msg" id="ibOcrMsg"></div>
+    <div class="hint">인바디 결과지를 찍으면 위 칸이 자동으로 채워집니다. <b>값을 눈으로 확인한 뒤</b> [기록 추가]를 누르세요.
+      기초대사량과 체중이 들어가면 <b>열량 탭이 자동으로 다시 계산됩니다.</b></div>
   </div>
 
   <div class="card" id="ibLatest"></div>
@@ -1343,6 +1354,60 @@ async function saveSettings() {
     cfgMsg.textContent = "✗ 연결 실패: URL과 비밀키를 확인하세요. (" + e.message + ")"; cfgMsg.className = "msg err";
   }
   render();
+}
+
+// ═════════ 사진 판독 ═════════
+// 원본 사진은 3~4MB 라 그대로 보내면 느리고 base64 로 33% 더 커진다. 긴 변 1600px 로 줄인다
+async function shrink(file, max = 1600, q = 0.82) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("이미지를 열 수 없습니다")); i.src = url;
+    });
+    const k = Math.min(1, max / Math.max(img.width, img.height));
+    const cv = document.createElement("canvas");
+    cv.width = Math.max(1, Math.round(img.width * k));
+    cv.height = Math.max(1, Math.round(img.height * k));
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    return cv.toDataURL("image/jpeg", q).split(",")[1];
+  } finally { URL.revokeObjectURL(url); }
+}
+async function readPhoto(input, kind) {
+  const file = input.files && input.files[0];
+  input.value = "";                                  // 같은 사진 다시 고를 수 있게
+  if (!file) return;
+  const box = kind === "inbody" ? ibOcrMsg : foodOcrMsg;
+  const show = (t, c) => { box.textContent = t; box.className = "msg" + (c ? " " + c : ""); };
+  if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요 — 판독은 백엔드를 거칩니다.", "err"); return; }
+  show("사진 읽는 중… 5~15초 걸립니다");
+  try {
+    const b64 = await shrink(file);
+    const r = await api({ action: "ocr", kind, image: b64 });
+    const d = r.data || {};
+    const filled = kind === "inbody" ? fillInbodyForm(d) : fillFoodForm(d);
+    if (!filled) { show("✗ 읽을 수 있는 값이 없습니다. 표가 잘 보이게 다시 찍어주세요.", "err"); return; }
+    show(`✓ ${filled}개 항목을 채웠습니다. 값을 확인하고 저장하세요.`, "ok");
+  } catch (e) {
+    show("✗ 판독 실패: " + e.message, "err");
+  }
+}
+// 판독 결과를 폼에만 채운다 — 자동 저장하지 않는다 (OCR 은 틀릴 수 있고, 이 숫자가 목표 계산의 기준이 된다)
+function setIf(el, v) { if (v === null || v === undefined || v === "" || isNaN(+v)) return 0; el.value = +v; return 1; }
+function fillInbodyForm(d) {
+  let n = 0;
+  if (d.date && /^\d{4}-\d{2}-\d{2}$/.test(d.date)) { ibDate.value = d.date; n++; }
+  [[ibW, d.weight], [ibS, d.smm], [ibBfm, d.bfm], [ibPbf, d.pbf],
+   [ibBmi, d.bmi], [ibBmr, d.bmr], [ibScore, d.score]].forEach(([el, v]) => { n += setIf(el, v); });
+  render();
+  return n;
+}
+function fillFoodForm(d) {
+  let n = 0;
+  if (d.name) { fName.value = String(d.name).slice(0, 40) + (d.serving ? " " + d.serving : ""); n++; }
+  [[fKcal, d.kcal], [fP, d.p], [fC, d.c], [fF, d.f], [fNa, d.na], [fFib, d.fib]]
+    .forEach(([el, v]) => { n += setIf(el, v); });
+  if (n) fName.scrollIntoView({ behavior: "smooth", block: "center" });
+  return n;
 }
 
 // ═════════ 내보내기 ═════════
