@@ -26,7 +26,7 @@ const SHEETS = {
   meta:   ["key", "value"],
 };
 // list 응답에 함께 실어 보낼 meta 키 (앱이 기대하는 것)
-const META_KEYS = ["goals", "presets", "plan", "calc", "act"];
+const META_KEYS = ["goals", "presets", "plan", "calc", "act", "sets"];
 
 // ───────────────────────── 엔트리 ─────────────────────────
 
@@ -44,6 +44,8 @@ function doPost(e) {
       case "ocr":     return out({ ok: true, data: ocr(req.image, req.kind, req.text) });
       case "foodSearch": return out({ ok: true, items: foodSearch(req.q, req.debug) });
       case "barcode":    return out({ ok: true, data: barcodeLookup(req.code) });
+      case "dbSearch":   return out({ ok: true, items: localDbSearch(req.q) });
+      case "dbCount":    return out({ ok: true, count: dbRowCount() });
       default:        return out({ ok: false, error: "unknown-action: " + req.action });
     }
   } catch (err) {
@@ -431,6 +433,157 @@ function mapNutrient(r) {
   };
 }
 
+// ═══════════ 식약처 통합식품영양성분DB 일괄 적재 ═══════════
+/**
+ * 식약처가 파일로 공개하는 영양성분 DB 전체를 시트에 넣습니다.
+ * 한 번 넣어두면 인증키·인터넷 없이 수만 건을 검색할 수 있습니다.
+ *
+ * 【사용법】
+ *  1) 아래에서 파일을 받습니다 (셋 중 아무거나, 여러 개 넣어도 됩니다)
+ *     · 공공데이터포털 data.go.kr → "식품영양성분" 검색 → 파일데이터 → CSV 다운로드
+ *     · 식품안전나라 → 전문정보 → 식품영양성분DB → 다운로드
+ *     · 「통합식품영양성분DB」 — 음식/가공식품/원재료성식품 3종
+ *  2) 받은 파일을 구글 드라이브에 올립니다 (드래그하면 끝)
+ *     · CSV 그대로 올려도 되고, 엑셀이면 드라이브에서 "Google 스프레드시트로 열기" 후 저장
+ *  3) 아래 FILE_NAME 을 그 파일 이름으로 바꾸고 importFoodDb 를 실행합니다
+ *
+ * 컬럼 이름은 데이터셋마다 달라서(식품명/제품명/DESC_KOR …) 한국어 키워드로
+ * 자동 매칭합니다. 못 찾은 항목은 0 이 되고, 실행 로그에 매칭 결과가 찍힙니다.
+ */
+function importFoodDb() {
+  const FILE_NAME = "여기에-드라이브에-올린-파일이름";   // 예: "통합식품영양성분DB.csv"
+  const files = DriveApp.getFilesByName(FILE_NAME);
+  if (!files.hasNext()) throw new Error("드라이브에 '" + FILE_NAME + "' 파일이 없습니다");
+  const file = files.next();
+
+  let rows;
+  const mime = file.getMimeType();
+  if (mime === MimeType.GOOGLE_SHEETS) {
+    const sh = SpreadsheetApp.openById(file.getId()).getSheets()[0];
+    rows = sh.getDataRange().getValues();
+  } else {
+    // CSV. 한글 인코딩이 깨지면 EUC-KR 로 다시 시도한다
+    let txt = file.getBlob().getDataAsString("UTF-8");
+    if (txt.indexOf("\uFFFD") >= 0) txt = file.getBlob().getDataAsString("EUC-KR");
+    rows = Utilities.parseCsv(txt);
+  }
+  if (!rows || rows.length < 2) throw new Error("데이터가 비었습니다");
+
+  const map = matchColumns(rows[0]);
+  Logger.log("컬럼 매칭 결과:");
+  Object.keys(map).forEach(function (k) {
+    Logger.log("  " + k + " → " + (map[k] >= 0 ? "'" + rows[0][map[k]] + "'" : "❌ 못 찾음"));
+  });
+  if (map.name < 0) throw new Error("식품명 컬럼을 찾지 못했습니다. 헤더: " + rows[0].slice(0, 15).join(" | "));
+
+  const out = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const nm = String(r[map.name] || "").trim();
+    if (!nm) continue;
+    const maker = map.maker >= 0 ? String(r[map.maker] || "").trim() : "";
+    out.push([
+      (maker && nm.indexOf(maker) < 0 ? maker + " " : "") + nm,
+      map.serving >= 0 ? String(r[map.serving] || "").trim() : "",
+      cell(r, map.kcal), cell(r, map.p), cell(r, map.c), cell(r, map.f),
+      cell(r, map.na), cell(r, map.sug), cell(r, map.sat), cell(r, map.trans),
+      cell(r, map.chol), cell(r, map.fib),
+    ]);
+  }
+  if (!out.length) throw new Error("옮길 행이 없습니다");
+
+  const sh = dbSheet();
+  sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), DB_COLS.length).clearContent();
+  if (sh.getMaxRows() < out.length + 1) sh.insertRowsAfter(sh.getMaxRows(), out.length + 1 - sh.getMaxRows());
+  // 한 번에 다 쓰면 시간초과가 나므로 나눠서 넣는다
+  const CH = 2000;
+  for (let i = 0; i < out.length; i += CH) {
+    const part = out.slice(i, i + CH);
+    sh.getRange(2 + i, 1, part.length, DB_COLS.length).setValues(part);
+  }
+  Logger.log("✅ " + out.length + "건을 fooddb 시트에 넣었습니다");
+  return out.length;
+}
+
+const DB_COLS = ["name", "serving", "kcal", "p", "c", "f", "na", "sug", "sat", "trans", "chol", "fib"];
+
+function dbSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName("fooddb");
+  if (!sh) {
+    sh = ss.insertSheet("fooddb");
+    sh.getRange(1, 1, 1, DB_COLS.length).setValues([DB_COLS]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function cell(row, idx) {
+  if (idx < 0) return 0;
+  const n = parseFloat(String(row[idx]).replace(/[^0-9.\-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
+// 헤더 이름을 키워드로 매칭. 데이터셋마다 이름이 달라도 붙는다
+function matchColumns(hdr) {
+  const H = hdr.map(function (h) { return String(h).replace(/\s|\(|\)|_/g, ""); });
+  function find(cands, avoid) {
+    for (let c = 0; c < cands.length; c++) {
+      for (let i = 0; i < H.length; i++) {
+        if (H[i].indexOf(cands[c]) < 0) continue;
+        if (avoid && avoid.some(function (a) { return H[i].indexOf(a) >= 0; })) continue;
+        return i;
+      }
+    }
+    return -1;
+  }
+  return {
+    name:    find(["식품명", "제품명", "DESCKOR", "FOODNM", "품목명"]),
+    maker:   find(["제조사", "업체명", "MAKERNAME", "BSSHNM", "제조업소"]),
+    serving: find(["1회제공량", "영양성분함량기준량", "SERVINGWT", "기준량", "내용량"]),
+    kcal:    find(["에너지", "열량", "칼로리", "kcal", "NUTRCONT1"]),
+    p:       find(["단백질", "PROCNT", "NUTRCONT3"]),
+    c:       find(["탄수화물", "CHOCDF", "NUTRCONT2"]),
+    f:       find(["지방", "FATCE", "NUTRCONT4"], ["포화", "트랜스"]),
+    na:      find(["나트륨", "NAT", "NUTRCONT6"]),
+    sug:     find(["당류", "SUGAR", "NUTRCONT5"]),
+    sat:     find(["포화지방", "FASAT"]),
+    trans:   find(["트랜스지방", "FATRN"]),
+    chol:    find(["콜레스테롤", "CHOLE"]),
+    fib:     find(["식이섬유", "FIBTG"]),
+  };
+}
+
+function dbRowCount() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName("fooddb");
+  return sh ? Math.max(0, sh.getLastRow() - 1) : 0;
+}
+
+// 시트에 적재된 DB 검색. 이름 컬럼만 먼저 훑어 후보 행을 찾고 그 행만 상세 조회한다
+// (수만 행 전체를 읽으면 느리다)
+function localDbSearch(q) {
+  const key = String(q || "").trim();
+  if (!key) return [];
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName("fooddb");
+  const last = sh ? sh.getLastRow() : 0;
+  if (!sh || last < 2) return [];
+
+  const names = sh.getRange(2, 1, last - 1, 1).getValues();
+  const hitRows = [];
+  for (let i = 0; i < names.length && hitRows.length < 40; i++) {
+    if (String(names[i][0]).indexOf(key) >= 0) hitRows.push(i + 2);
+  }
+  return hitRows.map(function (r) {
+    const v = sh.getRange(r, 1, 1, DB_COLS.length).getValues()[0];
+    const o = { src: "식약처" };
+    DB_COLS.forEach(function (c, i) { o[c] = i < 2 ? v[i] : (+v[i] || 0); });
+    if (!o.serving) o.serving = "100g";
+    return o;
+  });
+}
+
 // ───────────────────────── 점검용 ─────────────────────────
 // Apps Script 편집기에서 이 함수를 직접 실행하면 시트 3개가 만들어지고
 // 실행 로그에 결과가 찍힙니다. 배포 전에 한 번 돌려보세요.
@@ -444,7 +597,8 @@ function setupAndTest() {
   Logger.log("SECRET 을 바꿨는지 확인: " + (SECRET.indexOf("여기에") === 0 ? "❌ 아직 기본값입니다" : "✅ 변경됨"));
   const props = PropertiesService.getScriptProperties();
   Logger.log("사진 판독(GEMINI_KEY): " + (props.getProperty("GEMINI_KEY") ? "✅ 설정됨" : "⚠️ 없음 — 사진 판독만 안 됨"));
-  Logger.log("제품 검색(MFDS_KEY): " + (props.getProperty("MFDS_KEY") ? "✅ 설정됨" : "⚠️ 없음 — 제품 검색만 안 됨"));
+  Logger.log("제품 검색(MFDS_KEY): " + (props.getProperty("MFDS_KEY") ? "✅ 설정됨" : "⚠️ 없음 — API 검색만 안 됨"));
+  Logger.log("내장 식품DB(fooddb 시트): " + (dbRowCount() ? "✅ " + dbRowCount() + "건" : "⚠️ 비어 있음 — importFoodDb 실행하면 채워집니다"));
 }
 
 // 식약처 검색이 되는지, 필드명이 예상과 맞는지 확인. 실행 로그를 저에게 보여주시면

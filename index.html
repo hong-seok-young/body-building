@@ -246,6 +246,7 @@
     </div>
 
     <div class="card" id="summaryCard"></div>
+    <div class="card" id="setsCard"></div>
 
     <div class="card">
       <h3>오늘 활동 <span class="muted">그날 목표에 반영</span></h3>
@@ -286,6 +287,10 @@
       <form class="addform" onsubmit="addFood(event)">
         <select id="fMeal"></select>
         <input id="fName" placeholder="음식명" required>
+        <div class="nums" style="grid-template-columns:auto 1fr">
+          <input id="fQty" type="number" step="0.5" min="0.5" value="1" style="max-width:74px" title="수량 — 칩을 누를 때도 이 배수가 적용됩니다">
+          <span class="hint" style="margin:0;align-self:center">← 수량. 닭다리살 2개면 2 로 두고 칩을 한 번만 누르세요</span>
+        </div>
         <div class="nums">
           <input id="fKcal" type="number" step="any" min="0" placeholder="kcal" required>
           <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
@@ -664,22 +669,38 @@ let metaDirty = load("dt_meta_dirty", {});    // 전송 실패한 설정 키 { a
 // ── 설정 링크로 받기: 주소 끝에 #cfg=<base64> 가 붙어 있으면 그걸 저장하고
 //    주소에서 즉시 지운다. 폰에서 긴 URL·비밀키를 타이핑하지 않게 하는 용도.
 //    (비밀키는 코드에 넣지 않는다 — 공개 주소라 페이지 소스가 그대로 보인다)
-(function importCfgFromHash() {
-  const m = (location.hash || "").match(/(?:^#|[#&])cfg=([A-Za-z0-9+/=_-]+)/);
-  if (!m) return;
-  try {
-    const json = atob(m[1].replace(/-/g, "+").replace(/_/g, "/"));
-    const o = JSON.parse(json);
+function fromB64(x) {
+  const bin = atob(x.replace(/-/g, "+").replace(/_/g, "/"));
+  // 한글이 섞여 있어도 깨지지 않게 UTF-8 로 되돌린다
+  return decodeURIComponent(Array.prototype.map.call(bin,
+    c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+}
+let hashAdd = null;                            // #add= 로 받은 기록 (시작 후 처리)
+// 주소의 #cfg= / #add= 를 읽어 반영한다.
+// 최초 로드뿐 아니라 hashchange 에서도 불러야 한다 — 앱이 이미 열려 있을 때
+// 링크를 누르면 문서가 다시 로드되지 않고 해시만 바뀌기 때문(안드로이드 설치앱이 그렇다)
+function readHash() {
+  const h = location.hash || "";
+  const c = h.match(/(?:^#|[#&])cfg=([A-Za-z0-9+/=_-]+)/);
+  let got = false;
+  if (c) try {
+    const o = JSON.parse(fromB64(c[1]));
     if (o && o.url) {
       cfg = { url: String(o.url), secret: String(o.secret || "") };
       save("dt_cfg", cfg);
-      cache = {}; save("dt_cache", cache);        // 새 백엔드 기준으로 다시 받아온다
+      cache = {}; save("dt_cache", cache);      // 새 백엔드 기준으로 다시 받아온다
+      got = true;
     }
   } catch (e) { /* 깨진 링크는 무시 */ }
-  // 비밀키가 주소창·방문기록에 남지 않게 지운다
-  history.replaceState(null, "", location.pathname + location.search);
-})();
+  const a = h.match(/(?:^#|[#&])add=([A-Za-z0-9+/=_-]+)/);
+  if (a) try { hashAdd = JSON.parse(fromB64(a[1])); got = true; } catch (e) {}
+  // 비밀키·데이터가 주소창·방문기록에 남지 않게 지운다
+  if (c || a) history.replaceState(null, "", location.pathname + location.search);
+  return got;
+}
+readHash();
 let plan = load("dt_plan", DEFAULT_PLAN);
+let sets = load("dt_sets", []);               // 자주 먹는 끼니 조합
 let planFormOpen = -1;
 let section = "diet", view = "day";
 let curDate = todayStr();
@@ -727,7 +748,7 @@ function setMeta(key, value) {
     .catch(() => { metaDirty[key] = 1; save("dt_meta_dirty", metaDirty); });
 }
 // 로컬의 최신 설정값을 돌려주는 표 — flushMeta 가 무엇을 올릴지 여기서 찾는다
-function localMeta() { return { goals, presets, plan, calc, act }; }
+function localMeta() { return { goals, presets, plan, calc, act, sets }; }
 async function flushMeta() {
   const local = localMeta();
   for (const k of Object.keys(metaDirty)) {
@@ -746,6 +767,7 @@ async function syncRange(from, to) {
   if (r.plan) { plan = r.plan; save("dt_plan", plan); }
   if (r.calc) { calc = { ...DEFAULT_CALC, ...r.calc }; save("dt_calc", calc); }
   if (r.act) { act = r.act; save("dt_act", act); }
+  if (r.sets) { sets = r.sets; save("dt_sets", sets); }
   save("dt_cache", cache);
 }
 async function ensureRange(from, to) {
@@ -846,7 +868,14 @@ async function delItem(ds, id) {
     api({ action: "del", id }).catch(() => setStatus("● 삭제 동기화 실패", "var(--red)"));
   }
 }
-function addPreset(i) { pushItem({ ...presets[i], date: curDate, meal: fMeal.value || guessMeal() }); }
+function qtyVal() { const q = +fQty.value; return q > 0 ? q : 1; }
+// 수량 배수 적용. 이름에 ×2 를 붙여 나중에 봐도 몇 개였는지 알 수 있게
+function scaled(x, q) {
+  const o = { name: q !== 1 ? `${x.name} ×${q}` : x.name };
+  KEYS.forEach(k => { o[k] = Math.round((+x[k] || 0) * q * 10) / 10; });
+  return o;
+}
+function addPreset(i) { pushItem({ ...scaled(presets[i], qtyVal()), date: curDate, meal: fMeal.value || guessMeal() }); }
 function delPreset(i) { presets.splice(i, 1); save("dt_presets", presets); setMeta("presets", presets); render(); }
 async function copyMealFrom(m) {
   const src = mealLog(addDays(curDate, -1), m);
@@ -1046,7 +1075,12 @@ function renderDay() {
       return `<div class="macro"><div class="row"><span><b>${r.l}</b> ${fmt(r.v)} / ${r.g}${r.u}</span>${st}</div>
         <div class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.c}"></div></div></div>`;
     }).join("") +
-    `<div class="btns mt"><button class="btn" onclick="copyDay(-1)">어제 식단 전체 복사</button></div>`;
+    (list.length
+      ? `<div class="btns mt"><button class="btn" onclick="copyDay(-1)">어제와 똑같이 추가</button></div>`
+      : `<div class="btns mt">
+           <button class="btn pri" onclick="logAllPlan()">📋 계획대로 하루 기록</button>
+           <button class="btn ok" onclick="copyDay(-1)">📄 어제와 똑같이</button>
+         </div>`);
 
   // 끼니 카드
   mealsEl.innerHTML = MEALS.map(m => {
@@ -1067,6 +1101,7 @@ function renderDay() {
         + `<div class="meal-act">
              <button class="btn" onclick="pickMeal('${m}')">＋ 음식</button>
              <button class="btn" onclick="copyMealFrom('${m}')">전날 복사</button>
+             ${items.length ? `<button class="btn" onclick="saveMealSet('${m}')">💾 세트 저장</button>` : ""}
            </div>` : ""}
     </div>`;
   }).join("");
@@ -1111,6 +1146,7 @@ function renderDay() {
   if (!fMeal.options.length) fMeal.innerHTML = MEALS.map(m => `<option>${m}</option>`).join("");
   if (!fMeal.value) fMeal.value = guessMeal();
   renderPresets();
+  renderSets(g);
   renderStreak();
 }
 function renderPresets() {
@@ -1129,7 +1165,36 @@ function renderPresets() {
     : `자주 먹는 음식 ${presets.length}개 · 검색하면 기본 성분표 ${FOOD_DB.length}개도 같이 나옵니다`;
 }
 // 내장 성분표는 바로 기록하지 않고 칸에 채운다 — 양을 조절해야 하는 경우가 많다
-function fillFromDbFood(i) { fillForm(FOOD_DB[i]); }
+function fillFromDbFood(i) { fillForm(scaled(FOOD_DB[i], qtyVal())); }
+// 자주 먹는 끼니 조합 — 한 번 저장하면 그 뒤로는 칩 한 번에 끼니 전체가 들어간다
+function saveMealSet(m) {
+  const items = mealLog(curDate, m);
+  if (!items.length) { alert(`${m} 기록이 없어요`); return; }
+  const name = prompt("세트 이름", items.length + "개 · " + items[0].name.slice(0, 12));
+  if (!name || !name.trim()) return;
+  sets.unshift({ name: name.trim(), meal: m,
+    items: items.map(x => { const { id, date, meal, ...r } = x; return r; }) });
+  sets = sets.slice(0, 30);
+  save("dt_sets", sets); setMeta("sets", sets); render();
+}
+async function logSet(i) {
+  const st = sets[i], q = qtyVal();
+  for (const it of st.items) await pushItem({ ...scaled(it, q), date: curDate, meal: st.meal || guessMeal() });
+  render();
+}
+function delSet(i) { sets.splice(i, 1); save("dt_sets", sets); setMeta("sets", sets); render(); }
+function renderSets(g) {
+  if (!sets.length) {
+    setsCard.innerHTML = `<h3>자주 먹는 끼니 <span class="muted">아직 없음</span></h3>
+      <div class="hint" style="margin-top:0">아래 끼니 카드에서 <b>💾 세트 저장</b> 을 누르면, 그 조합이 여기 칩으로 올라옵니다. 그 뒤로는 칩 한 번에 끼니 전체가 기록됩니다.</div>`;
+    return;
+  }
+  setsCard.innerHTML = `<h3>자주 먹는 끼니 <span class="muted">칩 한 번 = 끼니 전체 기록</span></h3>
+    <div class="presets">` + sets.map((st, i) => {
+      const t = totals(st.items);
+      return `<span class="chip" onclick="logSet(${i})">${MEAL_ICON[st.meal] || ""} ${esc(st.name)} · ${num(t.kcal)}kcal P${fmt(t.p)}<span class="x" onclick="event.stopPropagation();delSet(${i})">×</span></span>`;
+    }).join("") + `</div>`;
+}
 function toggleMeal(m) { mealOpen[m] = (mealOpen[m] === false); render(); }
 function pickMeal(m) { fMeal.value = m; fName.focus(); fName.scrollIntoView({ behavior: "smooth", block: "center" }); }
 function renderStreak() {
@@ -1291,12 +1356,15 @@ async function addInbody(e) {
     bfm: +ibBfm.value || 0, pbf: +ibPbf.value || 0, bmi: +ibBmi.value || 0, bmr: +ibBmr.value || 0,
     score: +ibScore.value || 0, note: ibNote.value.trim() };
   ibW.value = ibS.value = ibBfm.value = ibPbf.value = ibBmi.value = ibBmr.value = ibScore.value = ibNote.value = "";
-  const tmpId = "tmp-" + Date.now();
+  await pushInbody(item);
+}
+async function pushInbody(item) {
+  const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5);
   inbody.push({ ...item, id: tmpId }); inbody.sort(cmpDate); save("dt_inbody", inbody); render();
   try {
     const r = await api({ action: "add", type: "inbody", item });
     const idx = inbody.findIndex(x => x.id === tmpId);
-    if (idx >= 0) inbody[idx] = r.item;
+    if (idx >= 0) inbody[idx] = { ...item, ...r.item };
     save("dt_inbody", inbody); setStatus("● 동기화됨", "var(--green)");
   } catch (err) {
     ibPending.push({ ...item, tmpId }); save("dt_ib_pending", ibPending);
@@ -1530,15 +1598,19 @@ async function dbSearch() {
   if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요 — 검색은 백엔드를 거칩니다.", "err"); return; }
   show("검색 중…"); dbResults.innerHTML = "";
   try {
-    const r = await api({ action: "foodSearch", q });
-    dbHits = r.items || [];
+    // 1순위: 시트에 적재한 식약처 통합DB (인증키 불필요·빠름)
+    // 2순위: 식약처 OpenAPI → Open Food Facts (브랜드 상품 보완)
+    dbHits = [];
+    try { dbHits = (await api({ action: "dbSearch", q })).items || []; } catch (e) { /* 미적재면 넘어간다 */ }
+    let src = dbHits.length ? "시트 식약처DB" : "";
+    if (!dbHits.length) { dbHits = (await api({ action: "foodSearch", q })).items || []; src = "인터넷"; }
     if (!dbHits.length) { show("결과 없음. 제품명을 줄여서 다시 해보세요 (예: '맛에반했닭' → '닭다리').", "err"); return; }
-    show(`${dbHits.length}건 — 누르면 아래 칸이 채워집니다. 1회 제공량 기준을 꼭 확인하세요.`, "ok");
+    show(`${src} ${dbHits.length}건 — 누르면 칸이 채워집니다. 기준량(${esc(dbHits[0].serving || "100g")})을 꼭 확인하세요.`, "ok");
     dbResults.innerHTML = dbHits.map((x, i) =>
       `<span class="chip" onclick="fillFromDb(${i})">${esc(x.name)} · ${Math.round(x.kcal)}kcal/${esc(x.serving)}</span>`).join("");
   } catch (e) { show("✗ " + e.message, "err"); }
 }
-function fillFromDb(i) { fillForm(dbHits[i]); }
+function fillFromDb(i) { fillForm(scaled(dbHits[i], qtyVal())); }
 function fillForm(x) {
   fName.value = (x.serving ? `${x.name} ${x.serving}` : x.name).slice(0, 60);
   const map = { kcal: fKcal, p: fP, c: fC, f: fF, na: fNa, sug: fSug, fib: fFib, sat: fSat, trans: fTrans, chol: fChol };
@@ -1737,15 +1809,49 @@ if ("serviceWorker" in navigator) {
   addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 }
 
+// 링크(#add=)로 받은 기록을 반영한다. 같은 날짜 인바디·같은 이름 제품은 건너뛴다
+async function applyHashAdd() {
+  const o = hashAdd; hashAdd = null;
+  if (!o) return;
+  const done = [];
+  for (const r of (o.inbody || [])) {
+    if (!r || !r.date) continue;
+    if (inbody.some(x => x.date === r.date)) { done.push(`인바디 ${r.date} (이미 있음)`); continue; }
+    await pushInbody(r); done.push(`인바디 ${r.date}`);
+  }
+  for (const it of (o.food || [])) {
+    if (!it || !it.name) continue;
+    await pushItem({ ...it, date: it.date || todayStr(), meal: it.meal || guessMeal() });
+    done.push(`식단 ${it.name}`);
+  }
+  const newP = (o.presets || []).filter(x => x && x.name && !presets.some(z => z.name === x.name));
+  if (newP.length) {
+    presets = newP.concat(presets).slice(0, 300);
+    save("dt_presets", presets); setMeta("presets", presets);
+    done.push(`음식 ${newP.length}개 등록`);
+  }
+  if (o.goals) { goals = { ...goals, ...o.goals }; save("dt_goals", goals); setMeta("goals", goals); done.push("목표 반영"); }
+  if (o.calc) { calc = { ...calc, ...o.calc }; save("dt_calc", calc); setMeta("calc", calc); done.push("열량 설정 반영"); }
+  render();
+  if (done.length) alert("✓ 반영했습니다\n\n" + done.join("\n"));
+}
+
 // ═════════ 시작 ═════════
 // 홈화면 아이콘 롱프레스 바로가기(#cal 등) 및 뒤로가기 대응
 function fromHash() {
+  // 설정·기록 링크가 먼저다 (앱이 열려 있는 상태로 링크를 누른 경우)
+  if (readHash()) {
+    if (cfg) fullSync();
+    applyHashAdd();
+    return;
+  }
   const h = (location.hash || "").replace("#", "");
   if (["diet", "plan", "cal", "inbody"].includes(h) && h !== section) setSection(h);
 }
 addEventListener("hashchange", fromHash);
 fromHash();
 render();
+applyHashAdd();
 if (!cfg) { setStatus("설정 필요 →", "var(--red)"); openSettings(); }
 else fullSync();
 </script>
