@@ -34,7 +34,18 @@ self.addEventListener("fetch", e => {
   // POST(구글 시트 API) 와 크로스오리진(Chart.js CDN) 은 건드리지 않는다
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
 
-  // stale-while-revalidate: 캐시를 먼저 주고 뒤에서 갱신
+  // 문서(앱 셸)는 네트워크 우선 — 온라인이면 항상 최신 버전이 뜨게
+  if (req.mode === "navigate" || new URL(req.url).pathname.endsWith("/index.html")) {
+    e.respondWith(
+      fetch(req).then(res => {
+        if (res && res.ok) caches.open(CACHE).then(c => c.put(req, res.clone()));
+        return res;
+      }).catch(() => caches.match(req).then(hit => hit || caches.match("./index.html")))
+    );
+    return;
+  }
+
+  // 나머지 정적 파일은 stale-while-revalidate
   e.respondWith(
     caches.match(req).then(hit => {
       const fresh = fetch(req).then(res => {

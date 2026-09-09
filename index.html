@@ -259,6 +259,12 @@
         <button class="btn pri" onclick="saveAct()">저장</button>
         <button class="btn" onclick="clearAct()">지우기</button>
       </div>
+      <div class="btns" style="margin-top:7px">
+        <button class="btn" onclick="actPreset('yesterday')">어제와 동일</button>
+        <button class="btn" onclick="actPreset('lift')">웨이트일</button>
+        <button class="btn" onclick="actPreset('cardio')">유산소일</button>
+        <button class="btn" onclick="actPreset('rest')">휴식일</button>
+      </div>
       <div class="hint" id="actInfo"></div>
     </div>
 
@@ -291,7 +297,11 @@
         <button type="submit">추가</button>
       </form>
       <div class="hint">새로 넣은 음식은 아래에 자동 등록됩니다. 칩을 누르면 위에서 고른 끼니로 바로 기록돼요.</div>
+      <div class="fields" style="margin-top:11px">
+        <input id="presetQ" placeholder="🔍 등록한 음식 검색 (제품명)" oninput="presetQ=this.value;renderPresets()">
+      </div>
       <div class="presets" id="presetsEl"></div>
+      <div class="hint" id="presetCount"></div>
     </div>
   </div>
 
@@ -453,6 +463,12 @@
       <label>나트륨mg 상한<input type="number" id="gNa"></label>
       <label>식이섬유g 하한<input type="number" id="gFib"></label>
     </div>
+    <label style="margin-top:16px">내보내기 — 기기에 있는 전체 기록을 파일로 저장</label>
+    <div class="btns">
+      <button class="btn" onclick="exportCsv()">식단 CSV</button>
+      <button class="btn" onclick="exportCsv('inbody')">인바디 CSV</button>
+      <button class="btn" onclick="exportJson()">전체 JSON</button>
+    </div>
     <div class="msg" id="cfgMsg"></div>
     <div class="btns mt">
       <button class="btn" onclick="closeSettings()">닫기</button>
@@ -522,6 +538,7 @@ let presets = load("dt_presets", DEFAULT_PRESETS);
 let pending = load("dt_pending", []);
 let inbody = load("dt_inbody", []);
 let ibPending = load("dt_ib_pending", []);
+let metaDirty = load("dt_meta_dirty", {});    // 전송 실패한 설정 키 { act:1, calc:1 ... }
 let plan = load("dt_plan", DEFAULT_PLAN);
 let planFormOpen = -1;
 let section = "diet", view = "day";
@@ -529,6 +546,8 @@ let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
 let weekChart = null, monthChart = null, ratioChart = null, ibChart1 = null, ibChart2 = null;
 let mealOpen = {};
+let actFilledFor = null;                      // 활동 입력칸을 어느 날짜로 채웠는지
+let presetQ = "";                             // 음식 검색어
 
 // ═════════ 유틸 ═════════
 function todayStr(d = new Date()) {
@@ -562,7 +581,21 @@ async function api(params) {
   return j;
 }
 function setStatus(txt, color) { statusEl.textContent = txt; statusEl.style.color = color || "var(--sub)"; }
-function setMeta(key, value) { api({ action: "setMeta", key, value }).catch(() => {}); }
+function setMeta(key, value) {
+  api({ action: "setMeta", key, value })
+    .then(() => { if (metaDirty[key]) { delete metaDirty[key]; save("dt_meta_dirty", metaDirty); } })
+    .catch(() => { metaDirty[key] = 1; save("dt_meta_dirty", metaDirty); });
+}
+// 로컬의 최신 설정값을 돌려주는 표 — flushMeta 가 무엇을 올릴지 여기서 찾는다
+function localMeta() { return { goals, presets, plan, calc, act }; }
+async function flushMeta() {
+  const local = localMeta();
+  for (const k of Object.keys(metaDirty)) {
+    if (local[k] === undefined) { delete metaDirty[k]; save("dt_meta_dirty", metaDirty); continue; }
+    await api({ action: "setMeta", key: k, value: local[k] });
+    delete metaDirty[k]; save("dt_meta_dirty", metaDirty);
+  }
+}
 
 async function syncRange(from, to) {
   const r = await api({ action: "list", from, to });
@@ -605,12 +638,12 @@ async function fullSync() {
   if (!cfg) { setStatus("설정 필요 →", "var(--red)"); return; }
   try {
     setStatus("동기화 중…");
-    await flushPending(); await flushIbPending();
+    await flushPending(); await flushIbPending(); await flushMeta();
     await syncRange(addDays(todayStr(), -92), todayStr());
     await syncInbody();
     setStatus("● 동기화됨", "var(--green)");
   } catch (e) {
-    const w = pending.length + ibPending.length;
+    const w = pending.length + ibPending.length + Object.keys(metaDirty).length;
     setStatus("● 오프라인" + (w ? ` (대기 ${w})` : ""), "var(--red)");
   }
   render();
@@ -634,7 +667,7 @@ async function addFood(e) {
   if (!presets.some(x => x.name === item.name)) {
     const { date, meal: _m, ...food } = item;
     presets.unshift(food);
-    if (presets.length > 16) presets.pop();
+    if (presets.length > 300) presets.pop();
     save("dt_presets", presets); setMeta("presets", presets);
   }
   render();
@@ -734,9 +767,36 @@ function dayTarget(ds) {
 function saveAct() {
   const a = { steps: +aSteps.value || 0, wh: +aWh.value || 0, ch: +aCh.value || 0, ci: aCi.value };
   if (!a.steps && !a.wh && !a.ch) act[curDate] = { ...a, rest: 1 }; else act[curDate] = a;
-  save("dt_act", act); setMeta("act", act); render();
+  pushAct();
 }
-function clearAct() { delete act[curDate]; save("dt_act", act); setMeta("act", act); render(); }
+// act 는 meta 셀 하나에 JSON 으로 들어가고 시트 셀 한도는 5만 자다.
+// 하루치가 약 50자라 그냥 쌓으면 2.6년쯤에서 저장이 막힌다. 최근 400일만 남긴다
+// (월간 차트가 보는 범위는 90일 남짓이라 그 이전 활동 기록은 쓰이지 않는다)
+function pushAct() {
+  const keep = addDays(todayStr(), -400);
+  Object.keys(act).forEach(d => { if (d < keep) delete act[d]; });
+  save("dt_act", act); setMeta("act", act); actFilledFor = null; render();
+}
+function clearAct() {
+  delete act[curDate];
+  aSteps.value = aWh.value = aCh.value = "";
+  pushAct();
+}
+// 자주 쓰는 활동 한 번에 — 폰에서 매일 입력하는 마찰을 줄인다
+function actPreset(kind) {
+  if (kind === "yesterday") {
+    const y = act[addDays(curDate, -1)];
+    if (!y) { alert("어제 활동 기록이 없어요"); return; }
+    act[curDate] = { ...y };
+  } else if (kind === "lift") {
+    act[curDate] = { steps: calc.steps, wh: calc.wH, ch: 0, ci: calc.cI };
+  } else if (kind === "cardio") {
+    act[curDate] = { steps: calc.steps, wh: 0, ch: calc.cH, ci: calc.cI };
+  } else {
+    act[curDate] = { steps: calc.steps, wh: 0, ch: 0, ci: calc.cI, rest: 1 };
+  }
+  pushAct();
+}
 
 function saveCalc() {
   calc = { ...calc,
@@ -806,8 +866,12 @@ function renderDay() {
 
   // 활동 입력 채우기
   if (!aCi.options.length) aCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
+  // 날짜가 바뀔 때만 채운다 — 매 render 마다 덮으면 타이핑 중인 값이 날아간다
   const a = act[curDate] || {};
-  aSteps.value = a.steps || ""; aWh.value = a.wh || ""; aCh.value = a.ch || ""; aCi.value = a.ci || calc.cI;
+  if (actFilledFor !== curDate) {
+    actFilledFor = curDate;
+    aSteps.value = a.steps || ""; aWh.value = a.wh || ""; aCh.value = a.ch || ""; aCi.value = a.ci || calc.cI;
+  }
   const w = calcWeek();
   actInfo.innerHTML = !w.wt
     ? `인바디 탭에서 <b>체중·기초대사량</b>을 먼저 넣어주세요. 그때부터 활동량이 목표에 반영됩니다.`
@@ -894,9 +958,16 @@ function renderDay() {
 
   if (!fMeal.options.length) fMeal.innerHTML = MEALS.map(m => `<option>${m}</option>`).join("");
   if (!fMeal.value) fMeal.value = guessMeal();
-  presetsEl.innerHTML = presets.map((x, i) =>
-    `<span class="chip" onclick="addPreset(${i})">${esc(x.name)} ${x.kcal}<span class="x" onclick="event.stopPropagation();delPreset(${i})">×</span></span>`).join("");
+  renderPresets();
   renderStreak();
+}
+function renderPresets() {
+  const q = presetQ.trim().toLowerCase();
+  const hit = presets.map((x, i) => [x, i]).filter(([x]) => !q || x.name.toLowerCase().includes(q));
+  presetsEl.innerHTML = hit.slice(0, 60).map(([x, i]) =>
+    `<span class="chip" onclick="addPreset(${i})">${esc(x.name)} ${x.kcal}<span class="x" onclick="event.stopPropagation();delPreset(${i})">×</span></span>`).join("")
+    || `<span class="hint">검색 결과 없음 — 위에서 직접 추가하면 자동 등록됩니다.</span>`;
+  presetCount.textContent = q ? `${hit.length}개 / 전체 ${presets.length}개` : `등록된 음식 ${presets.length}개`;
 }
 function toggleMeal(m) { mealOpen[m] = (mealOpen[m] === false); render(); }
 function pickMeal(m) { fMeal.value = m; fName.focus(); fName.scrollIntoView({ behavior: "smooth", block: "center" }); }
@@ -1274,6 +1345,36 @@ async function saveSettings() {
   render();
 }
 
+// ═════════ 내보내기 ═════════
+function download(name, text, mime) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["\ufeff" + text], { type: mime }));  // BOM = 엑셀 한글 깨짐 방지
+  a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+const csvCell = v => {
+  const s = v === undefined || v === null ? "" : String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+function exportCsv(kind) {
+  let cols, rows;
+  if (kind === "inbody") {
+    cols = ["date", "weight", "smm", "bfm", "pbf", "bmi", "bmr", "score", "note"];
+    rows = inbody.slice().sort(cmpDate);
+  } else {
+    cols = ["date", "meal", "name", "kcal", "p", "c", "f", "na", "fib", "sug"];
+    rows = Object.keys(cache).sort().flatMap(d => dayLog(d));
+  }
+  const csv = [cols.join(",")].concat(rows.map(r => cols.map(c => csvCell(r[c])).join(","))).join("\n");
+  download(`${kind === "inbody" ? "inbody" : "food"}-${todayStr()}.csv`, csv, "text/csv;charset=utf-8");
+}
+function exportJson() {
+  download(`bb-backup-${todayStr()}.json`,
+    JSON.stringify({ exportedAt: new Date().toISOString(), goals, calc, plan, presets, act, inbody, cache }, null, 2),
+    "application/json");
+}
+
 // ═════════ 설치 (PWA) ═════════
 let deferredPrompt = null;
 const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -1300,14 +1401,19 @@ function dismissInstall() { localStorage.setItem("dt_install_off", "1"); install
   }
 })();
 if ("serviceWorker" in navigator) {
+  // 자동 새로고침은 하지 않는다 — 입력 중에 리로드되면 쓰던 내용이 날아간다.
+  // skipWaiting + clients.claim 이라 다음 실행에서 새 버전이 뜬다.
   addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
-  let reloaded = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!reloaded) { reloaded = true; location.reload(); }
-  });
 }
 
 // ═════════ 시작 ═════════
+// 홈화면 아이콘 롱프레스 바로가기(#cal 등) 및 뒤로가기 대응
+function fromHash() {
+  const h = (location.hash || "").replace("#", "");
+  if (["diet", "plan", "cal", "inbody"].includes(h) && h !== section) setSection(h);
+}
+addEventListener("hashchange", fromHash);
+fromHash();
 render();
 if (!cfg) { setStatus("설정 필요 →", "var(--red)"); openSettings(); }
 else fullSync();
