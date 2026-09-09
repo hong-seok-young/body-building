@@ -2,737 +2,676 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>바디빌딩 트래커</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BB트래커">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" href="./icons/icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #f6f7f9; --card: #fff; --text: #1a1d21; --sub: #6b7280;
-    --line: #e5e7eb; --accent: #2563eb; --green: #16a34a; --red: #dc2626;
+    --bg: #f4f5f7; --card: #ffffff; --card2: #f9fafb;
+    --text: #111827; --sub: #6b7280; --line: #e6e8ec;
+    --accent: #2563eb; --green: #16a34a; --red: #dc2626; --amber: #b45309;
+    --warnbg: #fffbeb; --warnline: #fcd34d; --warntext: #92400e;
     --kcal: #2563eb; --protein: #ef4444; --carb: #f59e0b; --fat: #8b5cf6;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.08);
+    --r: 16px;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; background: var(--bg); color: var(--text); padding: 14px; max-width: 720px; margin: 0 auto; padding-bottom: 40px; }
-  h1 { font-size: 19px; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-  h1 .status { font-size: 12px; font-weight: 500; color: var(--sub); }
-  h1 .gear { margin-left: auto; cursor: pointer; font-size: 18px; background: none; border: none; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
-  .card h3 { font-size: 14px; margin-bottom: 10px; }
-  /* tabs */
-  .tabs { display: flex; background: #eceef1; border-radius: 10px; padding: 3px; margin-bottom: 12px; }
-  .tabs button { flex: 1; border: none; background: none; padding: 8px; font-size: 14px; border-radius: 8px; cursor: pointer; color: var(--sub); }
-  .tabs button.on { background: var(--card); color: var(--text); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  /* nav */
-  .nav { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px; }
-  .nav button { border: 1px solid var(--line); background: var(--card); border-radius: 8px; width: 32px; height: 32px; font-size: 15px; cursor: pointer; }
-  .nav .label { font-size: 15px; font-weight: 700; min-width: 150px; text-align: center; }
-  .nav input[type=date] { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 14px; background: var(--card); }
-  /* macro bars */
-  .macro { margin-bottom: 11px; }
-  .macro:last-child { margin-bottom: 0; }
-  .macro .row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
-  .bar { height: 10px; background: #eef0f3; border-radius: 5px; overflow: hidden; }
-  .bar > div { height: 100%; border-radius: 5px; transition: width .3s; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1220; --card: #151d2e; --card2: #1b2437;
+      --text: #e8ecf4; --sub: #94a3b8; --line: #263149;
+      --accent: #3b82f6; --green: #22c55e; --red: #f87171; --amber: #fbbf24;
+      --warnbg: #2a1f0c; --warnline: #7c5b12; --warntext: #fcd34d;
+      --kcal: #3b82f6; --protein: #f87171; --carb: #fbbf24; --fat: #a78bfa;
+      --shadow: 0 1px 2px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { background: var(--bg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.45;
+    max-width: 640px; margin: 0 auto;
+    padding: 0 13px calc(76px + env(safe-area-inset-bottom));
+  }
+  input, select, button, textarea { font-family: inherit; font-size: 14px; color: var(--text); }
+
+  /* ── 상단 바 ── */
+  .appbar {
+    position: sticky; top: 0; z-index: 15; margin: 0 -13px 12px; padding: calc(10px + env(safe-area-inset-top)) 15px 10px;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+  }
+  .appbar .logo { font-size: 16px; font-weight: 800; letter-spacing: -.3px; }
+  .appbar .spacer { flex: 1; }
+  .appbar button { background: none; border: none; cursor: pointer; font-size: 17px; padding: 2px 4px; }
+  .status { font-size: 11px; color: var(--sub); white-space: nowrap; }
+  .streak {
+    display: none; align-items: center; gap: 3px; background: var(--warnbg); color: var(--warntext);
+    border: 1px solid var(--warnline); border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 700;
+  }
+
+  /* ── 하단 탭 ── */
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    background: var(--card); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tabbar button {
+    background: none; border: none; cursor: pointer; padding: 8px 2px 9px;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    color: var(--sub); font-size: 11px; font-weight: 600;
+  }
+  .tabbar button i { font-style: normal; font-size: 19px; line-height: 1.15; filter: grayscale(1) opacity(.55); }
+  .tabbar button.on { color: var(--accent); }
+  .tabbar button.on i { filter: none; }
+
+  /* ── 카드 / 공통 ── */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 15px; margin-bottom: 11px; box-shadow: var(--shadow); }
+  .card > h3 { font-size: 13.5px; font-weight: 700; margin-bottom: 11px; display: flex; align-items: baseline; gap: 6px; }
+  .card > h3 .muted { font-weight: 400; color: var(--sub); font-size: 11.5px; }
+  .hint { font-size: 11.5px; color: var(--sub); margin-top: 8px; line-height: 1.5; }
+  .empty { text-align: center; color: var(--sub); padding: 18px 0; }
   .over { color: var(--red); font-weight: 700; }
   .good { color: var(--green); font-weight: 700; }
   .remain { color: var(--sub); }
-  /* ratio */
-  .ratio-bar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; font-size: 11px; color: #fff; margin-bottom: 6px; }
-  .ratio-bar div { display: flex; align-items: center; justify-content: center; min-width: 0; white-space: nowrap; }
-  .ratio-legend { font-size: 12px; color: var(--sub); }
-  /* form */
-  .addform { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 6px; }
-  .addform input { border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 14px; width: 100%; min-width: 0; }
-  .addform input:focus { outline: 2px solid var(--accent); border-color: transparent; }
-  .addform button { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 0 14px; font-size: 14px; cursor: pointer; }
-  .hint { font-size: 11px; color: var(--sub); margin-top: 6px; }
-  @media (max-width: 560px) {
-    .addform { grid-template-columns: 1fr 1fr 1fr 1fr; }
-    .addform input:first-child { grid-column: 1 / -1; }
-    .addform button { grid-column: 1 / -1; padding: 10px; }
-  }
-  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .chip { border: 1px solid var(--line); background: var(--bg); border-radius: 16px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
-  .chip:hover { border-color: var(--accent); color: var(--accent); }
-  .chip .x { color: var(--sub); margin-left: 4px; }
-  /* table */
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th { text-align: right; font-size: 12px; color: var(--sub); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--line); }
-  th:first-child, td:first-child { text-align: left; }
-  td { padding: 8px 6px; text-align: right; border-bottom: 1px solid var(--line); }
-  tr:last-child td { border-bottom: none; }
-  td .del { border: none; background: none; color: var(--sub); cursor: pointer; font-size: 14px; }
-  td .del:hover { color: var(--red); }
-  .empty { text-align: center; color: var(--sub); padding: 18px 0; font-size: 14px; }
-  tfoot td { font-weight: 700; border-top: 2px solid var(--text); }
-  /* stats grid */
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .stat { background: var(--bg); border-radius: 10px; padding: 10px; text-align: center; }
-  .stat b { display: block; font-size: 17px; margin-top: 2px; }
-  .stat span { font-size: 11px; color: var(--sub); }
-  @media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
-  /* modal */
-  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: flex-start; justify-content: center; padding: 30px 14px; z-index: 10; overflow-y: auto; }
-  .overlay.show { display: flex; }
-  .modal { background: var(--card); border-radius: 14px; padding: 20px; width: 100%; max-width: 480px; }
-  .modal h2 { font-size: 17px; margin-bottom: 4px; }
-  .modal p { font-size: 13px; color: var(--sub); margin-bottom: 14px; }
-  .modal label { font-size: 12px; color: var(--sub); display: block; margin: 10px 0 4px; }
-  .modal input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 9px; font-size: 14px; }
-  .goalgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .modal .btns { display: flex; gap: 8px; margin-top: 16px; }
-  .modal .btns button { flex: 1; border-radius: 8px; padding: 10px; font-size: 14px; cursor: pointer; border: 1px solid var(--line); background: var(--card); }
-  .modal .btns .primary { background: var(--accent); color: #fff; border: none; }
-  .msg { font-size: 12px; margin-top: 8px; min-height: 16px; }
-  .msg.ok { color: var(--green); } .msg.err { color: var(--red); }
-  canvas { max-height: 260px; }
-  .syncbtn { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--sub); }
-  /* section toggle */
-  .sections { display: flex; gap: 8px; margin-bottom: 12px; }
-  .sections button { flex: 1; border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 11px 4px; font-size: 14px; font-weight: 700; color: var(--sub); cursor: pointer; white-space: nowrap; }
-  .sections button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-  /* inbody form */
-  .inform { display: flex; flex-direction: column; gap: 10px; }
-  .inrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .inrow label { font-size: 11px; color: var(--sub); display: flex; flex-direction: column; gap: 3px; }
-  .inrow input, .inform > input { border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 14px; width: 100%; min-width: 0; }
-  .inrow input:focus, .inform > input:focus { outline: 2px solid var(--accent); border-color: transparent; }
-  .inform button { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 11px; font-size: 14px; cursor: pointer; }
-  @media (max-width: 560px) { .inrow { grid-template-columns: repeat(2, 1fr); } }
-  /* 끼니 카드 */
-  .meal { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
-  .meal-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; cursor: pointer; }
-  .meal-head .nm { font-weight: 700; font-size: 14px; }
-  .meal-head .kc { margin-left: auto; font-weight: 700; font-size: 15px; }
-  .meal-head .pct { font-size: 11px; color: var(--sub); min-width: 34px; text-align: right; }
-  .meal-head .arw { color: var(--sub); font-size: 11px; }
-  .meal-sub { display: flex; gap: 12px; padding: 0 14px 11px; font-size: 11px; color: var(--sub); }
-  .meal-sub b { color: var(--text); font-weight: 600; }
-  .mrow { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-top: 1px solid var(--line); }
-  .mrow .nm { flex: 1; min-width: 0; font-size: 13px; }
-  .mrow .nm small { display: block; color: var(--sub); font-size: 11px; margin-top: 2px; }
-  .mrow .kc { font-size: 13px; font-weight: 600; white-space: nowrap; }
-  .mrow .del { border: none; background: none; color: var(--sub); cursor: pointer; font-size: 13px; padding: 0 2px; }
-  .mrow .del:hover { color: var(--red); }
-  .meal-act { display: flex; gap: 6px; padding: 9px 14px; background: var(--bg); border-top: 1px solid var(--line); }
-  .meal-act button { flex: 1; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 7px; font-size: 12px; color: var(--sub); cursor: pointer; }
-  .meal-act button:hover { border-color: var(--accent); color: var(--accent); }
+  .warn { background: var(--warnbg); border: 1px solid var(--warnline); color: var(--warntext); border-radius: 10px; padding: 9px 11px; font-size: 12px; line-height: 1.55; margin-top: 9px; }
+
+  /* 세그먼트 / 날짜 이동 */
+  .seg { display: flex; background: var(--card2); border: 1px solid var(--line); border-radius: 11px; padding: 3px; margin-bottom: 11px; }
+  .seg button { flex: 1; border: none; background: none; padding: 8px; border-radius: 8px; cursor: pointer; color: var(--sub); font-weight: 600; }
+  .seg button.on { background: var(--card); color: var(--text); font-weight: 700; box-shadow: var(--shadow); }
+  .nav { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 11px; }
+  .nav button { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; width: 34px; height: 34px; font-size: 15px; cursor: pointer; }
+  .nav .label { font-size: 15px; font-weight: 700; min-width: 150px; text-align: center; }
+  .nav input[type=date] { border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; background: var(--card); }
+
+  /* 매크로 바 */
+  .macro { margin-bottom: 11px; }
+  .macro:last-child { margin-bottom: 0; }
+  .macro .row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; margin-bottom: 5px; }
+  .bar { height: 9px; background: var(--card2); border-radius: 5px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 5px; transition: width .3s; }
+
   /* 남은 칼로리 */
   .remain-big { display: flex; align-items: baseline; gap: 9px; padding-bottom: 13px; margin-bottom: 13px; border-bottom: 1px solid var(--line); }
-  .remain-big b { font-size: 29px; line-height: 1; }
+  .remain-big b { font-size: 31px; line-height: 1; letter-spacing: -1px; }
   .remain-big em { font-size: 12px; color: var(--sub); font-style: normal; }
-  .remain-big .r { margin-left: auto; font-size: 12px; color: var(--sub); text-align: right; line-height: 1.5; }
-  /* 영양소 상세 */
+  .remain-big .r { margin-left: auto; font-size: 11.5px; color: var(--sub); text-align: right; line-height: 1.55; }
+
+  /* 끼니 카드 */
+  .meal { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 10px; overflow: hidden; box-shadow: var(--shadow); }
+  .meal-head { display: flex; align-items: center; gap: 8px; padding: 13px 15px; cursor: pointer; }
+  .meal-head .nm { font-weight: 700; }
+  .meal-head .kc { margin-left: auto; font-weight: 800; font-size: 15px; }
+  .meal-head .pct { font-size: 11px; color: var(--sub); min-width: 32px; text-align: right; }
+  .meal-head .arw { color: var(--sub); font-size: 10px; }
+  .meal-sub { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 15px 11px; font-size: 11px; color: var(--sub); }
+  .meal-sub b { color: var(--text); font-weight: 600; }
+  .mrow { display: flex; align-items: center; gap: 9px; padding: 10px 15px; border-top: 1px solid var(--line); }
+  .mrow .nm { flex: 1; min-width: 0; font-size: 13px; }
+  .mrow .nm small { display: block; color: var(--sub); font-size: 11px; margin-top: 2px; }
+  .mrow .kc { font-weight: 700; white-space: nowrap; }
+  .mrow .del, .plan-head .del { border: none; background: none; color: var(--sub); cursor: pointer; font-size: 13px; padding: 2px 3px; }
+  .mrow .del:hover, .plan-head .del:hover { color: var(--red); }
+  .meal-act { display: flex; gap: 7px; padding: 10px 15px; background: var(--card2); border-top: 1px solid var(--line); }
+
+  /* 버튼 */
+  .btns { display: flex; gap: 7px; }
+  .btns.mt { margin-top: 11px; }
+  .btn { flex: 1; border: 1px solid var(--line); background: var(--card); color: var(--sub); border-radius: 10px; padding: 9px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.pri { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+  .btn.ok { background: var(--green); color: #fff; border-color: var(--green); font-weight: 700; }
+  .btn.dash { border-style: dashed; background: var(--card2); }
+
+  /* 통계 타일 */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat { background: var(--card2); border-radius: 11px; padding: 10px 8px; text-align: center; }
+  .stat span { font-size: 10.5px; color: var(--sub); display: block; }
+  .stat b { display: block; font-size: 16px; margin-top: 3px; letter-spacing: -.3px; }
+  @media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  /* 영양소 목록 */
   .nut { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-  .nut > div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .nut > div { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 8px 0; border-bottom: 1px solid var(--line); }
   .nut .lbl { color: var(--sub); }
   @media (max-width: 560px) { .nut { grid-template-columns: 1fr; } }
-  /* 기록 연속 */
-  .streak { display: inline-flex; align-items: center; gap: 5px; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; border-radius: 14px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
-  /* 추가 폼 (끼니 + 수치) */
-  .addform2 { display: grid; grid-template-columns: auto 1fr; gap: 6px; }
-  .addform2 select, .addform2 input { border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 14px; width: 100%; min-width: 0; background: var(--card); font-family: inherit; color: var(--text); }
-  .addform2 select:focus, .addform2 input:focus { outline: 2px solid var(--accent); border-color: transparent; }
-  .addform2 .nums { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
-  .addform2 > button { grid-column: 1 / -1; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px; font-size: 14px; cursor: pointer; }
-  @media (max-width: 560px) { .addform2 .nums { grid-template-columns: repeat(3, 1fr); } }
-  /* 식단 계획 */
-  .plan-meal { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 13px; margin-bottom: 10px; }
-  .plan-meal.done { border-color: var(--green); }
-  .plan-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-  .plan-head input[type=time] { border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; font-size: 14px; font-weight: 700; background: var(--bg); font-family: inherit; color: var(--text); }
-  .plan-head input.pname { flex: 1; min-width: 0; border: none; background: none; font-size: 14px; font-weight: 700; padding: 4px; font-family: inherit; color: var(--text); }
-  .plan-head input.pname:focus { outline: 2px solid var(--accent); border-radius: 6px; }
-  .plan-head .kc { font-size: 12px; color: var(--sub); white-space: nowrap; }
-  .plan-head .del, .plan-item .del { border: none; background: none; color: var(--sub); cursor: pointer; font-size: 13px; }
-  .plan-head .del:hover, .plan-item .del:hover { color: var(--red); }
+
+  /* 표 */
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: right; font-size: 11px; color: var(--sub); font-weight: 600; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  td { padding: 9px 6px; text-align: right; border-bottom: 1px solid var(--line); font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  tfoot td { font-weight: 700; border-top: 2px solid var(--text); }
+  .calc-t td:first-child { color: var(--sub); }
+  .calc-t td:last-child { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .calc-t tr.hi td { color: var(--accent); font-size: 15px; }
+
+  /* 입력 그리드 */
+  .fields { display: grid; gap: 9px; }
+  .g2 { grid-template-columns: 1fr 1fr; }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 560px) { .g4 { grid-template-columns: repeat(2, 1fr); } }
+  .fields label { font-size: 11px; color: var(--sub); display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .fields input, .fields select {
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px; width: 100%; min-width: 0; background: var(--card);
+  }
+  .fields input:focus, .fields select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+  /* 음식 추가 폼 */
+  .addform { display: grid; grid-template-columns: auto 1fr; gap: 7px; }
+  .addform select, .addform input { border: 1px solid var(--line); border-radius: 10px; padding: 9px; width: 100%; min-width: 0; background: var(--card); }
+  .addform select:focus, .addform input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .addform .nums { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; }
+  .addform > button { grid-column: 1 / -1; background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 11px; font-weight: 700; cursor: pointer; }
+  @media (max-width: 560px) { .addform .nums { grid-template-columns: repeat(3, 1fr); } }
+
+  /* 프리셋 칩 */
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { border: 1px solid var(--line); background: var(--card2); border-radius: 18px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip .x { color: var(--sub); margin-left: 5px; }
+
+  /* 계획 */
+  .plan-meal { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .plan-head { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+  .plan-head input[type=time] { border: 1px solid var(--line); border-radius: 9px; padding: 6px 8px; font-weight: 700; background: var(--card2); }
+  .plan-head input.pname { flex: 1; min-width: 0; border: none; background: none; font-weight: 700; padding: 4px; }
+  .plan-head input.pname:focus { outline: 2px solid var(--accent); border-radius: 7px; }
+  .plan-head .kc { font-size: 11.5px; color: var(--sub); white-space: nowrap; }
   .plan-item { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
   .plan-item:last-of-type { border-bottom: none; }
   .plan-item .nm { flex: 1; min-width: 0; }
-  .plan-item .mc { font-size: 11px; color: var(--sub); white-space: nowrap; }
-  .plan-btns { display: flex; gap: 6px; margin-top: 9px; }
-  .plan-btns button { flex: 1; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 9px; font-size: 13px; color: var(--sub); cursor: pointer; }
-  .plan-btns button.log { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
-  .plan-btns button.log.done { background: var(--green); border-color: var(--green); }
-  .plan-form { margin-top: 9px; padding-top: 10px; border-top: 1px solid var(--line); }
-  .planadd { width: 100%; border: 1px dashed var(--line); background: var(--bg); border-radius: 10px; padding: 11px; font-size: 14px; color: var(--sub); cursor: pointer; }
-  .planadd:hover { border-color: var(--accent); color: var(--accent); }
-  .warn { background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 8px; padding: 9px 11px; font-size: 12px; line-height: 1.55; margin-top: 10px; }
-  .diff { font-size: 12px; color: var(--sub); line-height: 1.6; margin-top: 10px; }
+  .plan-item .mc { font-size: 10.5px; color: var(--sub); white-space: nowrap; }
+  .plan-item .del { border: none; background: none; color: var(--sub); cursor: pointer; }
+  .plan-form { margin-top: 10px; padding-top: 11px; border-top: 1px solid var(--line); }
+
+  /* 모달 */
+  .overlay { position: fixed; inset: 0; background: rgba(8,12,20,.55); display: none; align-items: flex-start; justify-content: center; padding: 30px 13px; z-index: 30; overflow-y: auto; }
+  .overlay.show { display: flex; }
+  .modal { background: var(--card); border-radius: 18px; padding: 20px; width: 100%; max-width: 480px; box-shadow: 0 20px 40px rgba(0,0,0,.25); }
+  .modal h2 { font-size: 17px; margin-bottom: 4px; }
+  .modal p { font-size: 12.5px; color: var(--sub); margin-bottom: 14px; }
+  .modal label { font-size: 11px; color: var(--sub); display: block; margin: 11px 0 4px; }
+  .modal input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--card); }
+  .msg { font-size: 12px; margin-top: 9px; min-height: 16px; }
+  .msg.ok { color: var(--green); } .msg.err { color: var(--red); }
+
+  canvas { max-height: 250px; }
+  /* 설치 안내 배너 */
+  #installBar { display: none; }
+  #installBar.show { display: block; }
 </style>
 </head>
 <body>
 
-<h1>🏋️ 바디빌딩 트래커
-  <span class="streak" id="streakEl" style="display:none"></span>
+<header class="appbar">
+  <span class="logo">🏋️ 바디빌딩 트래커</span>
+  <span class="spacer"></span>
+  <span class="streak" id="streakEl"></span>
   <span class="status" id="statusEl"></span>
-  <button class="gear" onclick="openSettings()">⚙️</button>
-</h1>
+  <button onclick="openSettings()" title="설정">⚙️</button>
+</header>
 
-<div class="sections">
-  <button id="sec-diet" class="on" onclick="setSection('diet')">🥗 식단</button>
-  <button id="sec-plan" onclick="setSection('plan')">📋 계획</button>
-  <button id="sec-inbody" onclick="setSection('inbody')">📊 인바디</button>
+<div class="card" id="installBar">
+  <h3>📱 홈 화면에 설치</h3>
+  <div class="hint" id="installHint" style="margin-top:0"></div>
+  <div class="btns mt"><button class="btn pri" id="installBtn" onclick="doInstall()">설치</button><button class="btn" onclick="dismissInstall()">나중에</button></div>
 </div>
 
-<!-- ===== 식단 섹션 ===== -->
-<div id="section-diet">
-<div class="tabs">
-  <button id="tab-day" class="on" onclick="setView('day')">일간</button>
-  <button id="tab-week" onclick="setView('week')">주간</button>
-  <button id="tab-month" onclick="setView('month')">월간</button>
-</div>
-
-<!-- ===== 일간 ===== -->
-<div id="view-day">
-  <div class="nav">
-    <button onclick="moveDay(-1)">‹</button>
-    <input type="date" id="datePicker" onchange="curDate=this.value;render()">
-    <button onclick="moveDay(1)">›</button>
+<!-- ══════════ 식단 ══════════ -->
+<section id="section-diet">
+  <div class="seg">
+    <button id="tab-day" class="on" onclick="setView('day')">일간</button>
+    <button id="tab-week" onclick="setView('week')">주간</button>
+    <button id="tab-month" onclick="setView('month')">월간</button>
   </div>
 
-  <div class="card" id="summaryCard"></div>
+  <div id="view-day">
+    <div class="nav">
+      <button onclick="moveDay(-1)">‹</button>
+      <input type="date" id="datePicker" onchange="curDate=this.value;render()">
+      <button onclick="moveDay(1)">›</button>
+    </div>
 
-  <div id="mealsEl"></div>
+    <div class="card" id="summaryCard"></div>
 
-  <div class="card">
-    <h3>탄단지 비율 <span style="font-weight:400;color:var(--sub);font-size:12px">(칼로리 기준)</span></h3>
-    <canvas id="ratioChart" style="max-height:170px"></canvas>
-    <div id="ratioBox"></div>
-  </div>
-
-  <div class="card">
-    <h3>영양소</h3>
-    <div class="nut" id="nutEl"></div>
-  </div>
-
-  <div class="card">
-    <h3>음식 추가</h3>
-    <form class="addform2" onsubmit="addFood(event)">
-      <select id="fMeal"></select>
-      <input id="fName" placeholder="음식명" required>
-      <div class="nums">
-        <input id="fKcal" type="number" step="any" min="0" placeholder="kcal" required>
-        <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
-        <input id="fC" type="number" step="any" min="0" placeholder="탄수g">
-        <input id="fF" type="number" step="any" min="0" placeholder="지방g">
-        <input id="fNa" type="number" step="any" min="0" placeholder="나트륨mg">
-        <input id="fFib" type="number" step="any" min="0" placeholder="식이섬유g">
+    <div class="card">
+      <h3>오늘 활동 <span class="muted">그날 목표에 반영</span></h3>
+      <div class="fields g4">
+        <label>걸음수<input type="number" min="0" step="100" id="aSteps" placeholder="예 4200"></label>
+        <label>웨이트 (시간)<input type="number" min="0" step="0.25" id="aWh" placeholder="예 2"></label>
+        <label>유산소 (시간)<input type="number" min="0" step="0.25" id="aCh" placeholder="예 0.5"></label>
+        <label>유산소 강도<select id="aCi"></select></label>
       </div>
-      <button type="submit">추가</button>
-    </form>
-    <div class="hint">새로 입력한 음식은 아래 자주 먹는 음식에 자동 등록됩니다. 칩 클릭 = 선택한 끼니에 바로 기록, × = 삭제</div>
-    <div class="presets" id="presetsEl"></div>
-  </div>
-</div>
+      <div class="btns mt">
+        <button class="btn pri" onclick="saveAct()">저장</button>
+        <button class="btn" onclick="clearAct()">지우기</button>
+      </div>
+      <div class="hint" id="actInfo"></div>
+    </div>
 
-<!-- ===== 주간 ===== -->
-<div id="view-week" style="display:none">
-  <div class="nav">
-    <button onclick="moveWeek(-1)">‹</button>
-    <span class="label" id="weekLabel"></span>
-    <button onclick="moveWeek(1)">›</button>
-  </div>
-  <div class="card">
-    <h3>끼니별 칼로리 <span style="font-weight:400;color:var(--sub);font-size:12px">(점선 = 목표)</span></h3>
-    <canvas id="weekChart"></canvas>
-    <div id="weekMealBreak" style="margin-top:12px"></div>
-  </div>
-  <div class="card">
-    <h3>주간 평균 <span style="font-weight:400;color:var(--sub);font-size:12px">(기록한 날 기준)</span></h3>
-    <div class="stats" id="weekStats"></div>
-  </div>
-  <div class="card">
-    <h3>섭취한 음식</h3>
-    <table class="freq">
-      <thead><tr><th>음식</th><th>섭취 회수</th><th>Cal</th></tr></thead>
-      <tbody id="freqBody"></tbody>
-      <tfoot id="freqFoot"></tfoot>
-    </table>
-    <div class="empty" id="freqEmpty">이번 주 기록 없음</div>
-  </div>
-</div>
+    <div id="mealsEl"></div>
 
-<!-- ===== 월간 ===== -->
-<div id="view-month" style="display:none">
-  <div class="nav">
-    <button onclick="moveMonth(-1)">‹</button>
-    <span class="label" id="monthLabel"></span>
-    <button onclick="moveMonth(1)">›</button>
-  </div>
-  <div class="card"><canvas id="monthChart"></canvas></div>
-  <div class="card">
-    <h3>월간 요약</h3>
-    <div class="stats" id="monthStats"></div>
-  </div>
-</div>
-</div><!-- /section-diet -->
+    <div class="card">
+      <h3>탄단지 비율 <span class="muted">칼로리 기준</span></h3>
+      <canvas id="ratioChart" style="max-height:165px"></canvas>
+      <div id="ratioBox"></div>
+    </div>
 
-<!-- ===== 식단 계획 섹션 ===== -->
-<div id="section-plan" style="display:none">
+    <div class="card">
+      <h3>영양소</h3>
+      <div class="nut" id="nutEl"></div>
+    </div>
+
+    <div class="card">
+      <h3>음식 추가</h3>
+      <form class="addform" onsubmit="addFood(event)">
+        <select id="fMeal"></select>
+        <input id="fName" placeholder="음식명" required>
+        <div class="nums">
+          <input id="fKcal" type="number" step="any" min="0" placeholder="kcal" required>
+          <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
+          <input id="fC" type="number" step="any" min="0" placeholder="탄수g">
+          <input id="fF" type="number" step="any" min="0" placeholder="지방g">
+          <input id="fNa" type="number" step="any" min="0" placeholder="나트륨mg">
+          <input id="fFib" type="number" step="any" min="0" placeholder="섬유g">
+        </div>
+        <button type="submit">추가</button>
+      </form>
+      <div class="hint">새로 넣은 음식은 아래에 자동 등록됩니다. 칩을 누르면 위에서 고른 끼니로 바로 기록돼요.</div>
+      <div class="presets" id="presetsEl"></div>
+    </div>
+  </div>
+
+  <div id="view-week" style="display:none">
+    <div class="nav">
+      <button onclick="moveWeek(-1)">‹</button>
+      <span class="label" id="weekLabel"></span>
+      <button onclick="moveWeek(1)">›</button>
+    </div>
+    <div class="card">
+      <h3>끼니별 칼로리 <span class="muted">점선 = 그날 목표</span></h3>
+      <canvas id="weekChart"></canvas>
+      <div id="weekMealBreak" style="margin-top:11px"></div>
+    </div>
+    <div class="card">
+      <h3>주간 평균 <span class="muted">기록한 날 기준</span></h3>
+      <div class="stats" id="weekStats"></div>
+    </div>
+    <div class="card">
+      <h3>섭취한 음식</h3>
+      <table><thead><tr><th>음식</th><th>섭취 회수</th><th>Cal</th></tr></thead>
+        <tbody id="freqBody"></tbody><tfoot id="freqFoot"></tfoot></table>
+      <div class="empty" id="freqEmpty">이번 주 기록 없음</div>
+    </div>
+  </div>
+
+  <div id="view-month" style="display:none">
+    <div class="nav">
+      <button onclick="moveMonth(-1)">‹</button>
+      <span class="label" id="monthLabel"></span>
+      <button onclick="moveMonth(1)">›</button>
+    </div>
+    <div class="card"><canvas id="monthChart"></canvas></div>
+    <div class="card"><h3>월간 요약</h3><div class="stats" id="monthStats"></div></div>
+  </div>
+</section>
+
+<!-- ══════════ 계획 ══════════ -->
+<section id="section-plan" style="display:none">
   <div class="nav">
     <button onclick="moveDay(-1)">‹</button>
     <input type="date" id="planDate" onchange="curDate=this.value;render()">
     <button onclick="moveDay(1)">›</button>
   </div>
-
   <div class="card" id="planSummary"></div>
   <div id="planMeals"></div>
+  <div class="card">
+    <div class="btns">
+      <button class="btn dash" onclick="addPlanMeal()">＋ 끼니 추가</button>
+      <button class="btn dash" onclick="resetPlan()">기본 계획으로 초기화</button>
+    </div>
+    <div class="hint">시간·이름은 눌러서 바로 수정. [기록]을 누르면 위 날짜의 식단으로 들어가고, 시간대에 맞는 끼니로 자동 분류됩니다.</div>
+  </div>
+</section>
+
+<!-- ══════════ 열량 ══════════ -->
+<section id="section-cal" style="display:none">
+  <div class="card" id="calBase"></div>
 
   <div class="card">
-    <div class="plan-btns">
-      <button class="planadd" onclick="addPlanMeal()">＋ 끼니 추가</button>
-      <button class="planadd" onclick="resetPlan()">기본 계획으로 초기화</button>
+    <h3>활동 기준 <span class="muted">평소 값</span></h3>
+    <div class="fields g4">
+      <label>활동계수 (좌식+소화열)<input type="number" step="0.01" min="1" id="cAf"></label>
+      <label>하루 걸음수<input type="number" step="100" min="0" id="cSteps"></label>
+      <label>웨이트 시간/회<input type="number" step="0.25" min="0" id="cWh"></label>
+      <label>웨이트 주 횟수<input type="number" step="1" min="0" max="7" id="cWd"></label>
+      <label>유산소 시간/회<input type="number" step="0.25" min="0" id="cCh"></label>
+      <label>유산소 주 횟수<input type="number" step="1" min="0" max="7" id="cCd"></label>
+      <label>유산소 강도<select id="cCi"></select></label>
+      <label>적자 (kcal)<input type="number" step="25" min="0" id="cDef"></label>
     </div>
-    <div class="hint">시간·이름은 눌러서 바로 수정, [기록] 을 누르면 위 날짜의 식단 기록으로 그대로 들어갑니다. 이미 기록한 끼니는 초록색으로 표시돼요.</div>
+    <div class="btns mt"><button class="btn pri" onclick="saveCalc()">계산</button></div>
   </div>
-</div>
 
-<!-- ===== 인바디 섹션 ===== -->
-<div id="section-inbody" style="display:none">
+  <div class="card">
+    <h3>계산</h3>
+    <table class="calc-t"><tbody id="calcTable"></tbody></table>
+  </div>
+
+  <div class="card">
+    <h3>매크로 비율 <span class="muted">% → g 자동 환산</span></h3>
+    <div class="fields g3">
+      <label>탄수 %<input type="number" step="1" min="0" max="100" id="cPc"></label>
+      <label>단백질 %<input type="number" step="1" min="0" max="100" id="cPp"></label>
+      <label>지방 %<input type="number" step="1" min="0" max="100" id="cPf"></label>
+    </div>
+    <div class="btns mt">
+      <button class="btn" onclick="macroFromGperKg()">단백질 1.9 · 지방 0.7 g/kg 기준</button>
+      <button class="btn pri" onclick="saveCalc()">환산</button>
+    </div>
+    <div id="macroOut" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h3>칼로리 사이클링 <span class="muted">요일 유형별 목표</span></h3>
+    <table class="calc-t"><tbody id="cycleTable"></tbody></table>
+    <div class="hint">일간 화면에서 그날 활동을 입력하면 이 값이 자동으로 적용됩니다.</div>
+  </div>
+</section>
+
+<!-- ══════════ 인바디 ══════════ -->
+<section id="section-inbody" style="display:none">
   <div class="card">
     <h3>인바디 기록 추가</h3>
-    <form class="inform" onsubmit="addInbody(event)">
-      <div class="inrow">
+    <form onsubmit="addInbody(event)">
+      <div class="fields g4">
         <label>날짜<input type="date" id="ibDate"></label>
         <label>체중 (kg)<input type="number" step="any" min="0" id="ibW" placeholder="필수" required></label>
         <label>골격근량 (kg)<input type="number" step="any" min="0" id="ibS" placeholder="SMM"></label>
         <label>체지방량 (kg)<input type="number" step="any" min="0" id="ibBfm"></label>
         <label>체지방률 (%)<input type="number" step="any" min="0" id="ibPbf"></label>
         <label>BMI<input type="number" step="any" min="0" id="ibBmi"></label>
-        <label>기초대사량<input type="number" step="any" min="0" id="ibBmr" placeholder="kcal·선택"></label>
-        <label>인바디 점수<input type="number" step="any" min="0" id="ibScore" placeholder="선택"></label>
+        <label>기초대사량 (kcal)<input type="number" step="any" min="0" id="ibBmr" placeholder="열량 계산에 사용"></label>
+        <label>인바디 점수<input type="number" step="any" min="0" id="ibScore"></label>
       </div>
-      <input id="ibNote" placeholder="메모 (선택)">
-      <button type="submit">기록 추가</button>
+      <div class="fields" style="margin-top:9px"><label>메모<input id="ibNote" placeholder="선택"></label></div>
+      <div class="btns mt"><button class="btn pri" type="submit">기록 추가</button></div>
     </form>
-    <div class="hint">인바디 측정할 때마다 한 줄씩 기록하면 아래에 변화 추세가 그래프로 보여요. 체중만 필수, 나머지는 있는 것만 입력해도 돼요.</div>
+    <div class="hint">기초대사량과 체중을 넣으면 <b>열량 탭이 자동으로 다시 계산됩니다.</b> 체중만 필수예요.</div>
   </div>
 
   <div class="card" id="ibLatest"></div>
-
   <div class="card">
-    <h3>체성분 추세 <span style="font-weight:400;color:var(--sub);font-size:12px">(체중·골격근량·체지방량 kg)</span></h3>
+    <h3>체성분 추세 <span class="muted">체중·골격근량·체지방량 kg</span></h3>
     <canvas id="ibChart1"></canvas>
     <div class="empty" id="ibChartEmpty">기록이 없어요</div>
   </div>
-
+  <div class="card"><h3>체지방률 · BMI 추세</h3><canvas id="ibChart2"></canvas></div>
   <div class="card">
-    <h3>체지방률 · BMI 추세</h3>
-    <canvas id="ibChart2"></canvas>
-  </div>
-
-  <div class="card">
-    <table>
-      <thead><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방</th><th>체지방률</th><th>BMI</th><th></th></tr></thead>
-      <tbody id="ibBody"></tbody>
-    </table>
+    <table><thead><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방</th><th>체지방률</th><th>BMR</th><th></th></tr></thead>
+      <tbody id="ibBody"></tbody></table>
     <div class="empty" id="ibTableEmpty">기록이 없어요</div>
   </div>
-</div>
+</section>
 
-<!-- ===== 설정 모달 ===== -->
+<!-- ══════════ 하단 탭 ══════════ -->
+<nav class="tabbar">
+  <button id="sec-diet" class="on" onclick="setSection('diet')"><i>🥗</i>식단</button>
+  <button id="sec-plan" onclick="setSection('plan')"><i>📋</i>계획</button>
+  <button id="sec-cal" onclick="setSection('cal')"><i>🔥</i>열량</button>
+  <button id="sec-inbody" onclick="setSection('inbody')"><i>📊</i>인바디</button>
+</nav>
+
+<!-- 설정 -->
 <div class="overlay" id="settingsOverlay">
   <div class="modal">
     <h2>⚙️ 설정</h2>
     <p>Google 시트에 연결하면 폰·컴퓨터 어디서든 같은 데이터를 봅니다.</p>
     <label>Apps Script 웹앱 URL</label>
     <input id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec">
-    <label>비밀키 (Code.gs의 SECRET과 동일하게)</label>
+    <label>비밀키 (Code.gs의 SECRET과 동일)</label>
     <input id="cfgSecret" placeholder="비밀키">
-    <label style="margin-top:16px">목표 (저장하면 모든 기기에 적용)</label>
-    <div class="goalgrid">
-      <div><label>kcal</label><input type="number" id="gKcal"></div>
-      <div><label>단백질g</label><input type="number" id="gP"></div>
-      <div><label>탄수g</label><input type="number" id="gC"></div>
-      <div><label>지방g</label><input type="number" id="gF"></div>
-    </div>
-    <div class="goalgrid" style="margin-top:8px">
-      <div><label>나트륨mg 상한</label><input type="number" id="gNa"></div>
-      <div><label>식이섬유g 하한</label><input type="number" id="gFib"></div>
+    <label style="margin-top:16px">목표 — 열량 탭에서 [목표로 적용]하면 자동으로 채워집니다</label>
+    <div class="fields g4">
+      <label>kcal<input type="number" id="gKcal"></label>
+      <label>단백질g<input type="number" id="gP"></label>
+      <label>탄수g<input type="number" id="gC"></label>
+      <label>지방g<input type="number" id="gF"></label>
+      <label>나트륨mg 상한<input type="number" id="gNa"></label>
+      <label>식이섬유g 하한<input type="number" id="gFib"></label>
     </div>
     <div class="msg" id="cfgMsg"></div>
-    <div class="btns">
-      <button onclick="closeSettings()">닫기</button>
-      <button class="primary" onclick="saveSettings()">저장 & 연결 테스트</button>
+    <div class="btns mt">
+      <button class="btn" onclick="closeSettings()">닫기</button>
+      <button class="btn pri" onclick="saveSettings()">저장 &amp; 연결 테스트</button>
     </div>
   </div>
 </div>
 
 <script>
-// ================= 상태 =================
-// na = 나트륨 상한(mg), fib = 식이섬유 하한(g)
-const DEFAULT_GOALS = { kcal: 2224, p: 212, c: 72, f: 128, na: 2000, fib: 30 };
+// ═════════ 기본값 ═════════
 const KEYS = ["kcal", "p", "c", "f", "na", "fib", "sug"];
 const MEALS = ["아침", "점심", "저녁", "간식"];
 const MEAL_COLOR = { "아침": "#f59e0b", "점심": "#2563eb", "저녁": "#fb923c", "간식": "#8b5cf6" };
 const MEAL_ICON = { "아침": "🌅", "점심": "☀️", "저녁": "🌆", "간식": "🌙" };
-function slotOf(t) { const h = +String(t).slice(0, 2) || 0; return h < 11 ? "아침" : h < 16 ? "점심" : h < 22 ? "저녁" : "간식"; }
+const INTENSITY = ["저", "중", "고"];
+
+// 활동 소모 계수 — 사용자가 확인한 실측 앵커에 맞춰 역산한 값
+const STEP_K = 0.0004;                              // kcal / 보 / 체중kg  (3,000보·99kg ≈ 120kcal)
+const LIFT_K = 2.75;                                // kcal / 체중kg / 시간 (1.5h·99kg ≈ 408kcal)
+const CARDIO_K = { "저": 4.0, "중": 6.0, "고": 8.0 };  // kcal / 체중kg / 시간 (0.5h·99kg 중강도 ≈ 297kcal)
+
+const DEFAULT_GOALS = { kcal: 2600, p: 195, c: 293, f: 72, na: 2000, fib: 30 };
+const DEFAULT_CALC = {
+  af: 1.18, steps: 3000,
+  wH: 2, wD: 5,
+  cH: 0.5, cD: 2, cI: "중",
+  deficit: 350,
+  pC: 45, pP: 30, pF: 25,
+  bmr: 0, wt: 0,        // 인바디 기록이 없을 때만 쓰는 수동값
+};
 const DEFAULT_PRESETS = [
-  // 아래 3개는 제품 영양정보표 실측값 (사진 확인, 2026-09-09)
+  // 제품 영양정보표 실측값
   { name: "서동 닭다리살 1개", kcal: 115, p: 16, c: 8, f: 2.1, na: 552, fib: 0, sug: 1 },
   { name: "BSN 아이솔레이트 1스쿱", kcal: 140, p: 25, c: 6, f: 2, na: 135, fib: 0, sug: 2 },
   { name: "양반 현미밥 130g", kcal: 210, p: 3, c: 45, f: 1.8, na: 15, fib: 1.5, sug: 0 },
-  { name: "아몬드 65g", kcal: 376, p: 13.8, c: 14, f: 32.4, na: 1, fib: 8.1, sug: 2.8 },
   { name: "아몬드 15알", kcal: 105, p: 4, c: 4, f: 9, na: 0, fib: 2.3, sug: 0.8 },
   { name: "채소 한 접시 150g", kcal: 45, p: 3, c: 8, f: 0.3, na: 30, fib: 3, sug: 2 },
   { name: "계란 1개", kcal: 72, p: 6.3, c: 0.4, f: 5, na: 70, fib: 0, sug: 0.2 },
+  { name: "고등어구이 300g", kcal: 569, p: 52.8, c: 1.1, f: 37.8, na: 400, fib: 0, sug: 0 },
   { name: "귀리 80g", kcal: 304, p: 10.4, c: 52.8, f: 5.6, na: 2, fib: 8, sug: 0.8 },
   { name: "고구마 200g", kcal: 172, p: 2, c: 40, f: 0.2, na: 20, fib: 4.6, sug: 8 },
 ];
-// 하루 계획 — 시간대별 끼니. 언제든 화면에서 수정/추가/삭제 가능
 const MEAL_SET = [
-  { name: "아몬드 65g", kcal: 376, p: 13.8, c: 14, f: 32.4, na: 1, fib: 8.1, sug: 2.8 },
-  { name: "닭다리살 200g", kcal: 240, p: 38, c: 0, f: 9, na: 130, fib: 0, sug: 0 },
+  { name: "서동 닭다리살 1개", kcal: 115, p: 16, c: 8, f: 2.1, na: 552, fib: 0, sug: 1 },
+  { name: "서동 닭다리살 1개", kcal: 115, p: 16, c: 8, f: 2.1, na: 552, fib: 0, sug: 1 },
+  { name: "양반 현미밥 130g", kcal: 210, p: 3, c: 45, f: 1.8, na: 15, fib: 1.5, sug: 0 },
   { name: "채소 한 접시 150g", kcal: 45, p: 3, c: 8, f: 0.3, na: 30, fib: 3, sug: 2 },
 ];
 const DEFAULT_PLAN = [
-  { time: "09:00", name: "기상 후", items: [{ name: "프로틴 2스쿱", kcal: 240, p: 48, c: 6, f: 3, na: 270, fib: 0, sug: 4 }] },
+  { time: "09:00", name: "기상 후", items: [{ name: "BSN 아이솔레이트 1스쿱", kcal: 140, p: 25, c: 6, f: 2, na: 135, fib: 0, sug: 2 }] },
   { time: "10:30", name: "1식", items: MEAL_SET.map(x => ({ ...x })) },
-  { time: "15:30", name: "2식", items: MEAL_SET.map(x => ({ ...x })) },
-  { time: "21:30", name: "3식", items: MEAL_SET.map(x => ({ ...x })) },
+  { time: "13:00", name: "쉐이크", items: [{ name: "BSN 아이솔레이트 1스쿱", kcal: 140, p: 25, c: 6, f: 2, na: 135, fib: 0, sug: 2 }] },
+  { time: "16:30", name: "2식", items: MEAL_SET.map(x => ({ ...x })) },
+  { time: "20:00", name: "3식", items: MEAL_SET.map(x => ({ ...x })) },
 ];
+
+// ═════════ 상태 ═════════
 function load(k, fb) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? fb; } catch { return fb; } }
 function save(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
 
-let cfg = load("dt_cfg", null);              // {url, secret}
-let cache = load("dt_cache", {});            // {"YYYY-MM-DD": [items]} — 키 존재 = 서버에서 받아옴
-let goals = { ...DEFAULT_GOALS, ...load("dt_goals", {}) };  // 예전 저장본에 없는 키는 기본값으로 채움
+let cfg = load("dt_cfg", null);
+let cache = load("dt_cache", {});
+let goals = { ...DEFAULT_GOALS, ...load("dt_goals", {}) };
+let calc = { ...DEFAULT_CALC, ...load("dt_calc", {}) };
+let act = load("dt_act", {});                 // { "YYYY-MM-DD": {steps, wh, ch, ci} }
 let presets = load("dt_presets", DEFAULT_PRESETS);
-let pending = load("dt_pending", []);        // 오프라인 중 추가된 항목
-let view = "day";
+let pending = load("dt_pending", []);
+let inbody = load("dt_inbody", []);
+let ibPending = load("dt_ib_pending", []);
+let plan = load("dt_plan", DEFAULT_PLAN);
+let planFormOpen = -1;
+let section = "diet", view = "day";
 let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
-let weekChart = null, monthChart = null, ratioChart = null;
-let mealOpen = {};                          // 끼니 카드 접힘 상태
-let inbody = load("dt_inbody", []);          // 인바디 기록 배열
-let ibPending = load("dt_ib_pending", []);   // 오프라인 중 추가된 인바디
-let section = "diet";
-let plan = load("dt_plan", DEFAULT_PLAN);   // 하루 식단 계획
-let planFormOpen = -1;                      // 음식 추가폼이 열린 끼니 index
-let ibChart1 = null, ibChart2 = null;
+let weekChart = null, monthChart = null, ratioChart = null, ibChart1 = null, ibChart2 = null;
+let mealOpen = {};
 
-// ================= 날짜 유틸 =================
+// ═════════ 유틸 ═════════
 function todayStr(d = new Date()) {
-  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 function addDays(ds, n) { const d = new Date(ds + "T00:00:00"); d.setDate(d.getDate() + n); return todayStr(d); }
 function weekStart(ds) { const d = new Date(ds + "T00:00:00"); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return todayStr(d); }
-function monthRange(ym) {
-  const [y, m] = ym.split("-").map(Number);
-  const last = new Date(y, m, 0).getDate();
-  return [ym + "-01", ym + "-" + String(last).padStart(2, "0")];
+function monthRange(ym) { const [y, m] = ym.split("-").map(Number); return [ym + "-01", ym + "-" + String(new Date(y, m, 0).getDate()).padStart(2, "0")]; }
+function moveMonthStr(ym, n) { const [y, m] = ym.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
+const fmt = n => Math.round(n * 10) / 10;
+const r25 = n => Math.round(n / 25) * 25;
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const sign = n => (n >= 0 ? "+" : "") + fmt(n);
+const num = n => Math.round(n).toLocaleString("ko-KR");
+function cmpDate(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }
+function slotOf(t) { const h = +String(t).slice(0, 2) || 0; return h < 11 ? "아침" : h < 16 ? "점심" : h < 22 ? "저녁" : "간식"; }
+function guessMeal() { return slotOf(String(new Date().getHours()).padStart(2, "0")); }
+// Chart.js 가 못 올라와도(오프라인·CDN 차단) 화면이 죽지 않게
+function newChart(el, c) {
+  if (typeof Chart !== "function") { el.style.display = "none"; return null; }
+  el.style.display = ""; return new Chart(el, c);
 }
-function moveMonthStr(ym, n) { const [y, m] = ym.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"); }
 
-// ================= API =================
+// ═════════ API / 동기화 ═════════
 async function api(params) {
   if (!cfg) throw new Error("no-config");
-  const res = await fetch(cfg.url, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ ...params, secret: cfg.secret }),
-  });
+  const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ ...params, secret: cfg.secret }) });
   const j = await res.json();
   if (!j.ok) throw new Error(j.error || "api-error");
   return j;
 }
-
-function setStatus(txt, color) {
-  statusEl.textContent = txt;
-  statusEl.style.color = color || "var(--sub)";
-}
+function setStatus(txt, color) { statusEl.textContent = txt; statusEl.style.color = color || "var(--sub)"; }
+function setMeta(key, value) { api({ action: "setMeta", key, value }).catch(() => {}); }
 
 async function syncRange(from, to) {
   const r = await api({ action: "list", from, to });
-  // 범위 내 모든 날짜를 '받아옴' 처리
   for (let d = from; d <= to; d = addDays(d, 1)) cache[d] = [];
   r.items.forEach(it => { (cache[it.date] = cache[it.date] || []).push(it); });
-  if (r.goals) { goals = r.goals; save("dt_goals", goals); }
+  if (r.goals) { goals = { ...DEFAULT_GOALS, ...r.goals }; save("dt_goals", goals); }
   if (r.presets) { presets = r.presets; save("dt_presets", presets); }
   if (r.plan) { plan = r.plan; save("dt_plan", plan); }
+  if (r.calc) { calc = { ...DEFAULT_CALC, ...r.calc }; save("dt_calc", calc); }
+  if (r.act) { act = r.act; save("dt_act", act); }
   save("dt_cache", cache);
 }
-
 async function ensureRange(from, to) {
-  let missing = false;
-  for (let d = from; d <= to; d = addDays(d, 1)) if (!(d in cache)) { missing = true; break; }
-  if (missing) await syncRange(from, to);
+  for (let d = from; d <= to; d = addDays(d, 1)) if (!(d in cache)) { await syncRange(from, to); return; }
 }
-
 async function flushPending() {
   while (pending.length) {
     const it = pending[0];
     const r = await api({ action: "add", item: it });
-    // 임시 id를 실제 id로 교체
     const list = cache[it.date] || [];
     const idx = list.findIndex(x => x.id === it.tmpId);
-    if (idx >= 0) list[idx] = r.item;
-    pending.shift();
-    save("dt_pending", pending); save("dt_cache", cache);
+    if (idx >= 0) list[idx] = { ...it, ...r.item };
+    pending.shift(); save("dt_pending", pending); save("dt_cache", cache);
   }
 }
-
-async function fullSync() {
-  if (!cfg) { setStatus("설정 필요 → ⚙️", "var(--red)"); return; }
-  try {
-    setStatus("동기화 중…");
-    await flushPending();
-    await flushIbPending();
-    await syncRange(addDays(todayStr(), -92), todayStr());
-    await syncInbody();
-    setStatus("● 동기화됨", "var(--green)");
-  } catch (e) {
-    const waiting = pending.length + ibPending.length;
-    setStatus("● 오프라인" + (waiting ? ` (대기 ${waiting}건)` : ""), "var(--red)");
-  }
-  render();
-}
-
-// ================= 인바디 동기화 =================
 async function syncInbody() {
   const r = await api({ action: "list", type: "inbody", from: "2000-01-01", to: todayStr() });
-  inbody = (r.items || []).slice().sort(cmpDate);
-  save("dt_inbody", inbody);
+  inbody = (r.items || []).slice().sort(cmpDate); save("dt_inbody", inbody);
 }
-
 async function flushIbPending() {
   while (ibPending.length) {
     const it = ibPending[0];
     const r = await api({ action: "add", type: "inbody", item: it });
     const idx = inbody.findIndex(x => x.id === it.tmpId);
     if (idx >= 0) inbody[idx] = r.item; else inbody.push(r.item);
-    ibPending.shift();
-    save("dt_ib_pending", ibPending); save("dt_inbody", inbody);
+    ibPending.shift(); save("dt_ib_pending", ibPending); save("dt_inbody", inbody);
   }
 }
-
-// Chart.js 가 못 올라와도(오프라인·CDN 차단) 화면이 죽지 않게 감싼다
-function newChart(el, cfg) {
-  if (typeof Chart !== "function") { el.style.display = "none"; return null; }
-  el.style.display = "";
-  return new Chart(el, cfg);
+async function fullSync() {
+  if (!cfg) { setStatus("설정 필요 →", "var(--red)"); return; }
+  try {
+    setStatus("동기화 중…");
+    await flushPending(); await flushIbPending();
+    await syncRange(addDays(todayStr(), -92), todayStr());
+    await syncInbody();
+    setStatus("● 동기화됨", "var(--green)");
+  } catch (e) {
+    const w = pending.length + ibPending.length;
+    setStatus("● 오프라인" + (w ? ` (대기 ${w})` : ""), "var(--red)");
+  }
+  render();
 }
 
-function cmpDate(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }
-
-// ================= 기록 =================
+// ═════════ 기록 ═════════
 function dayLog(ds) { return cache[ds] || []; }
-const fmt = n => Math.round(n * 10) / 10;
+function mealLog(ds, meal) { return dayLog(ds).filter(x => (x.meal || "간식") === meal); }
 function totals(list) {
   const a = {}; KEYS.forEach(k => a[k] = 0);
   list.forEach(x => KEYS.forEach(k => a[k] += (+x[k] || 0)));
   return a;
 }
-function mealLog(ds, meal) { return dayLog(ds).filter(x => (x.meal || "간식") === meal); }
-function guessMeal() { return slotOf(String(new Date().getHours()).padStart(2, "0")); }
-
 async function addFood(e) {
   e.preventDefault();
   const meal = fMeal.value;
-  const item = { date: curDate, meal, name: fName.value.trim(), kcal:+fKcal.value||0,
-                 p:+fP.value||0, c:+fC.value||0, f:+fF.value||0, na:+fNa.value||0, fib:+fFib.value||0, sug:0 };
+  const item = { date: curDate, meal, name: fName.value.trim(), kcal: +fKcal.value || 0, p: +fP.value || 0,
+    c: +fC.value || 0, f: +fF.value || 0, na: +fNa.value || 0, fib: +fFib.value || 0, sug: 0 };
   e.target.reset(); fMeal.value = meal; fName.focus();
   await pushItem(item);
-  // 프리셋 자동 등록
   if (!presets.some(x => x.name === item.name)) {
     const { date, meal: _m, ...food } = item;
     presets.unshift(food);
     if (presets.length > 16) presets.pop();
-    save("dt_presets", presets);
-    api({ action:"setMeta", key:"presets", value:presets }).catch(()=>{});
+    save("dt_presets", presets); setMeta("presets", presets);
   }
   render();
 }
-
 async function pushItem(item) {
-  const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random()*1e5);
-  const local = { ...item, id: tmpId };
-  (cache[item.date] = cache[item.date] || []).push(local);
-  save("dt_cache", cache);
-  render();
+  const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5);
+  (cache[item.date] = cache[item.date] || []).push({ ...item, id: tmpId });
+  save("dt_cache", cache); render();
   try {
     const r = await api({ action: "add", item });
     const list = cache[item.date];
     const idx = list.findIndex(x => x.id === tmpId);
-    // 백엔드가 meal/na/fib 컬럼을 아직 모르면 응답에서 빠지므로 로컬 값을 덮어쓰지 않는다
+    // 백엔드가 meal/na/fib 컬럼을 아직 모르면 응답에서 빠지므로 로컬 값을 유지한다
     if (idx >= 0) list[idx] = { ...item, ...r.item };
-    save("dt_cache", cache);
-    setStatus("● 동기화됨", "var(--green)");
+    save("dt_cache", cache); setStatus("● 동기화됨", "var(--green)");
   } catch (e) {
-    pending.push({ ...item, tmpId });
-    save("dt_pending", pending);
-    setStatus(`● 오프라인 (대기 ${pending.length}건)`, "var(--red)");
+    pending.push({ ...item, tmpId }); save("dt_pending", pending);
+    setStatus(`● 오프라인 (대기 ${pending.length})`, "var(--red)");
   }
 }
-
 async function delItem(ds, id) {
   const list = cache[ds] || [];
   const idx = list.findIndex(x => x.id === id);
   if (idx < 0) return;
-  list.splice(idx, 1);
-  save("dt_cache", cache);
-  render();
+  list.splice(idx, 1); save("dt_cache", cache); render();
   if (String(id).startsWith("tmp-")) {
     const pi = pending.findIndex(x => x.tmpId === id);
     if (pi >= 0) { pending.splice(pi, 1); save("dt_pending", pending); }
   } else {
-    api({ action: "del", id }).catch(() => setStatus("● 삭제 동기화 실패 — 새로고침 후 재시도", "var(--red)"));
+    api({ action: "del", id }).catch(() => setStatus("● 삭제 동기화 실패", "var(--red)"));
   }
 }
-
-function addPreset(i) { pushItem({ ...presets[i], date: curDate, meal: fMeal ? fMeal.value : guessMeal() }); }
-function delPreset(i) {
-  presets.splice(i, 1); save("dt_presets", presets);
-  api({ action:"setMeta", key:"presets", value:presets }).catch(()=>{});
-  render();
-}
-
-// ================= 이동 =================
-function setSection(s) {
-  section = s;
-  ["diet", "plan", "inbody"].forEach(x => {
-    document.getElementById("section-" + x).style.display = x === s ? "" : "none";
-    document.getElementById("sec-" + x).classList.toggle("on", x === s);
-  });
-  render();
-}
-function setView(v) {
-  view = v;
-  ["day","week","month"].forEach(x => {
-    document.getElementById("view-"+x).style.display = x === v ? "" : "none";
-    document.getElementById("tab-"+x).classList.toggle("on", x === v);
-  });
-  render();
-}
-function moveDay(n) { curDate = addDays(curDate, n); render(); }
-function moveWeek(n) { curDate = addDays(curDate, n * 7); render(); }
-async function moveMonth(n) {
-  curMonth = moveMonthStr(curMonth, n);
-  const [from, to] = monthRange(curMonth);
-  try { await ensureRange(from, to > todayStr() ? todayStr() : to); } catch(e) {}
-  render();
-}
-
-// ================= 렌더 =================
-function render() {
-  if (section === "inbody") { renderInbody(); return; }
-  if (section === "plan") { renderPlan(); return; }
-  if (view === "day") renderDay();
-  else if (view === "week") renderWeek();
-  else renderMonth();
-}
-
-function renderDay() {
-  datePicker.value = curDate;
-  const list = dayLog(curDate);
-  const t = totals(list);
-
-  // ── 요약: 남은 칼로리 + 매크로 바
-  const left = goals.kcal - t.kcal;
-  const rows = [
-    { label:"칼로리", val:t.kcal, goal:goals.kcal, unit:"kcal", color:"var(--kcal)", more:false },
-    { label:"단백질", val:t.p, goal:goals.p, unit:"g", color:"var(--protein)", more:true },
-    { label:"탄수화물", val:t.c, goal:goals.c, unit:"g", color:"var(--carb)", more:false },
-    { label:"지방", val:t.f, goal:goals.f, unit:"g", color:"var(--fat)", more:false },
-  ];
-  summaryCard.innerHTML = `
-    <div class="remain-big">
-      <b style="color:${left < 0 ? "var(--red)" : "var(--text)"}">${Math.abs(Math.round(left))}</b>
-      <em>kcal ${left < 0 ? "초과" : "남음"}</em>
-      <span class="r">섭취 ${Math.round(t.kcal)} / 목표 ${goals.kcal}<br>일일권장 ${goals.kcal ? Math.round(t.kcal / goals.kcal * 100) : 0}%</span>
-    </div>` +
-    rows.map(r => {
-      const pct = r.goal ? Math.min(100, r.val / r.goal * 100) : 0;
-      const over = r.val - r.goal;
-      const status = over > 0
-        ? (r.more ? `<span class="good">달성 +${fmt(over)}${r.unit}</span>` : `<span class="over">${fmt(over)}${r.unit} 초과</span>`)
-        : `<span class="remain">${fmt(r.goal - r.val)}${r.unit} 남음</span>`;
-      return `<div class="macro">
-        <div class="row"><span><b>${r.label}</b> &nbsp;${fmt(r.val)} / ${r.goal}${r.unit}</span>${status}</div>
-        <div class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.color}"></div></div>
-      </div>`;
-    }).join("") +
-    `<div class="plan-btns"><button onclick="copyDay(-1)">어제 식단 전체 복사</button></div>`;
-
-  // ── 끼니별 카드
-  mealsEl.innerHTML = MEALS.map(m => {
-    const items = mealLog(curDate, m);
-    const mt = totals(items);
-    const open = mealOpen[m] !== false;
-    return `<div class="meal">
-      <div class="meal-head" onclick="toggleMeal('${m}')">
-        <span>${MEAL_ICON[m]}</span>
-        <span class="nm">${m === "간식" ? "간식/기타" : m + " 식사"}</span>
-        <span class="kc">${items.length ? Math.round(mt.kcal) : "-"}</span>
-        <span class="pct">${items.length && goals.kcal ? Math.round(mt.kcal / goals.kcal * 100) + "%" : ""}</span>
-        <span class="arw">${open ? "▲" : "▼"}</span>
-      </div>
-      ${items.length ? `<div class="meal-sub">지방 <b>${fmt(mt.f)}</b> · 탄수 <b>${fmt(mt.c)}</b> · 단백질 <b>${fmt(mt.p)}</b> · 나트륨 <b>${Math.round(mt.na)}</b>mg</div>` : ""}
-      ${open ? items.map(x => `<div class="mrow">
-        <span class="nm">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · 나트륨 " + Math.round(x.na) + "mg" : ""}</small></span>
-        <span class="kc">${Math.round(x.kcal)}</span>
-        <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button>
-      </div>`).join("") + `<div class="meal-act">
-        <button onclick="pickMeal('${m}')">＋ 음식</button>
-        <button onclick="copyMealFrom('${m}')">전날 복사</button>
-      </div>` : ""}
-    </div>`;
-  }).join("");
-
-  // ── 탄단지 도넛
-  const ak = t.p * 4 + t.c * 4 + t.f * 9;
-  if (ratioChart) { ratioChart.destroy(); ratioChart = null; }
-  const ratioEl = document.getElementById("ratioChart");
-  ratioEl.style.display = "none";
-  if (ak > 0) {
-    ratioChart = newChart(ratioEl, {
-      type: "doughnut",
-      data: { labels: ["탄수화물", "단백질", "지방"], datasets: [{
-        data: [t.c * 4, t.p * 4, t.f * 9], backgroundColor: ["#f59e0b", "#ef4444", "#8b5cf6"], borderWidth: 0 }] },
-      options: { cutout: "58%", plugins: {
-        legend: { position: "right", labels: { boxWidth: 12, font: { size: 12 } } },
-        tooltip: { callbacks: { label: c => `${c.label} ${Math.round(c.parsed / ak * 100)}%` } } } },
-    });
-  }
-  const gk = goals.p * 4 + goals.c * 4 + goals.f * 9;
-  ratioBox.innerHTML = (ak > 0
-      ? `<div class="ratio-legend" style="margin-top:8px">실제 — 탄 ${Math.round(t.c*4/ak*100)}% : 단 ${Math.round(t.p*4/ak*100)}% : 지 ${Math.round(t.f*9/ak*100)}%</div>`
-      : `<div class="empty">기록 없음</div>`) +
-    `<div class="ratio-legend">목표 — 탄 ${Math.round(goals.c*4/gk*100)}% : 단 ${Math.round(goals.p*4/gk*100)}% : 지 ${Math.round(goals.f*9/gk*100)}%</div>`;
-
-  // ── 영양소 상세 (나트륨은 상한, 식이섬유는 하한)
-  const cls = st => st === "bad" ? ' class="over"' : st === "good" ? ' class="good"' : "";
-  nutEl.innerHTML = [
-    ["칼로리", `${Math.round(t.kcal)} / ${goals.kcal} kcal`, null],
-    ["단백질", `${fmt(t.p)} / ${goals.p} g`, t.p >= goals.p ? "good" : null],
-    ["탄수화물", `${fmt(t.c)} / ${goals.c} g`, null],
-    ["지방", `${fmt(t.f)} / ${goals.f} g`, null],
-    ["나트륨 (상한)", `${Math.round(t.na)} / ${goals.na} mg`, t.na > goals.na ? "bad" : t.na ? "good" : null],
-    ["식이섬유 (하한)", `${fmt(t.fib)} / ${goals.fib} g`, t.fib >= goals.fib ? "good" : t.fib ? "bad" : null],
-    ["당", `${fmt(t.sug)} g`, null],
-    ["기록 항목", `${list.length}개`, null],
-  ].map(([lbl, val, st]) => `<div><span class="lbl">${lbl}</span><span${cls(st)}>${val}</span></div>`).join("");
-
-  // ── 끼니 선택 + 프리셋
-  if (!fMeal.options.length) fMeal.innerHTML = MEALS.map(m => `<option>${m}</option>`).join("");
-  if (!fMeal.value) fMeal.value = guessMeal();
-  presetsEl.innerHTML = presets.map((x, i) =>
-    `<span class="chip" onclick="addPreset(${i})">${esc(x.name)} ${x.kcal}kcal<span class="x" onclick="event.stopPropagation();delPreset(${i})">×</span></span>`
-  ).join("");
-
-  renderStreak();
-}
-
-function toggleMeal(m) { mealOpen[m] = (mealOpen[m] === false); render(); }
-function pickMeal(m) {
-  fMeal.value = m; fName.focus();
-  fName.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
+function addPreset(i) { pushItem({ ...presets[i], date: curDate, meal: fMeal.value || guessMeal() }); }
+function delPreset(i) { presets.splice(i, 1); save("dt_presets", presets); setMeta("presets", presets); render(); }
 async function copyMealFrom(m) {
   const src = mealLog(addDays(curDate, -1), m);
-  if (!src.length) { alert(`전날 ${m} 식사 기록이 없어요`); return; }
+  if (!src.length) { alert(`전날 ${m} 기록이 없어요`); return; }
   for (const x of src) { const { id, date, ...rest } = x; await pushItem({ ...rest, date: curDate, meal: m }); }
   render();
 }
@@ -743,13 +682,230 @@ async function copyDay(n) {
   render();
 }
 
-// 오늘(또는 어제)부터 거꾸로 기록이 끊기지 않은 날수
+// ═════════ 열량 계산 ═════════
+function lastIb(key) {
+  const r = inbody.slice().sort(cmpDate);
+  for (let i = r.length - 1; i >= 0; i--) if (+r[i][key] > 0) return +r[i][key];
+  return 0;
+}
+function ibDateOf(key) {
+  const r = inbody.slice().sort(cmpDate);
+  for (let i = r.length - 1; i >= 0; i--) if (+r[i][key] > 0) return r[i].date;
+  return "";
+}
+// 인바디에 값이 있으면 그것을, 없으면 수동 입력값을 쓴다
+function calcBase() {
+  const bmr = lastIb("bmr") || +calc.bmr || 0;
+  const wt = lastIb("weight") || +calc.wt || 0;
+  const sed = bmr * calc.af;                          // 좌식 + 소화열
+  const stepK = calc.steps * wt * STEP_K;
+  return { bmr, wt, sed, stepK, rest: sed + stepK, src: lastIb("bmr") ? "인바디" : "수동" };
+}
+function burnLift(h, wt) { return h * wt * LIFT_K; }
+function burnCardio(h, wt, i) { return h * wt * (CARDIO_K[i] || CARDIO_K["중"]); }
+
+function calcWeek() {
+  const b = calcBase();
+  const lift = burnLift(calc.wH, b.wt), cardio = burnCardio(calc.cH, b.wt, calc.cI);
+  const ov = Math.max(0, calc.wD + calc.cD - 7);
+  const dW = calc.wD - ov, dC = calc.cD - ov, dB = 7 - dW - dC - ov;
+  const weekly = dW * (b.rest + lift) + dC * (b.rest + cardio) + ov * (b.rest + lift + cardio) + dB * b.rest;
+  const avg = weekly / 7;
+  return { ...b, lift, cardio, dW, dC, ov, dB, avg, target: r25(avg - calc.deficit) };
+}
+function macrosFor(kcal) {
+  return { kcal, c: Math.round(kcal * calc.pC / 400), p: Math.round(kcal * calc.pP / 400), f: Math.round(kcal * calc.pF / 900) };
+}
+// 그날 활동이 기록돼 있으면 그날 TDEE 로, 없으면 주 평균 목표로
+function dayTarget(ds) {
+  const a = act[ds], w = calcWeek();
+  if (!a || !w.wt) return { ...goals, kcal: goals.kcal, src: "주 평균 목표", adjusted: false };
+  const b = calcBase();
+  const tdee = b.sed + (+a.steps || 0) * b.wt * STEP_K
+             + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci);
+  const m = macrosFor(r25(tdee - calc.deficit));
+  const parts = [];
+  if (+a.steps) parts.push(num(a.steps) + "보");
+  if (+a.wh) parts.push(`웨이트 ${+a.wh}h`);
+  if (+a.ch) parts.push(`유산소 ${+a.ch}h(${a.ci || calc.cI})`);
+  return { ...goals, ...m, tdee, src: parts.length ? parts.join(" · ") : "완전 휴식", adjusted: true };
+}
+
+function saveAct() {
+  const a = { steps: +aSteps.value || 0, wh: +aWh.value || 0, ch: +aCh.value || 0, ci: aCi.value };
+  if (!a.steps && !a.wh && !a.ch) act[curDate] = { ...a, rest: 1 }; else act[curDate] = a;
+  save("dt_act", act); setMeta("act", act); render();
+}
+function clearAct() { delete act[curDate]; save("dt_act", act); setMeta("act", act); render(); }
+
+function saveCalc() {
+  calc = { ...calc,
+    af: +cAf.value || DEFAULT_CALC.af, steps: +cSteps.value || 0,
+    wH: +cWh.value || 0, wD: Math.min(7, +cWd.value || 0),
+    cH: +cCh.value || 0, cD: Math.min(7, +cCd.value || 0), cI: cCi.value,
+    deficit: +cDef.value || 0,
+    pC: +cPc.value || 0, pP: +cPp.value || 0, pF: +cPf.value || 0 };
+  save("dt_calc", calc); setMeta("calc", calc); render();
+}
+// 단백질·지방을 체중 기준 g/kg 으로 먼저 확보하고 나머지를 탄수로
+function macroFromGperKg() {
+  const w = calcWeek();
+  if (!w.wt || !w.target) { alert("인바디에 체중·기초대사량을 먼저 넣어주세요"); return; }
+  const pG = 1.9 * w.wt, fG = 0.7 * w.wt;
+  const pPct = Math.round(pG * 4 / w.target * 100), fPct = Math.round(fG * 9 / w.target * 100);
+  calc = { ...calc, pP: pPct, pF: fPct, pC: 100 - pPct - fPct };
+  save("dt_calc", calc); setMeta("calc", calc); render();
+}
+function applyCalcGoals() {
+  const w = calcWeek();
+  const m = macrosFor(w.target);
+  goals = { ...goals, kcal: m.kcal, p: m.p, c: m.c, f: m.f };
+  save("dt_goals", goals); setMeta("goals", goals); render();
+}
+
+// ═════════ 이동 ═════════
+function setSection(s) {
+  section = s;
+  ["diet", "plan", "cal", "inbody"].forEach(x => {
+    document.getElementById("section-" + x).style.display = x === s ? "" : "none";
+    document.getElementById("sec-" + x).classList.toggle("on", x === s);
+  });
+  window.scrollTo({ top: 0 }); render();
+}
+function setView(v) {
+  view = v;
+  ["day", "week", "month"].forEach(x => {
+    document.getElementById("view-" + x).style.display = x === v ? "" : "none";
+    document.getElementById("tab-" + x).classList.toggle("on", x === v);
+  });
+  render();
+}
+function moveDay(n) { curDate = addDays(curDate, n); render(); }
+function moveWeek(n) { curDate = addDays(curDate, n * 7); render(); }
+async function moveMonth(n) {
+  curMonth = moveMonthStr(curMonth, n);
+  const [from, to] = monthRange(curMonth);
+  try { await ensureRange(from, to > todayStr() ? todayStr() : to); } catch (e) {}
+  render();
+}
+
+// ═════════ 렌더 ═════════
+function render() {
+  if (section === "plan") return renderPlan();
+  if (section === "cal") return renderCal();
+  if (section === "inbody") return renderInbody();
+  if (view === "day") renderDay();
+  else if (view === "week") renderWeek();
+  else renderMonth();
+}
+
+function renderDay() {
+  datePicker.value = curDate;
+  const list = dayLog(curDate), t = totals(list);
+  const g = dayTarget(curDate);
+
+  // 활동 입력 채우기
+  if (!aCi.options.length) aCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
+  const a = act[curDate] || {};
+  aSteps.value = a.steps || ""; aWh.value = a.wh || ""; aCh.value = a.ch || ""; aCi.value = a.ci || calc.cI;
+  const w = calcWeek();
+  actInfo.innerHTML = !w.wt
+    ? `인바디 탭에서 <b>체중·기초대사량</b>을 먼저 넣어주세요. 그때부터 활동량이 목표에 반영됩니다.`
+    : g.adjusted
+      ? `이날 TDEE <b>${num(g.tdee)}</b> − 적자 ${calc.deficit} → 목표 <b>${num(g.kcal)}kcal</b> · ${esc(g.src)}`
+      : `활동 미입력 — 주 평균 목표 <b>${num(goals.kcal)}kcal</b>를 씁니다. 저장하면 이날 것만 다시 계산됩니다.`;
+  // 완전휴식일엔 조정 목표가 기초대사량 밑으로 떨어질 수 있다
+  if (g.adjusted && w.bmr && g.kcal < w.bmr)
+    actInfo.innerHTML += `<div class="warn">⚠️ 이날 목표 ${num(g.kcal)}kcal 이 기초대사량 ${num(w.bmr)}kcal 보다 낮습니다. 휴식일이라도 기초대사량 아래로는 내리지 마세요 — 적자를 줄이거나 걸음 수를 늘리는 쪽이 낫습니다.</div>`;
+
+  // 요약
+  const left = g.kcal - t.kcal;
+  summaryCard.innerHTML = `
+    <div class="remain-big">
+      <b style="color:${left < 0 ? "var(--red)" : "var(--text)"}">${num(Math.abs(left))}</b>
+      <em>kcal ${left < 0 ? "초과" : "남음"}</em>
+      <span class="r">섭취 ${num(t.kcal)} / 목표 ${num(g.kcal)}<br>${g.adjusted ? "🔥 " + esc(g.src) : "주 평균 목표"}</span>
+    </div>` +
+    [{ l: "칼로리", v: t.kcal, g: g.kcal, u: "kcal", c: "var(--kcal)" },
+     { l: "단백질", v: t.p, g: g.p, u: "g", c: "var(--protein)", more: true },
+     { l: "탄수화물", v: t.c, g: g.c, u: "g", c: "var(--carb)" },
+     { l: "지방", v: t.f, g: g.f, u: "g", c: "var(--fat)" }].map(r => {
+      const pct = r.g ? Math.min(100, r.v / r.g * 100) : 0, over = r.v - r.g;
+      const st = over > 0 ? (r.more ? `<span class="good">달성 +${fmt(over)}${r.u}</span>` : `<span class="over">${fmt(over)}${r.u} 초과</span>`)
+                          : `<span class="remain">${fmt(r.g - r.v)}${r.u} 남음</span>`;
+      return `<div class="macro"><div class="row"><span><b>${r.l}</b> ${fmt(r.v)} / ${r.g}${r.u}</span>${st}</div>
+        <div class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.c}"></div></div></div>`;
+    }).join("") +
+    `<div class="btns mt"><button class="btn" onclick="copyDay(-1)">어제 식단 전체 복사</button></div>`;
+
+  // 끼니 카드
+  mealsEl.innerHTML = MEALS.map(m => {
+    const items = mealLog(curDate, m), mt = totals(items), open = mealOpen[m] !== false;
+    return `<div class="meal">
+      <div class="meal-head" onclick="toggleMeal('${m}')">
+        <span>${MEAL_ICON[m]}</span>
+        <span class="nm">${m === "간식" ? "간식/기타" : m + " 식사"}</span>
+        <span class="kc">${items.length ? num(mt.kcal) : "-"}</span>
+        <span class="pct">${items.length && g.kcal ? Math.round(mt.kcal / g.kcal * 100) + "%" : ""}</span>
+        <span class="arw">${open ? "▲" : "▼"}</span>
+      </div>
+      ${items.length ? `<div class="meal-sub">지방 <b>${fmt(mt.f)}</b> · 탄수 <b>${fmt(mt.c)}</b> · 단백질 <b>${fmt(mt.p)}</b> · 나트륨 <b>${num(mt.na)}</b>mg</div>` : ""}
+      ${open ? items.map(x => `<div class="mrow">
+        <span class="nm">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · 나트륨 " + num(x.na) + "mg" : ""}</small></span>
+        <span class="kc">${num(x.kcal)}</span>
+        <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button></div>`).join("")
+        + `<div class="meal-act">
+             <button class="btn" onclick="pickMeal('${m}')">＋ 음식</button>
+             <button class="btn" onclick="copyMealFrom('${m}')">전날 복사</button>
+           </div>` : ""}
+    </div>`;
+  }).join("");
+
+  // 도넛
+  const ak = t.p * 4 + t.c * 4 + t.f * 9;
+  if (ratioChart) { ratioChart.destroy(); ratioChart = null; }
+  const rc = document.getElementById("ratioChart");
+  rc.style.display = "none";
+  if (ak > 0) ratioChart = newChart(rc, {
+    type: "doughnut",
+    data: { labels: ["탄수화물", "단백질", "지방"], datasets: [{ data: [t.c * 4, t.p * 4, t.f * 9],
+      backgroundColor: ["#f59e0b", "#ef4444", "#8b5cf6"], borderWidth: 0 }] },
+    options: { cutout: "60%", plugins: { legend: { position: "right", labels: { boxWidth: 12, font: { size: 12 } } },
+      tooltip: { callbacks: { label: c => `${c.label} ${Math.round(c.parsed / ak * 100)}%` } } } },
+  });
+  const gk = g.p * 4 + g.c * 4 + g.f * 9;
+  ratioBox.innerHTML = (ak > 0
+    ? `<div class="hint">실제 — 탄 ${Math.round(t.c * 4 / ak * 100)}% : 단 ${Math.round(t.p * 4 / ak * 100)}% : 지 ${Math.round(t.f * 9 / ak * 100)}%</div>`
+    : `<div class="empty">기록 없음</div>`)
+    + `<div class="hint" style="margin-top:2px">목표 — 탄 ${Math.round(g.c * 4 / gk * 100)}% : 단 ${Math.round(g.p * 4 / gk * 100)}% : 지 ${Math.round(g.f * 9 / gk * 100)}%</div>`;
+
+  // 영양소
+  const cls = s => s === "bad" ? ' class="over"' : s === "good" ? ' class="good"' : "";
+  nutEl.innerHTML = [
+    ["칼로리", `${num(t.kcal)} / ${num(g.kcal)} kcal`, null],
+    ["단백질", `${fmt(t.p)} / ${g.p} g`, t.p >= g.p ? "good" : null],
+    ["탄수화물", `${fmt(t.c)} / ${g.c} g`, null],
+    ["지방", `${fmt(t.f)} / ${g.f} g`, null],
+    ["나트륨 (상한)", `${num(t.na)} / ${num(goals.na)} mg`, t.na > goals.na ? "bad" : t.na ? "good" : null],
+    ["식이섬유 (하한)", `${fmt(t.fib)} / ${goals.fib} g`, t.fib >= goals.fib ? "good" : t.fib ? "bad" : null],
+    ["당", `${fmt(t.sug)} g`, null],
+    ["기록 항목", `${list.length}개`, null],
+  ].map(([l, v, s]) => `<div><span class="lbl">${l}</span><span${cls(s)}>${v}</span></div>`).join("");
+
+  if (!fMeal.options.length) fMeal.innerHTML = MEALS.map(m => `<option>${m}</option>`).join("");
+  if (!fMeal.value) fMeal.value = guessMeal();
+  presetsEl.innerHTML = presets.map((x, i) =>
+    `<span class="chip" onclick="addPreset(${i})">${esc(x.name)} ${x.kcal}<span class="x" onclick="event.stopPropagation();delPreset(${i})">×</span></span>`).join("");
+  renderStreak();
+}
+function toggleMeal(m) { mealOpen[m] = (mealOpen[m] === false); render(); }
+function pickMeal(m) { fMeal.value = m; fName.focus(); fName.scrollIntoView({ behavior: "smooth", block: "center" }); }
 function renderStreak() {
   let d = todayStr(), n = 0;
   if (!dayLog(d).length) d = addDays(d, -1);
   while (dayLog(d).length && n < 400) { n++; d = addDays(d, -1); }
-  streakEl.style.display = n >= 2 ? "" : "none";
-  streakEl.textContent = `🔥 ${n}일 연속 기록`;
+  streakEl.style.display = n >= 2 ? "inline-flex" : "none";
+  streakEl.textContent = `🔥 ${n}일 연속`;
 }
 
 function renderWeek() {
@@ -758,264 +914,227 @@ function renderWeek() {
   weekLabel.textContent = `${start.slice(5).replace("-", "/")} ~ ${days[6].slice(5).replace("-", "/")}`;
   const names = ["월", "화", "수", "목", "금", "토", "일"];
 
-  // ── 끼니별 누적 막대 (목표선은 별도 stack 이라 자기 값에 그려짐)
   if (weekChart) { weekChart.destroy(); weekChart = null; }
   weekChart = newChart(document.getElementById("weekChart"), {
     type: "bar",
-    data: {
-      labels: names.map((n, i) => `${n} ${+days[i].slice(8)}`),
-      datasets: MEALS.map(m => ({
-        label: m, stack: "eaten", backgroundColor: MEAL_COLOR[m], borderRadius: 3,
-        data: days.map(d => Math.round(totals(mealLog(d, m)).kcal)),
-      })).concat([{
-        label: "목표", type: "line", stack: "goal", data: days.map(() => goals.kcal),
-        borderColor: "#9ca3af", borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5,
-      }]),
-    },
-    options: {
-      plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
-      scales: {
-        y: { stacked: true, beginAtZero: true, suggestedMax: goals.kcal * 1.2, grid: { color: "#eef0f3" } },
-        x: { stacked: true, grid: { display: false } },
-      },
-    },
+    data: { labels: names.map((n, i) => `${n} ${+days[i].slice(8)}`),
+      datasets: MEALS.map(m => ({ label: m, stack: "eaten", backgroundColor: MEAL_COLOR[m], borderRadius: 3,
+        data: days.map(d => Math.round(totals(mealLog(d, m)).kcal)) }))
+        .concat([{ label: "목표", type: "line", stack: "goal", data: days.map(d => dayTarget(d).kcal),
+          borderColor: "#9ca3af", borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5 }]) },
+    options: { plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: { y: { stacked: true, beginAtZero: true, suggestedMax: goals.kcal * 1.2, grid: { color: "rgba(148,163,184,.18)" } },
+        x: { stacked: true, grid: { display: false } } } },
   });
 
-  // ── 끼니별 주간 합계·비중
-  const weekAll = days.flatMap(d => dayLog(d));
-  const weekKcal = totals(weekAll).kcal;
+  const weekAll = days.flatMap(d => dayLog(d)), weekKcal = totals(weekAll).kcal;
   weekMealBreak.innerHTML = MEALS.map(m => {
     const mk = totals(days.flatMap(d => mealLog(d, m))).kcal;
     return `<div class="mrow" style="padding:8px 0">
       <span style="width:11px;height:11px;border-radius:3px;background:${MEAL_COLOR[m]};flex:none"></span>
       <span class="nm">${m === "간식" ? "간식/기타" : m + " 식사"}</span>
       <span style="color:var(--sub);font-size:12px">(${weekKcal ? Math.round(mk / weekKcal * 100) : 0}%)</span>
-      <span class="kc" style="color:var(--green)">${mk ? Math.round(mk) : "-"}</span>
-    </div>`;
+      <span class="kc" style="color:var(--green)">${mk ? num(mk) : "-"}</span></div>`;
   }).join("");
 
-  // ── 주간 평균
   const logged = days.map(d => totals(dayLog(d))).filter(x => x.kcal > 0);
-  const n = logged.length || 1;
-  const avg = k => Math.round(logged.reduce((a, x) => a + x[k], 0) / n);
+  const n = logged.length || 1, avg = k => Math.round(logged.reduce((s, x) => s + x[k], 0) / n);
+  const actDays = days.filter(d => act[d]).length;
   weekStats.innerHTML = logged.length ? `
-    <div class="stat"><span>평균 칼로리</span><b>${avg("kcal")}</b></div>
+    <div class="stat"><span>평균 칼로리</span><b>${num(avg("kcal"))}</b></div>
     <div class="stat"><span>평균 단백질</span><b>${avg("p")}g</b></div>
     <div class="stat"><span>평균 탄수</span><b>${avg("c")}g</b></div>
     <div class="stat"><span>평균 지방</span><b>${avg("f")}g</b></div>
-    <div class="stat"><span>평균 나트륨</span><b style="color:${avg("na") > goals.na ? "var(--red)" : "var(--text)"}">${avg("na")}mg</b></div>
+    <div class="stat"><span>평균 나트륨</span><b style="color:${avg("na") > goals.na ? "var(--red)" : "var(--text)"}">${num(avg("na"))}mg</b></div>
     <div class="stat"><span>평균 식이섬유</span><b style="color:${avg("fib") < goals.fib ? "var(--red)" : "var(--green)"}">${avg("fib")}g</b></div>
     <div class="stat"><span>기록한 날</span><b>${logged.length}일</b></div>
-    <div class="stat"><span>주간 총합</span><b>${Math.round(weekKcal)}</b></div>
+    <div class="stat"><span>활동 기록</span><b>${actDays}일</b></div>
   ` : `<div class="stat" style="grid-column:1/-1"><span>이번 주 기록 없음</span></div>`;
 
-  // ── 섭취한 음식 (빈도·칼로리 집계)
   const freq = {};
-  weekAll.forEach(x => {
-    const f = freq[x.name] || (freq[x.name] = { n: 0, kcal: 0 });
-    f.n++; f.kcal += (+x.kcal || 0);
-  });
+  weekAll.forEach(x => { const f = freq[x.name] || (freq[x.name] = { n: 0, kcal: 0 }); f.n++; f.kcal += (+x.kcal || 0); });
   const fr = Object.entries(freq).sort((a, b) => b[1].kcal - a[1].kcal);
   freqEmpty.style.display = fr.length ? "none" : "block";
-  freqBody.innerHTML = fr.map(([nm, v]) =>
-    `<tr><td>${esc(nm)}</td><td>x${v.n} =</td><td>${Math.round(v.kcal)}</td></tr>`).join("");
-  freqFoot.innerHTML = fr.length
-    ? `<tr><td>총</td><td>x${fr.reduce((a, [, v]) => a + v.n, 0)} =</td><td>${Math.round(weekKcal)}</td></tr>` : "";
-
+  freqBody.innerHTML = fr.map(([nm, v]) => `<tr><td>${esc(nm)}</td><td>x${v.n} =</td><td>${num(v.kcal)}</td></tr>`).join("");
+  freqFoot.innerHTML = fr.length ? `<tr><td>총</td><td>x${fr.reduce((s, [, v]) => s + v.n, 0)} =</td><td>${num(weekKcal)}</td></tr>` : "";
   renderStreak();
 }
 
 function renderMonth() {
   const [from, to] = monthRange(curMonth);
   monthLabel.textContent = curMonth.replace("-", "년 ") + "월";
-  const days = [];
-  for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
-  const dayTotals = days.map(d => totals(dayLog(d)));
-  const kcals = dayTotals.map(t => t.kcal ? Math.round(t.kcal) : null);
+  const days = []; for (let d = from; d <= to; d = addDays(d, 1)) days.push(d);
+  const dt = days.map(d => totals(dayLog(d)));
 
   if (monthChart) { monthChart.destroy(); monthChart = null; }
   monthChart = newChart(document.getElementById("monthChart"), {
     type: "line",
-    data: {
-      labels: days.map(d => +d.slice(8)),
-      datasets: [
-        { label: "kcal", data: kcals, borderColor: "#2563eb", backgroundColor: "#2563eb", spanGaps: true, tension: .3, pointRadius: 3 },
-        { label: "목표", data: days.map(() => goals.kcal), borderColor: "#d1d5db", borderDash: [6,4], pointRadius: 0 },
-      ],
-    },
-    options: {
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, grid: { color: "#eef0f3" } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } } },
-    },
+    data: { labels: days.map(d => +d.slice(8)), datasets: [
+      { label: "kcal", data: dt.map(x => x.kcal ? Math.round(x.kcal) : null), borderColor: "#2563eb",
+        backgroundColor: "#2563eb", spanGaps: true, tension: .3, pointRadius: 3 },
+      { label: "목표", data: days.map(d => dayTarget(d).kcal), borderColor: "#9ca3af", borderDash: [6, 4], pointRadius: 0 }] },
+    options: { plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, grid: { color: "rgba(148,163,184,.18)" } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } } } },
   });
 
-  const logged = dayTotals.filter(t => t.kcal > 0);
-  const n = logged.length || 1;
-  const avg = k => Math.round(logged.reduce((a, t) => a + t[k], 0) / n);
-  const onTarget = logged.filter(t => Math.abs(t.kcal - goals.kcal) <= goals.kcal * 0.1).length;
-  const proteinOk = logged.filter(t => t.p >= goals.p).length;
-  const naOver = logged.filter(t => t.na > goals.na).length;
-  const fibOk = logged.filter(t => t.fib >= goals.fib).length;
+  const logged = dt.filter(x => x.kcal > 0);
+  const n = logged.length || 1, avg = k => Math.round(logged.reduce((s, x) => s + x[k], 0) / n);
+  const onTarget = logged.filter((x, i) => Math.abs(x.kcal - goals.kcal) <= goals.kcal * 0.1).length;
   monthStats.innerHTML = logged.length ? `
     <div class="stat"><span>기록한 날</span><b>${logged.length}일</b></div>
-    <div class="stat"><span>평균 칼로리</span><b>${avg("kcal")}</b></div>
-    <div class="stat"><span>칼로리 목표 ±10%</span><b>${onTarget}일</b></div>
-    <div class="stat"><span>단백질 목표 달성</span><b>${proteinOk}일</b></div>
-    <div class="stat"><span>나트륨 상한 초과</span><b style="color:${naOver ? "var(--red)" : "var(--green)"}">${naOver}일</b></div>
-    <div class="stat"><span>식이섬유 달성</span><b style="color:${fibOk ? "var(--green)" : "var(--red)"}">${fibOk}일</b></div>
-    <div class="stat"><span>평균 나트륨</span><b>${avg("na")}mg</b></div>
+    <div class="stat"><span>평균 칼로리</span><b>${num(avg("kcal"))}</b></div>
+    <div class="stat"><span>목표 ±10%</span><b>${onTarget}일</b></div>
+    <div class="stat"><span>단백질 달성</span><b>${logged.filter(x => x.p >= goals.p).length}일</b></div>
+    <div class="stat"><span>나트륨 초과</span><b style="color:${logged.filter(x => x.na > goals.na).length ? "var(--red)" : "var(--green)"}">${logged.filter(x => x.na > goals.na).length}일</b></div>
+    <div class="stat"><span>식이섬유 달성</span><b>${logged.filter(x => x.fib >= goals.fib).length}일</b></div>
+    <div class="stat"><span>평균 나트륨</span><b>${num(avg("na"))}mg</b></div>
     <div class="stat"><span>평균 식이섬유</span><b>${avg("fib")}g</b></div>
   ` : `<div class="stat" style="grid-column:1/-1"><span>이 달 기록 없음</span></div>`;
+  renderStreak();
 }
 
-// ================= 인바디 =================
+// ═════════ 열량 탭 ═════════
+function renderCal() {
+  const w = calcWeek();
+  cAf.value = calc.af; cSteps.value = calc.steps; cWh.value = calc.wH; cWd.value = calc.wD;
+  cCh.value = calc.cH; cCd.value = calc.cD; cDef.value = calc.deficit;
+  cPc.value = calc.pC; cPp.value = calc.pP; cPf.value = calc.pF;
+  if (!cCi.options.length) cCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
+  cCi.value = calc.cI;
+
+  calBase.innerHTML = `<h3>기준 <span class="muted">${w.src === "인바디" ? "인바디 최근 측정" : "수동 입력"}</span></h3>
+    <div class="stats">
+      <div class="stat"><span>기초대사량</span><b>${w.bmr ? num(w.bmr) : "-"}</b></div>
+      <div class="stat"><span>체중</span><b>${w.wt ? fmt(w.wt) + "kg" : "-"}</b></div>
+      <div class="stat"><span>제지방량</span><b>${lastIb("weight") && lastIb("bfm") ? fmt(lastIb("weight") - lastIb("bfm")) + "kg" : "-"}</b></div>
+      <div class="stat"><span>측정일</span><b style="font-size:13px">${ibDateOf("bmr") ? ibDateOf("bmr").slice(2) : "-"}</b></div>
+    </div>
+    ${w.bmr ? `<div class="hint">인바디 탭에 새 기록을 넣으면 이 값과 아래 계산이 <b>자동으로 갱신</b>됩니다.</div>`
+            : `<div class="warn">인바디 기록이 없습니다. 인바디 탭에서 체중·기초대사량을 넣어주세요.</div>`}`;
+
+  const rows = [
+    ["기초대사량", num(w.bmr)],
+    [`좌식 + 소화열 ×${calc.af}`, num(w.sed)],
+    [`${num(calc.steps)}보 (${fmt(w.wt)}kg)`, `+${num(w.stepK)} → ${num(w.rest)}`],
+  ];
+  if (calc.wH && calc.wD) rows.push([`웨이트 ${calc.wH}h × 주${calc.wD}`, `+${num(w.lift)} → ${num(w.rest + w.lift)}`]);
+  if (calc.cH && calc.cD) rows.push([`유산소 ${calc.cH}h(${calc.cI}) × 주${calc.cD}`, `+${num(w.cardio)} → ${num(w.rest + w.cardio)}`]);
+  rows.push([`주 평균 (웨이트 ${w.dW} / 유산소 ${w.dC}${w.ov ? " / 병행 " + w.ov : ""} / 휴식 ${w.dB})`, num(w.avg)]);
+  calcTable.innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("")
+    + `<tr class="hi"><td>적자 −${num(calc.deficit)} → 목표</td><td>${num(w.target)} kcal</td></tr>`;
+
+  const m = macrosFor(w.target), sum = calc.pC + calc.pP + calc.pF;
+  const fpk = w.wt ? m.f / w.wt : 0, ppk = w.wt ? m.p / w.wt : 0;
+  const ffm = lastIb("weight") && lastIb("bfm") ? lastIb("weight") - lastIb("bfm") : 0;
+  macroOut.innerHTML = `
+    ${sum !== 100 ? `<div class="warn">비율 합이 ${sum}% 입니다. 100%로 맞춰주세요.</div>` : ""}
+    <div class="stats">
+      <div class="stat"><span>탄수</span><b>${m.c}g</b></div>
+      <div class="stat"><span>단백질</span><b>${m.p}g</b></div>
+      <div class="stat"><span>지방</span><b>${m.f}g</b></div>
+      <div class="stat"><span>목표</span><b>${num(m.kcal)}</b></div>
+    </div>
+    <div class="hint">지방 ${fpk.toFixed(2)} g/체중kg · 단백질 ${ppk.toFixed(2)} g/체중kg${ffm ? ` (제지방 ${(m.p / ffm).toFixed(2)})` : ""} · 탄수 ${w.wt ? (m.c / w.wt).toFixed(2) : "-"} g/체중kg</div>
+    ${fpk && fpk < 0.6 ? `<div class="warn">⚠️ 지방 ${m.f}g = ${fpk.toFixed(2)} g/체중kg. 하한 0.6(${Math.round(w.wt * 0.6)}g) 아래입니다 — 호르몬·지용성 비타민에 직접 영향이 있어 더 내리지 마세요.</div>` : ""}
+    ${w.bmr && m.kcal < w.bmr ? `<div class="warn">⚠️ 목표 ${num(m.kcal)}kcal 이 기초대사량 ${num(w.bmr)}kcal 보다 낮습니다. 적자를 줄이거나 활동량을 늘리세요.</div>` : ""}
+    ${w.wt && m.c / w.wt < 1 ? `<div class="warn">⚠️ 탄수 ${m.c}g = 체중 kg당 ${(m.c / w.wt).toFixed(2)}g. 1g 아래면 웨이트 세트 볼륨이 떨어집니다.</div>` : ""}
+    <div class="btns mt"><button class="btn ok" onclick="applyCalcGoals()">이 값을 목표로 적용</button></div>`;
+
+  const cyc = [];
+  if (calc.wH && calc.wD) cyc.push([`웨이트일 ×${w.dW}일`, num(r25(w.rest + w.lift - calc.deficit))]);
+  if (calc.cH && calc.cD) cyc.push([`유산소일 ×${w.dC}일`, num(r25(w.rest + w.cardio - calc.deficit))]);
+  if (w.ov) cyc.push([`병행일 ×${w.ov}일`, num(r25(w.rest + w.lift + w.cardio - calc.deficit))]);
+  if (w.dB) cyc.push([`완전휴식일 ×${w.dB}일`, num(r25(w.rest - calc.deficit))]);
+  const wsum = (calc.wH && calc.wD ? w.dW * r25(w.rest + w.lift - calc.deficit) : 0)
+    + (calc.cH && calc.cD ? w.dC * r25(w.rest + w.cardio - calc.deficit) : 0)
+    + w.ov * r25(w.rest + w.lift + w.cardio - calc.deficit) + w.dB * r25(w.rest - calc.deficit);
+  cycleTable.innerHTML = cyc.map(([a, b]) => `<tr><td>${a}</td><td>${b} kcal</td></tr>`).join("")
+    + `<tr class="hi"><td>주 평균</td><td>${num(wsum / 7)} kcal</td></tr>`;
+}
+
+// ═════════ 인바디 ═════════
 async function addInbody(e) {
   e.preventDefault();
-  const item = {
-    date: ibDate.value || todayStr(),
-    weight: +ibW.value || 0, smm: +ibS.value || 0, bfm: +ibBfm.value || 0,
-    pbf: +ibPbf.value || 0, bmi: +ibBmi.value || 0, bmr: +ibBmr.value || 0,
-    score: +ibScore.value || 0, note: ibNote.value.trim(),
-  };
+  const item = { date: ibDate.value || todayStr(), weight: +ibW.value || 0, smm: +ibS.value || 0,
+    bfm: +ibBfm.value || 0, pbf: +ibPbf.value || 0, bmi: +ibBmi.value || 0, bmr: +ibBmr.value || 0,
+    score: +ibScore.value || 0, note: ibNote.value.trim() };
   ibW.value = ibS.value = ibBfm.value = ibPbf.value = ibBmi.value = ibBmr.value = ibScore.value = ibNote.value = "";
-  const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5);
-  inbody.push({ ...item, id: tmpId });
-  inbody.sort(cmpDate);
-  save("dt_inbody", inbody);
-  render();
+  const tmpId = "tmp-" + Date.now();
+  inbody.push({ ...item, id: tmpId }); inbody.sort(cmpDate); save("dt_inbody", inbody); render();
   try {
     const r = await api({ action: "add", type: "inbody", item });
     const idx = inbody.findIndex(x => x.id === tmpId);
     if (idx >= 0) inbody[idx] = r.item;
-    save("dt_inbody", inbody);
-    setStatus("● 동기화됨", "var(--green)");
+    save("dt_inbody", inbody); setStatus("● 동기화됨", "var(--green)");
   } catch (err) {
-    ibPending.push({ ...item, tmpId });
-    save("dt_ib_pending", ibPending);
-    setStatus(`● 오프라인 (대기 ${pending.length + ibPending.length}건)`, "var(--red)");
+    ibPending.push({ ...item, tmpId }); save("dt_ib_pending", ibPending);
+    setStatus(`● 오프라인 (대기 ${pending.length + ibPending.length})`, "var(--red)");
   }
+  render();
 }
-
 async function delInbodyRec(id) {
   const idx = inbody.findIndex(x => x.id === id);
   if (idx < 0) return;
-  inbody.splice(idx, 1);
-  save("dt_inbody", inbody);
-  render();
+  inbody.splice(idx, 1); save("dt_inbody", inbody); render();
   if (String(id).startsWith("tmp-")) {
     const pi = ibPending.findIndex(x => x.tmpId === id);
     if (pi >= 0) { ibPending.splice(pi, 1); save("dt_ib_pending", ibPending); }
-  } else {
-    api({ action: "del", type: "inbody", id }).catch(() => setStatus("● 삭제 동기화 실패 — 새로고침 후 재시도", "var(--red)"));
-  }
+  } else api({ action: "del", type: "inbody", id }).catch(() => setStatus("● 삭제 동기화 실패", "var(--red)"));
 }
-
 function renderInbody() {
   if (!ibDate.value) ibDate.value = todayStr();
   const recs = inbody.slice().sort(cmpDate);
-
-  // 최근 측정 요약 (직전 대비 증감)
   if (recs.length) {
     const cur = recs[recs.length - 1], prev = recs[recs.length - 2];
-    const tiles = [
-      { key: "weight", label: "체중", unit: "kg", dir: "neutral" },
-      { key: "smm", label: "골격근량", unit: "kg", dir: "up" },
-      { key: "bfm", label: "체지방량", unit: "kg", dir: "down" },
-      { key: "pbf", label: "체지방률", unit: "%", dir: "down" },
-      { key: "bmi", label: "BMI", unit: "", dir: "down" },
-      { key: "score", label: "인바디점수", unit: "", dir: "up" },
-    ].filter(t => cur[t.key] > 0 || t.key === "weight");
-    ibLatest.innerHTML =
-      `<h3>최근 측정 <span style="font-weight:400;color:var(--sub);font-size:12px">(${cur.date}${prev ? " · 직전 대비" : ""})</span></h3>
-       <div class="stats">` +
+    const tiles = [{ k: "weight", l: "체중", u: "kg", d: "n" }, { k: "smm", l: "골격근량", u: "kg", d: "up" },
+      { k: "bfm", l: "체지방량", u: "kg", d: "dn" }, { k: "pbf", l: "체지방률", u: "%", d: "dn" },
+      { k: "bmr", l: "기초대사량", u: "", d: "up" }, { k: "score", l: "인바디점수", u: "", d: "up" }]
+      .filter(t => +cur[t.k] > 0 || t.k === "weight");
+    ibLatest.innerHTML = `<h3>최근 측정 <span class="muted">${cur.date}${prev ? " · 직전 대비" : ""}</span></h3><div class="stats">` +
       tiles.map(t => {
-        let delta = "";
-        if (prev && prev[t.key] > 0 && cur[t.key] > 0) {
-          const d = fmt(cur[t.key] - prev[t.key]);
+        let dl = "";
+        if (prev && +prev[t.k] > 0 && +cur[t.k] > 0) {
+          const d = fmt(cur[t.k] - prev[t.k]);
           if (d !== 0) {
-            const good = t.dir === "up" ? d > 0 : t.dir === "down" ? d < 0 : null;
-            const color = good === null ? "var(--sub)" : good ? "var(--green)" : "var(--red)";
-            delta = `<span style="font-size:11px;font-weight:700;color:${color}"> ${d > 0 ? "▲" : "▼"}${fmt(Math.abs(d))}</span>`;
+            const good = t.d === "up" ? d > 0 : t.d === "dn" ? d < 0 : null;
+            dl = `<span style="font-size:10.5px;font-weight:700;color:${good === null ? "var(--sub)" : good ? "var(--green)" : "var(--red)"}"> ${d > 0 ? "▲" : "▼"}${fmt(Math.abs(d))}</span>`;
           }
         }
-        return `<div class="stat"><span>${t.label}</span><b>${fmt(cur[t.key])}${t.unit}${delta}</b></div>`;
+        return `<div class="stat"><span>${t.l}</span><b>${fmt(cur[t.k])}${t.u}${dl}</b></div>`;
       }).join("") + `</div>`;
-  } else {
-    ibLatest.innerHTML = `<div class="empty">아직 인바디 기록이 없어요. 위에서 첫 기록을 추가해봐요.</div>`;
-  }
+  } else ibLatest.innerHTML = `<div class="empty">아직 인바디 기록이 없어요. 위에서 첫 기록을 추가해보세요.</div>`;
 
-  // 그래프
   const labels = recs.map(r => r.date.slice(5).replace("-", "/"));
   ibChartEmpty.style.display = recs.length ? "none" : "block";
-  document.getElementById("ibChart1").style.display = recs.length ? "" : "none";
-  document.getElementById("ibChart2").style.display = recs.length ? "" : "none";
-  drawIbChart1(labels, recs);
-  drawIbChart2(labels, recs);
+  const ds = (k, c, l) => ({ label: l, data: recs.map(r => +r[k] || null), borderColor: c, backgroundColor: c, spanGaps: true, tension: .3, pointRadius: 3 });
+  if (ibChart1) { ibChart1.destroy(); ibChart1 = null; }
+  if (ibChart2) { ibChart2.destroy(); ibChart2 = null; }
+  const opt = { plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+    scales: { y: { grid: { color: "rgba(148,163,184,.18)" } }, x: { grid: { display: false } } } };
+  if (recs.length) {
+    ibChart1 = newChart(document.getElementById("ibChart1"), { type: "line",
+      data: { labels, datasets: [ds("weight", "#2563eb", "체중"), ds("smm", "#16a34a", "골격근량"), ds("bfm", "#f59e0b", "체지방량")] }, options: opt });
+    ibChart2 = newChart(document.getElementById("ibChart2"), { type: "line",
+      data: { labels, datasets: [ds("pbf", "#ef4444", "체지방률(%)"), ds("bmi", "#8b5cf6", "BMI")] }, options: opt });
+  } else {
+    document.getElementById("ibChart1").style.display = "none";
+    document.getElementById("ibChart2").style.display = "none";
+  }
 
-  // 표 (최근순)
   const rev = recs.slice().reverse();
   ibTableEmpty.style.display = rev.length ? "none" : "block";
-  ibBody.innerHTML = rev.map(r => `<tr>
-    <td>${r.date.slice(2)}</td>
-    <td>${r.weight ? fmt(r.weight) : "-"}</td>
-    <td>${r.smm ? fmt(r.smm) : "-"}</td>
-    <td>${r.bfm ? fmt(r.bfm) : "-"}</td>
-    <td>${r.pbf ? fmt(r.pbf) : "-"}</td>
-    <td>${r.bmi ? fmt(r.bmi) : "-"}</td>
+  ibBody.innerHTML = rev.map(r => `<tr><td>${r.date.slice(2)}</td><td>${r.weight ? fmt(r.weight) : "-"}</td>
+    <td>${r.smm ? fmt(r.smm) : "-"}</td><td>${r.bfm ? fmt(r.bfm) : "-"}</td><td>${r.pbf ? fmt(r.pbf) : "-"}</td>
+    <td>${r.bmr ? num(r.bmr) : "-"}</td>
     <td><button class="del" onclick="delInbodyRec('${r.id}')">✕</button></td></tr>`).join("");
 }
 
-function ibDataset(recs, key, color) {
-  return { label: key, data: recs.map(r => r[key] || null), borderColor: color, backgroundColor: color, spanGaps: true, tension: .3, pointRadius: 3 };
-}
-
-function drawIbChart1(labels, recs) {
-  if (ibChart1) { ibChart1.destroy(); ibChart1 = null; }
-  if (!recs.length) return;
-  ibChart1 = newChart(document.getElementById("ibChart1"), {
-    type: "line",
-    data: { labels, datasets: [
-      { ...ibDataset(recs, "weight", "#2563eb"), label: "체중" },
-      { ...ibDataset(recs, "smm", "#16a34a"), label: "골격근량" },
-      { ...ibDataset(recs, "bfm", "#f59e0b"), label: "체지방량" },
-    ] },
-    options: {
-      plugins: { legend: { display: true, position: "bottom" } },
-      scales: { y: { grid: { color: "#eef0f3" } }, x: { grid: { display: false } } },
-    },
-  });
-}
-
-function drawIbChart2(labels, recs) {
-  if (ibChart2) { ibChart2.destroy(); ibChart2 = null; }
-  if (!recs.length) return;
-  ibChart2 = newChart(document.getElementById("ibChart2"), {
-    type: "line",
-    data: { labels, datasets: [
-      { ...ibDataset(recs, "pbf", "#ef4444"), label: "체지방률(%)" },
-      { ...ibDataset(recs, "bmi", "#8b5cf6"), label: "BMI" },
-    ] },
-    options: {
-      plugins: { legend: { display: true, position: "bottom" } },
-      scales: { y: { grid: { color: "#eef0f3" } }, x: { grid: { display: false } } },
-    },
-  });
-}
-
-// ================= 식단 계획 =================
-const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const sign = n => (n >= 0 ? "+" : "") + fmt(n);
+// ═════════ 계획 ═════════
 function planTotals() { return totals(plan.flatMap(m => m.items)); }
-function lastIb(key) { const r = inbody.slice().sort(cmpDate); for (let i = r.length - 1; i >= 0; i--) if (r[i][key] > 0) return r[i][key]; return 0; }
-
 function savePlan() {
   plan.sort((a, b) => a.time < b.time ? -1 : a.time > b.time ? 1 : 0);
-  save("dt_plan", plan);
-  api({ action: "setMeta", key: "plan", value: plan }).catch(() => {});
+  save("dt_plan", plan); setMeta("plan", plan);
 }
-
-// 끼니별 '기록 완료' 판정. 같은 음식이 여러 끼니에 겹치므로 이름 매칭만으로는 안 되고,
-// 앞 끼니부터 그날 기록을 개수만큼 소진해가며 판정한다.
 function planLoggedFlags(ds) {
   const pool = {};
   dayLog(ds).forEach(x => { pool[x.name] = (pool[x.name] || 0) + 1; });
@@ -1028,11 +1147,10 @@ function planLoggedFlags(ds) {
     return ok;
   });
 }
-
 async function logMeal(i) {
   const m = plan[i], meal = slotOf(m.time);
-  for (const it of m.items) await pushItem({ date: curDate, meal, name: it.name,
-    kcal: it.kcal, p: it.p, c: it.c, f: it.f, na: +it.na || 0, fib: +it.fib || 0, sug: +it.sug || 0 });
+  for (const it of m.items) await pushItem({ date: curDate, meal, name: it.name, kcal: it.kcal, p: it.p, c: it.c,
+    f: it.f, na: +it.na || 0, fib: +it.fib || 0, sug: +it.sug || 0 });
   render();
 }
 async function logAllPlan() {
@@ -1040,95 +1158,86 @@ async function logAllPlan() {
   for (let i = 0; i < plan.length; i++) if (!flags[i]) await logMeal(i);
   render();
 }
-
 function applyPlanAsGoals() {
   const t = planTotals();
-  // 나트륨 상한·식이섬유 하한은 건강 기준이므로 계획값으로 덮어쓰지 않는다
   goals = { ...goals, kcal: Math.round(t.kcal), p: Math.round(t.p), c: Math.round(t.c), f: Math.round(t.f) };
-  save("dt_goals", goals);
-  api({ action: "setMeta", key: "goals", value: goals }).catch(() => {});
-  render();
+  save("dt_goals", goals); setMeta("goals", goals); render();
 }
-
 function resetPlan() {
   if (!confirm("지금 계획을 지우고 기본 계획으로 되돌릴까요?")) return;
-  plan = JSON.parse(JSON.stringify(DEFAULT_PLAN));
-  planFormOpen = -1;
-  savePlan(); render();
+  plan = JSON.parse(JSON.stringify(DEFAULT_PLAN)); planFormOpen = -1; savePlan(); render();
 }
-function setPlanTime(i, v) { plan[i].time = v || "00:00"; savePlan(); planFormOpen = -1; render(); }
+function setPlanTime(i, v) { plan[i].time = v || "00:00"; planFormOpen = -1; savePlan(); render(); }
 function setPlanName(i, v) { plan[i].name = v.trim() || "끼니"; savePlan(); render(); }
 function addPlanMeal() { const m = { time: "12:00", name: "새 끼니", items: [] }; plan.push(m); savePlan(); planFormOpen = plan.indexOf(m); render(); }
 function delPlanMeal(i) { plan.splice(i, 1); planFormOpen = -1; savePlan(); render(); }
 function delPlanItem(i, j) { plan[i].items.splice(j, 1); savePlan(); render(); }
 function togglePlanForm(i) { planFormOpen = planFormOpen === i ? -1 : i; render(); }
-function addPlanPreset(i, k) { const x = presets[k]; plan[i].items.push({ ...x }); savePlan(); render(); }
+function addPlanPreset(i, k) { plan[i].items.push({ ...presets[k] }); savePlan(); render(); }
 function addPlanItem(e, i) {
   e.preventDefault();
   const f = e.target;
   plan[i].items.push({ name: f.pname.value.trim(), kcal: +f.pkcal.value || 0, p: +f.pp.value || 0,
     c: +f.pc.value || 0, f: +f.pf.value || 0, na: +f.pna.value || 0, fib: +f.pfib.value || 0, sug: 0 });
-  f.reset();
-  savePlan(); render();
+  f.reset(); savePlan(); render();
 }
-
 function renderPlan() {
   planDate.value = curDate;
-  const t = planTotals();
-  const bmr = lastIb("bmr"), w = lastIb("weight");
-  const minFat = w ? Math.round(w * 0.6) : 60;
-  const minCarb = w ? Math.round(w * 1.0) : 100;
-
+  const t = planTotals(), g = dayTarget(curDate);
+  const wt = calcBase().wt, bmr = calcBase().bmr;
+  const minFat = wt ? Math.round(wt * 0.6) : 60, minCarb = wt ? Math.round(wt) : 100;
   planSummary.innerHTML = `
-    <h3>계획 하루 합계 <span style="font-weight:400;color:var(--sub);font-size:12px">(${plan.length}끼니)</span></h3>
+    <h3>계획 하루 합계 <span class="muted">${plan.length}끼니</span></h3>
     <div class="stats">
-      <div class="stat"><span>칼로리</span><b>${Math.round(t.kcal)}</b></div>
+      <div class="stat"><span>칼로리</span><b>${num(t.kcal)}</b></div>
       <div class="stat"><span>단백질</span><b>${fmt(t.p)}g</b></div>
       <div class="stat"><span>탄수</span><b>${fmt(t.c)}g</b></div>
       <div class="stat"><span>지방</span><b>${fmt(t.f)}g</b></div>
-      <div class="stat"><span>나트륨</span><b style="color:${t.na > goals.na ? "var(--red)" : "var(--text)"}">${Math.round(t.na)}mg</b></div>
+      <div class="stat"><span>나트륨</span><b style="color:${t.na > goals.na ? "var(--red)" : "var(--text)"}">${num(t.na)}mg</b></div>
       <div class="stat"><span>식이섬유</span><b style="color:${t.fib < goals.fib ? "var(--red)" : "var(--green)"}">${fmt(t.fib)}g</b></div>
     </div>
-    <div class="diff">목표(${goals.kcal}kcal · P${goals.p} · C${goals.c} · F${goals.f}) 대비 &nbsp;
-      칼로리 ${sign(t.kcal - goals.kcal)} · 단백질 ${sign(t.p - goals.p)}g · 탄수 ${sign(t.c - goals.c)}g · 지방 ${sign(t.f - goals.f)}g</div>
-    ${bmr && t.kcal < bmr ? `<div class="warn">⚠️ 계획 열량 ${Math.round(t.kcal)}kcal 이 최근 인바디 기초대사량 ${bmr}kcal 보다 낮습니다. 근손실·대사 적응 위험이 커요.</div>` : ""}
-    ${t.f < minFat ? `<div class="warn">⚠️ 지방이 하루 ${fmt(t.f)}g 뿐이에요. 체중 kg당 0.6g 기준 최소 ${minFat}g 은 채우는 걸 권장합니다. (견과류·계란·등푸른생선)</div>` : ""}
-    ${t.na > goals.na ? `<div class="warn">⚠️ 나트륨이 하루 ${Math.round(t.na)}mg 입니다. 상한 ${goals.na}mg 의 ${(t.na / goals.na).toFixed(1)}배 — 혈압·수분 저류로 체중 추세가 왜곡됩니다. 양념 제품을 무양념으로 바꾸는 게 가장 빠릅니다.</div>` : ""}
-    ${t.fib < goals.fib ? `<div class="warn">⚠️ 식이섬유가 하루 ${fmt(t.fib)}g 입니다. 목표 ${goals.fib}g — 내장지방·포만감에 직접 영향이 있으니 채소를 끼니마다 넣으세요.</div>` : ""}
-    ${t.c < minCarb ? `<div class="warn">⚠️ 탄수가 하루 ${fmt(t.c)}g 입니다. 체중 kg당 1g(${minCarb}g) 아래면 근력운동 중 글리코겐이 비어 세트 볼륨이 떨어지고 골격근 유지가 어려워요. 운동일만이라도 고구마·귀리로 보충하세요.</div>` : ""}
-    <div class="plan-btns">
-      <button onclick="applyPlanAsGoals()">이 계획을 목표로 설정</button>
-      <button class="log" onclick="logAllPlan()">이 날짜에 전체 기록</button>
+    <div class="hint">이 날짜 목표(${num(g.kcal)}kcal · ${g.adjusted ? esc(g.src) : "주 평균"}) 대비 —
+      칼로리 ${sign(t.kcal - g.kcal)} · 단백질 ${sign(t.p - g.p)}g · 탄수 ${sign(t.c - g.c)}g · 지방 ${sign(t.f - g.f)}g</div>
+    ${bmr && t.kcal < bmr ? `<div class="warn">⚠️ 계획 ${num(t.kcal)}kcal 이 기초대사량 ${num(bmr)}kcal 보다 낮습니다.</div>` : ""}
+    ${t.na > goals.na ? `<div class="warn">⚠️ 나트륨 ${num(t.na)}mg — 상한 ${num(goals.na)}mg 의 ${(t.na / goals.na).toFixed(1)}배. 혈압·수분 저류로 체중 추세가 왜곡됩니다. 양념 제품을 무양념으로 바꾸는 게 가장 빠릅니다.</div>` : ""}
+    ${t.fib < goals.fib ? `<div class="warn">⚠️ 식이섬유 ${fmt(t.fib)}g — 목표 ${goals.fib}g. 끼니마다 채소를 넣으세요.</div>` : ""}
+    ${t.f < minFat ? `<div class="warn">⚠️ 지방 ${fmt(t.f)}g — 체중 kg당 0.6g 기준 최소 ${minFat}g 은 채우세요.</div>` : ""}
+    ${t.c < minCarb ? `<div class="warn">⚠️ 탄수 ${fmt(t.c)}g — 체중 kg당 1g(${minCarb}g) 아래면 세트 볼륨이 떨어집니다.</div>` : ""}
+    <div class="btns mt">
+      <button class="btn" onclick="applyPlanAsGoals()">계획을 목표로</button>
+      <button class="btn ok" onclick="logAllPlan()">이 날짜에 전체 기록</button>
     </div>`;
 
   const flags = planLoggedFlags(curDate);
   planMeals.innerHTML = plan.map((m, i) => {
     const mt = totals(m.items), done = flags[i];
-    return `<div class="plan-meal${done ? " done" : ""}">
+    return `<div class="plan-meal" style="${done ? "border-color:var(--green)" : ""}">
       <div class="plan-head">
         <input type="time" value="${esc(m.time)}" onchange="setPlanTime(${i}, this.value)">
         <input class="pname" value="${esc(m.name)}" onchange="setPlanName(${i}, this.value)">
-        <span class="kc">${MEAL_ICON[slotOf(m.time)]}${slotOf(m.time)} · ${Math.round(mt.kcal)}kcal</span>
+        <span class="kc">${MEAL_ICON[slotOf(m.time)]}${slotOf(m.time)} · ${num(mt.kcal)}kcal</span>
         <button class="del" title="끼니 삭제" onclick="delPlanMeal(${i})">✕</button>
       </div>
       ${m.items.length ? m.items.map((it, j) => `<div class="plan-item">
         <span class="nm">${esc(it.name)}</span>
-        <span class="mc">${Math.round(it.kcal)}kcal · P${fmt(it.p)} C${fmt(it.c)} F${fmt(it.f)}${+it.na ? " · Na" + Math.round(it.na) : ""}</span>
-        <button class="del" onclick="delPlanItem(${i},${j})">✕</button>
-      </div>`).join("") : `<div class="empty" style="padding:10px 0">음식을 추가해주세요</div>`}
-      <div class="plan-btns">
-        <button onclick="togglePlanForm(${i})">${planFormOpen === i ? "닫기" : "＋ 음식"}</button>
-        <button class="log${done ? " done" : ""}" onclick="logMeal(${i})">${done ? "✓ 기록됨" : "이 끼니 기록"}</button>
+        <span class="mc">${num(it.kcal)} · P${fmt(it.p)} C${fmt(it.c)} F${fmt(it.f)}${+it.na ? " · Na" + num(it.na) : ""}</span>
+        <button class="del" onclick="delPlanItem(${i},${j})">✕</button></div>`).join("")
+        : `<div class="empty" style="padding:10px 0">음식을 추가해주세요</div>`}
+      <div class="btns mt">
+        <button class="btn" onclick="togglePlanForm(${i})">${planFormOpen === i ? "닫기" : "＋ 음식"}</button>
+        <button class="btn ${done ? "ok" : "pri"}" onclick="logMeal(${i})">${done ? "✓ 기록됨" : "이 끼니 기록"}</button>
       </div>
       ${planFormOpen === i ? `<div class="plan-form">
         <form class="addform" onsubmit="addPlanItem(event, ${i})">
-          <input name="pname" placeholder="음식명" required>
-          <input name="pkcal" type="number" step="any" min="0" placeholder="kcal" required>
-          <input name="pp" type="number" step="any" min="0" placeholder="단백질g">
-          <input name="pc" type="number" step="any" min="0" placeholder="탄수g">
-          <input name="pf" type="number" step="any" min="0" placeholder="지방g">
-          <input name="pna" type="number" step="any" min="0" placeholder="나트륨mg">
-          <input name="pfib" type="number" step="any" min="0" placeholder="식이섬유g">
+          <input name="pname" placeholder="음식명" required style="grid-column:1/-1">
+          <div class="nums">
+            <input name="pkcal" type="number" step="any" min="0" placeholder="kcal" required>
+            <input name="pp" type="number" step="any" min="0" placeholder="단백질g">
+            <input name="pc" type="number" step="any" min="0" placeholder="탄수g">
+            <input name="pf" type="number" step="any" min="0" placeholder="지방g">
+            <input name="pna" type="number" step="any" min="0" placeholder="나트륨mg">
+            <input name="pfib" type="number" step="any" min="0" placeholder="섬유g">
+          </div>
           <button type="submit">추가</button>
         </form>
         <div class="presets">${presets.map((x, k) => `<span class="chip" onclick="addPlanPreset(${i},${k})">${esc(x.name)}</span>`).join("")}</div>
@@ -1137,40 +1246,70 @@ function renderPlan() {
   }).join("");
 }
 
-// ================= 설정 =================
+// ═════════ 설정 ═════════
 function openSettings() {
-  cfgUrl.value = cfg?.url || "";
-  cfgSecret.value = cfg?.secret || "";
+  cfgUrl.value = cfg?.url || ""; cfgSecret.value = cfg?.secret || "";
   gKcal.value = goals.kcal; gP.value = goals.p; gC.value = goals.c; gF.value = goals.f;
   gNa.value = goals.na; gFib.value = goals.fib;
   cfgMsg.textContent = ""; cfgMsg.className = "msg";
   settingsOverlay.classList.add("show");
 }
 function closeSettings() { settingsOverlay.classList.remove("show"); }
-
 async function saveSettings() {
-  const newGoals = { kcal:+gKcal.value||0, p:+gP.value||0, c:+gC.value||0, f:+gF.value||0,
-                     na:+gNa.value||DEFAULT_GOALS.na, fib:+gFib.value||DEFAULT_GOALS.fib };
-  goals = newGoals; save("dt_goals", goals);
+  goals = { kcal: +gKcal.value || 0, p: +gP.value || 0, c: +gC.value || 0, f: +gF.value || 0,
+    na: +gNa.value || DEFAULT_GOALS.na, fib: +gFib.value || DEFAULT_GOALS.fib };
+  save("dt_goals", goals);
   const url = cfgUrl.value.trim(), secret = cfgSecret.value.trim();
-  if (!url) { cfgMsg.textContent = "URL을 입력하세요 (로컬 목표만 저장됨)"; cfgMsg.className = "msg err"; render(); return; }
+  if (!url) { cfgMsg.textContent = "URL이 없어 목표만 저장했습니다"; cfgMsg.className = "msg err"; render(); return; }
   cfg = { url, secret }; save("dt_cfg", cfg);
   cfgMsg.textContent = "연결 테스트 중…"; cfgMsg.className = "msg";
   try {
     await api({ action: "setMeta", key: "goals", value: goals });
     cfgMsg.textContent = "✓ 연결 성공! 데이터를 불러옵니다."; cfgMsg.className = "msg ok";
-    cache = {}; save("dt_cache", cache); // 전체 재동기화
-    await fullSync();
-    setTimeout(closeSettings, 800);
+    cache = {}; save("dt_cache", cache);
+    await fullSync(); setTimeout(closeSettings, 800);
   } catch (e) {
     cfgMsg.textContent = "✗ 연결 실패: URL과 비밀키를 확인하세요. (" + e.message + ")"; cfgMsg.className = "msg err";
   }
   render();
 }
 
-// ================= 시작 =================
+// ═════════ 설치 (PWA) ═════════
+let deferredPrompt = null;
+const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+addEventListener("beforeinstallprompt", e => {
+  e.preventDefault(); deferredPrompt = e;
+  if (!standalone && !localStorage.getItem("dt_install_off")) {
+    installHint.innerHTML = "폰 홈 화면에 앱처럼 설치하면 주소창 없이 전체화면으로 열리고, 오프라인에서도 기록할 수 있습니다.";
+    installBar.classList.add("show");
+  }
+});
+function doInstall() {
+  if (!deferredPrompt) return dismissInstall();
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.finally(() => { deferredPrompt = null; dismissInstall(); });
+}
+function dismissInstall() { localStorage.setItem("dt_install_off", "1"); installBar.classList.remove("show"); }
+// iOS 는 beforeinstallprompt 가 없어서 직접 안내
+(function iosHint() {
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (ios && !standalone && !localStorage.getItem("dt_install_off")) {
+    installHint.innerHTML = "Safari 하단 <b>공유 버튼 ⎋</b> → <b>홈 화면에 추가</b> 를 누르면 앱처럼 설치됩니다.";
+    installBtn.style.display = "none";
+    installBar.classList.add("show");
+  }
+})();
+if ("serviceWorker" in navigator) {
+  addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!reloaded) { reloaded = true; location.reload(); }
+  });
+}
+
+// ═════════ 시작 ═════════
 render();
-if (!cfg) { setStatus("설정 필요 → ⚙️", "var(--red)"); openSettings(); }
+if (!cfg) { setStatus("설정 필요 →", "var(--red)"); openSettings(); }
 else fullSync();
 </script>
 </body>
