@@ -39,6 +39,7 @@ function doPost(e) {
       case "del":     return out({ ok: true, id: delItem(type, req.id) });
       case "setMeta": return out({ ok: true, key: req.key, value: setMeta(req.key, req.value) });
       case "ocr":     return out({ ok: true, data: ocr(req.image, req.kind) });
+      case "foodSearch": return out({ ok: true, items: foodSearch(req.q, req.debug) });
       default:        return out({ ok: false, error: "unknown-action: " + req.action });
     }
   } catch (err) {
@@ -282,6 +283,78 @@ function ocr(imageB64, kind) {
   return data;
 }
 
+// ───────────────────────── 식약처 식품영양성분 DB 검색 ─────────────────────────
+/**
+ * 식품안전나라 OpenAPI(I2790) 로 시중 제품·식품을 검색합니다.
+ * 브라우저에서 직접 부르면 CORS 에 막히지만, 여기(구글 서버)에서 부르면 됩니다.
+ * 키도 앱이 아니라 여기 남으므로 노출되지 않습니다.
+ *
+ * 설정
+ *   1) https://www.foodsafetykorea.go.kr/api/openApiInfo.do 에서 무료 인증키 발급
+ *   2) Apps Script ⚙️ 프로젝트 설정 → 스크립트 속성
+ *        MFDS_KEY = 발급받은 인증키
+ *   3) 배포 → 배포 관리 → ✏️ → 새 버전 → 배포
+ */
+function foodSearch(q, debug) {
+  const key = PropertiesService.getScriptProperties().getProperty("MFDS_KEY");
+  if (!key) throw new Error("MFDS_KEY 가 없습니다. Apps Script → 프로젝트 설정 → 스크립트 속성에 추가하세요");
+  if (!q || !String(q).trim()) return [];
+
+  const url = "https://openapi.foodsafetykorea.go.kr/api/" + encodeURIComponent(key)
+            + "/I2790/json/1/30/DESC_KOR=" + encodeURIComponent(String(q).trim());
+  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error("식약처 API " + res.getResponseCode());
+
+  let j;
+  try { j = JSON.parse(res.getContentText()); }
+  catch (e) { throw new Error("응답이 JSON 이 아닙니다: " + res.getContentText().slice(0, 200)); }
+
+  // 응답 껍데기가 서비스마다 달라서 첫 번째 객체에서 row 를 찾아낸다
+  let box = j.I2790 || null;
+  if (!box) for (const k in j) { if (j[k] && (j[k].row || j[k].RESULT)) { box = j[k]; break; } }
+  if (!box) throw new Error("예상과 다른 응답: " + JSON.stringify(j).slice(0, 200));
+
+  const code = box.RESULT && box.RESULT.CODE;
+  if (code && code !== "INFO-000") {
+    if (String(code).indexOf("INFO-200") === 0) return [];        // 검색 결과 없음
+    throw new Error("식약처: " + code + " " + (box.RESULT.MSG || ""));
+  }
+  const rows = box.row || [];
+  if (debug) return rows.slice(0, 1);        // 필드명 확인용 — 원본 한 건을 그대로 돌려준다
+
+  return rows.map(function (r) { return mapNutrient(r); }).filter(function (x) { return x.name; });
+}
+
+// 필드명이 서비스·개정에 따라 달라지므로 여러 후보를 훑는다.
+// 못 찾으면 0 이 되고 앱에서는 빈칸으로 보이니, 그럴듯한 오답이 들어가지는 않는다.
+function pick(r, names) {
+  for (let i = 0; i < names.length; i++) {
+    const v = r[names[i]];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+  }
+  return "";
+}
+function numOf(v) {
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+function mapNutrient(r) {
+  const name = String(pick(r, ["DESC_KOR", "FOOD_NM_KR", "PRDLST_NM", "food_name"])).trim();
+  const maker = String(pick(r, ["MAKER_NAME", "BSSH_NM", "maker_name"])).trim();
+  const serv = String(pick(r, ["SERVING_WT", "SERVING_SIZE", "serving_size"])).trim();
+  return {
+    name: (maker && name.indexOf(maker) < 0 ? maker + " " : "") + name,
+    serving: serv ? serv + "g" : "100g",
+    kcal: numOf(pick(r, ["NUTR_CONT1", "AMT_NUM1", "ENERC"])),
+    c:    numOf(pick(r, ["NUTR_CONT2", "AMT_NUM7", "CHOCDF"])),
+    p:    numOf(pick(r, ["NUTR_CONT3", "AMT_NUM3", "PROCNT"])),
+    f:    numOf(pick(r, ["NUTR_CONT4", "AMT_NUM4", "FATCE"])),
+    sug:  numOf(pick(r, ["NUTR_CONT5", "AMT_NUM8", "SUGAR"])),
+    na:   numOf(pick(r, ["NUTR_CONT6", "AMT_NUM9", "NAT"])),
+    fib:  numOf(pick(r, ["NUTR_CONT7", "AMT_NUM10", "FIBTG"])),
+  };
+}
+
 // ───────────────────────── 점검용 ─────────────────────────
 // Apps Script 편집기에서 이 함수를 직접 실행하면 시트 3개가 만들어지고
 // 실행 로그에 결과가 찍힙니다. 배포 전에 한 번 돌려보세요.
@@ -293,8 +366,18 @@ function setupAndTest() {
   setMeta("__test__", { ok: 1 });
   Logger.log("시트 생성 완료 / 추가·조회·삭제 정상: " + (found === 1 ? "OK" : "실패"));
   Logger.log("SECRET 을 바꿨는지 확인: " + (SECRET.indexOf("여기에") === 0 ? "❌ 아직 기본값입니다" : "✅ 변경됨"));
-  const gk = PropertiesService.getScriptProperties().getProperty("GEMINI_KEY");
-  Logger.log("사진 판독(GEMINI_KEY): " + (gk ? "✅ 설정됨" : "⚠️ 없음 — 사진 판독만 안 되고 나머지는 정상 동작"));
+  const props = PropertiesService.getScriptProperties();
+  Logger.log("사진 판독(GEMINI_KEY): " + (props.getProperty("GEMINI_KEY") ? "✅ 설정됨" : "⚠️ 없음 — 사진 판독만 안 됨"));
+  Logger.log("제품 검색(MFDS_KEY): " + (props.getProperty("MFDS_KEY") ? "✅ 설정됨" : "⚠️ 없음 — 제품 검색만 안 됨"));
+}
+
+// 식약처 검색이 되는지, 필드명이 예상과 맞는지 확인. 실행 로그를 저에게 보여주시면
+// 필드가 다를 경우 매핑을 정확히 고칠 수 있습니다.
+function testFoodSearch() {
+  Logger.log("── 매핑된 결과 ──");
+  Logger.log(JSON.stringify(foodSearch("닭가슴살").slice(0, 3), null, 2));
+  Logger.log("── 원본 필드명 확인용 ──");
+  Logger.log(JSON.stringify(foodSearch("닭가슴살", true), null, 2));
 }
 
 // 사진 판독이 되는지 실제로 한 번 확인. 인바디 사진을 구글 드라이브에 올리고

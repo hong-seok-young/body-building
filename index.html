@@ -296,11 +296,17 @@
         </div>
         <button type="submit">추가</button>
       </form>
+      <div class="fields" style="margin-top:11px">
+        <input id="dbQ" placeholder="🔍 식약처 DB에서 제품 검색 (예: 닭가슴살)"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();dbSearch();}">
+      </div>
       <div class="btns mt">
+        <button class="btn" type="button" onclick="dbSearch()">식약처 검색</button>
         <button class="btn" type="button" onclick="foodPhoto.click()">📷 영양정보표 촬영</button>
       </div>
       <input type="file" id="foodPhoto" accept="image/*" capture="environment" hidden onchange="readPhoto(this,'label')">
       <div class="msg" id="foodOcrMsg"></div>
+      <div class="presets" id="dbResults"></div>
       <div class="hint">새로 넣은 음식은 아래에 자동 등록됩니다. 칩을 누르면 위에서 고른 끼니로 바로 기록돼요.</div>
       <div class="fields" style="margin-top:11px">
         <input id="presetQ" placeholder="🔍 등록한 음식 검색 (제품명)" oninput="presetQ=this.value;renderPresets()">
@@ -474,6 +480,10 @@
       <label>나트륨mg 상한<input type="number" id="gNa"></label>
       <label>식이섬유g 하한<input type="number" id="gFib"></label>
     </div>
+    <label style="margin-top:16px">다른 기기로 옮기기 — 링크를 열면 위 두 칸이 자동으로 채워집니다</label>
+    <div class="btns">
+      <button class="btn" onclick="copyCfgLink()">설정 링크 복사</button>
+    </div>
     <label style="margin-top:16px">내보내기 — 기기에 있는 전체 기록을 파일로 저장</label>
     <div class="btns">
       <button class="btn" onclick="exportCsv()">식단 CSV</button>
@@ -550,6 +560,25 @@ let pending = load("dt_pending", []);
 let inbody = load("dt_inbody", []);
 let ibPending = load("dt_ib_pending", []);
 let metaDirty = load("dt_meta_dirty", {});    // 전송 실패한 설정 키 { act:1, calc:1 ... }
+
+// ── 설정 링크로 받기: 주소 끝에 #cfg=<base64> 가 붙어 있으면 그걸 저장하고
+//    주소에서 즉시 지운다. 폰에서 긴 URL·비밀키를 타이핑하지 않게 하는 용도.
+//    (비밀키는 코드에 넣지 않는다 — 공개 주소라 페이지 소스가 그대로 보인다)
+(function importCfgFromHash() {
+  const m = (location.hash || "").match(/(?:^#|[#&])cfg=([A-Za-z0-9+/=_-]+)/);
+  if (!m) return;
+  try {
+    const json = atob(m[1].replace(/-/g, "+").replace(/_/g, "/"));
+    const o = JSON.parse(json);
+    if (o && o.url) {
+      cfg = { url: String(o.url), secret: String(o.secret || "") };
+      save("dt_cfg", cfg);
+      cache = {}; save("dt_cache", cache);        // 새 백엔드 기준으로 다시 받아온다
+    }
+  } catch (e) { /* 깨진 링크는 무시 */ }
+  // 비밀키가 주소창·방문기록에 남지 않게 지운다
+  history.replaceState(null, "", location.pathname + location.search);
+})();
 let plan = load("dt_plan", DEFAULT_PLAN);
 let planFormOpen = -1;
 let section = "diet", view = "day";
@@ -1354,6 +1383,45 @@ async function saveSettings() {
     cfgMsg.textContent = "✗ 연결 실패: URL과 비밀키를 확인하세요. (" + e.message + ")"; cfgMsg.className = "msg err";
   }
   render();
+}
+
+// 설정을 담은 일회용 링크. 폰에서 열면 URL·비밀키가 자동으로 들어간다.
+// 비밀키가 들어있으니 카톡·메모처럼 남는 곳에 붙여넣지 말고, 열고 나면 지울 것.
+function copyCfgLink() {
+  const url = cfgUrl.value.trim(), secret = cfgSecret.value.trim();
+  if (!url) { cfgMsg.textContent = "URL 을 먼저 입력하세요"; cfgMsg.className = "msg err"; return; }
+  const b64 = btoa(JSON.stringify({ url, secret })).replace(/\+/g, "-").replace(/\//g, "_");
+  const link = location.origin + location.pathname + "#cfg=" + b64;
+  const done = () => { cfgMsg.textContent = "✓ 링크를 복사했습니다. 다른 기기에서 열면 자동 설정됩니다."; cfgMsg.className = "msg ok"; };
+  if (navigator.clipboard) navigator.clipboard.writeText(link).then(done).catch(() => prompt("복사하세요", link));
+  else prompt("복사하세요", link);
+}
+
+// ═════════ 식약처 제품 검색 ═════════
+let dbHits = [];
+async function dbSearch() {
+  const q = dbQ.value.trim();
+  const show = (t, c) => { foodOcrMsg.textContent = t; foodOcrMsg.className = "msg" + (c ? " " + c : ""); };
+  if (!q) { dbQ.focus(); return; }
+  if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요 — 검색은 백엔드를 거칩니다.", "err"); return; }
+  show("검색 중…"); dbResults.innerHTML = "";
+  try {
+    const r = await api({ action: "foodSearch", q });
+    dbHits = r.items || [];
+    if (!dbHits.length) { show("결과 없음. 제품명을 줄여서 다시 해보세요 (예: '맛에반했닭' → '닭다리').", "err"); return; }
+    show(`${dbHits.length}건 — 누르면 아래 칸이 채워집니다. 1회 제공량 기준을 꼭 확인하세요.`, "ok");
+    dbResults.innerHTML = dbHits.map((x, i) =>
+      `<span class="chip" onclick="fillFromDb(${i})">${esc(x.name)} · ${Math.round(x.kcal)}kcal/${esc(x.serving)}</span>`).join("");
+  } catch (e) { show("✗ " + e.message, "err"); }
+}
+function fillFromDb(i) {
+  const x = dbHits[i];
+  fName.value = `${x.name} ${x.serving}`.slice(0, 60);
+  ["kcal", "p", "c", "f", "na", "fib"].forEach(k => {
+    const el = { kcal: fKcal, p: fP, c: fC, f: fF, na: fNa, fib: fFib }[k];
+    el.value = +x[k] ? +x[k] : "";
+  });
+  fName.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 // ═════════ 사진 판독 ═════════
