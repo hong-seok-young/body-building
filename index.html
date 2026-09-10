@@ -108,6 +108,8 @@
     align-items: center; column-gap: 9px; padding: 5px 0; font-size: 12.5px; }
   .macro .nm { font-weight: 700; white-space: nowrap; }
   .macro .val, .macro .st { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  /* 단백질은 "이 밑으로 내려가지 않는다" 는 뜻의 바닥선 표시 */
+  .macro .val small { font-size: 9px; color: var(--protein); vertical-align: 1px; }
   .macro .st { font-size: 11.5px; }
   /* 머리글의 글자만 작게 한다 — .macro 자체의 font-size 를 줄이면 em 기반 열 폭까지
      같이 줄어들어 아래 줄과 열이 어긋난다 */
@@ -441,12 +443,13 @@
   </div>
 
   <div class="card">
-    <h3>매크로 <span class="muted">단백질·지방 고정, 탄수가 활동량을 흡수</span></h3>
-    <div class="fields g2">
-      <label>단백질 g/kg<input type="number" step="0.1" min="0" max="4" id="cPg"></label>
-      <label>지방 g/kg<input type="number" step="0.05" min="0" max="2" id="cFg"></label>
+    <h3>매크로 <span class="muted">단백질 고정 · 탄수·지방으로 열량 조절</span></h3>
+    <div class="fields g3">
+      <label>단백질 g/kg <span class="muted">고정</span><input type="number" step="0.1" min="0" max="4" id="cPg"></label>
+      <label>지방 하한 g/kg<input type="number" step="0.05" min="0" max="2" id="cFmin"></label>
+      <label>지방 상한 g/kg<input type="number" step="0.05" min="0" max="2" id="cFmax"></label>
     </div>
-    <div class="hint">단백질은 매일 같은 양을 지키고, 남는 열량을 탄수가 받습니다. 운동을 많이 한 날은 탄수만 늘어납니다 — 단백질을 퍼센트로 걸면 쉬는 날 단백질까지 같이 깎여 근손실 쪽으로 불리합니다.</div>
+    <div class="hint"><b>단백질은 바닥선입니다.</b> 그날 운동을 얼마나 했든 체중 × 이 값을 먼저 떼어놓고, 열량 조절은 탄수와 지방에서만 합니다. 지방은 하한~상한 안에서 움직이고, 남는 열량은 전부 탄수가 받습니다 — 쉬는 날엔 지방이 하한에 걸리고, 많이 움직인 날엔 탄수가 늘어납니다.</div>
     <div class="btns mt">
       <button class="btn pri" onclick="saveCalc()">적용</button>
     </div>
@@ -665,7 +668,10 @@ const DEFAULT_CALC = {
   wH: 2, wD: 5,
   cH: 0.5, cD: 2, cI: "중",
   deficit: 350,
-  byKg: true, pG: 2.0, fG: 0.7,     // 단백질·지방은 체중 기준 g/kg (아래 macrosFor 참고)
+  byKg: true, pG: 2.0,              // 단백질 = 체중 × 2.0 g. 활동량과 무관하게 고정되는 바닥선
+  fG: 0.7,                          // 지방 기준선 (g/kg) — 실제로는 아래 fMin~fMax 안에서 움직인다
+  fMin: 0.6, fMax: 0.9,             // 지방 하한(호르몬)·상한. 이 안에서 열량 변동을 나눠 받는다
+  fShare: 0.35,                     // 단백질 뺀 나머지 열량 중 지방이 받는 비율, 남는 건 탄수
   pC: 45, pP: 30, pF: 25,           // byKg 를 끄면 쓰는 퍼센트 방식
   bmr: 0, wt: 0,        // 인바디 기록이 없을 때만 쓰는 수동값
 };
@@ -1148,10 +1154,16 @@ function calcWeek(ds) {
 function macrosFor(kcal, ds) {
   const wt = ibAt("weight", ds) || +calc.wt || 0;
   if (calc.byKg !== false && wt > 0) {
+    // 단백질은 바닥선이다 — 그날 활동이 뭐였든 체중 × 2.0 g 을 먼저 떼어놓고,
+    // 열량 조절은 탄수와 지방에서만 한다. 더 먹는 건 괜찮고 줄이는 건 안 된다.
     const p = Math.round((+calc.pG || 2.0) * wt);
-    const f = Math.round((+calc.fG || 0.7) * wt);
-    const c = Math.max(0, Math.round((kcal - p * 4 - f * 9) / 4));
-    return { kcal, p, c, f };
+    const rest = Math.max(0, kcal - p * 4);
+    // 지방도 열량 변동을 나눠 받되, 호르몬 하한(fMin)과 상한(fMax) 밖으로는 안 나간다.
+    // 쉬는 날엔 하한에 걸리고 많이 움직인 날엔 상한에 걸린 뒤 나머지는 탄수가 받는다
+    const fLo = (+calc.fMin || 0.6) * wt, fHi = (+calc.fMax || 0.9) * wt;
+    const f = Math.round(Math.min(fHi, Math.max(fLo, rest * (+calc.fShare || 0.35) / 9)));
+    const c = Math.max(0, Math.round((rest - f * 9) / 4));
+    return { kcal, p, c, f, pFloor: p };
   }
   return { kcal, c: Math.round(kcal * calc.pC / 400), p: Math.round(kcal * calc.pP / 400), f: Math.round(kcal * calc.pF / 900) };
 }
@@ -1211,7 +1223,8 @@ function saveCalc() {
     wH: +cWh.value || 0, wD: Math.min(7, +cWd.value || 0),
     cH: +cCh.value || 0, cD: Math.min(7, +cCd.value || 0), cI: cCi.value,
     deficit: +cDef.value || 0,
-    byKg: true, pG: +cPg.value || DEFAULT_CALC.pG, fG: +cFg.value || DEFAULT_CALC.fG };
+    byKg: true, pG: +cPg.value || DEFAULT_CALC.pG,
+    fMin: +cFmin.value || DEFAULT_CALC.fMin, fMax: +cFmax.value || DEFAULT_CALC.fMax };
   saveCalcMeta(); render();
 }
 function applyCalcGoals() {
@@ -1343,7 +1356,7 @@ function renderDay() {
     `<div class="macro mhead"><span class="nm"></span><span class="val">섭취 / 목표</span>
        <span></span><span class="st">남음</span></div>` +
     [{ l: "칼로리", v: t.kcal, g: g.kcal, d: 0, c: "var(--kcal)" },
-     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", more: true },
+     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", more: true, floor: true },
      { l: "탄수화물", v: t.c, g: g.c, d: 1, c: "var(--carb)" },
      { l: "지방", v: t.f, g: g.f, d: 1, c: "var(--fat)" }].map(r => {
       const pct = r.g ? Math.min(100, r.v / r.g * 100) : 0, over = r.v - r.g;
@@ -1353,7 +1366,7 @@ function renderDay() {
         : `<span class="remain">${n(r.g - r.v)}</span>`;
       return `<div class="macro">
         <span class="nm">${r.l}</span>
-        <span class="val">${n(r.v)} / ${n(r.g)}</span>
+        <span class="val">${n(r.v)} / ${n(r.g)}${r.floor ? "<small>↑</small>" : ""}</span>
         <span class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.c}"></div></span>
         <span class="st">${st}</span></div>`;
     }).join("") +
@@ -1872,7 +1885,8 @@ function renderCal() {
   const w = calcWeek();
   cAf.value = calc.af; cSteps.value = calc.steps; cWh.value = calc.wH; cWd.value = calc.wD;
   cCh.value = calc.cH; cCd.value = calc.cD; cDef.value = calc.deficit;
-  cPg.value = calc.pG ?? DEFAULT_CALC.pG; cFg.value = calc.fG ?? DEFAULT_CALC.fG;
+  cPg.value = calc.pG ?? DEFAULT_CALC.pG;
+  cFmin.value = calc.fMin ?? DEFAULT_CALC.fMin; cFmax.value = calc.fMax ?? DEFAULT_CALC.fMax;
   if (!cCi.options.length) cCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
   cCi.value = calc.cI;
 
