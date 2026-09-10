@@ -2307,6 +2307,8 @@ function renderWeek() {
   // 목표에 이미 적자가 들어 있어서 목표 초과분을 환산하면 "적자인데 살쪘다" 가 된다
   const sumReal = sumEat - sumTdee;
   const fatKg = sumReal / 7700;                              // 지방 1kg = 7,700kcal
+  // 목표를 넘기지 않았다면 나왔을 값 — 적자 × 일수만큼 빠진다
+  const plannedKg = -done.length * calc.deficit / 7700;
 
   // ── 이번 주 장부: 적자 합계 → 예상 체지방 변화 (인바디와 크로스체크용)
   const wk = calcWeek();
@@ -2326,7 +2328,7 @@ function renderWeek() {
       <div class="stat"><span>실제 수지</span><b style="color:${sumReal > 0 ? "var(--red)" : "var(--green)"}">${sumReal > 0 ? "+" : ""}${num(sumReal)}</b>
         <small>하루 ${sumReal > 0 ? "+" : ""}${num(sumReal / done.length)}</small></div>
       <div class="stat"><span>예상 체지방</span><b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b>
-        <small>실제 수지 ÷ 7,700</small></div>
+        <small>미초과시 ${plannedKg > 0 ? "+" : "−"}${Math.abs(plannedKg).toFixed(2)}kg</small></div>
     </div>
     <div class="diff">
       체지방은 <b>유지 열량 대비</b>로 계산합니다. 목표(하루 ${num(sumGoal / done.length)})에는 이미 적자 ${num(calc.deficit)} 이 들어 있어서,
