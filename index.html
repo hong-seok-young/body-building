@@ -1538,6 +1538,7 @@ function renderDay() {
       ${open ? items.map(x => `<div class="mrow" data-id="${x.id}">
         <span class="nm" onclick="event.stopPropagation();toggleRowEdit('${x.id}')" style="cursor:pointer">${esc(x.name)}<small>탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)} · 지 ${fmt(+x.f || 0)}${+x.na ? " · Na " + num(x.na) : ""}${+x.sug ? " · 당 " + fmt(x.sug) : ""}${+x.sat ? " · 포화 " + fmt(x.sat) : ""}</small></span>
         <span class="kc">${num(x.kcal)}</span>
+        <button class="star${favIdx(x) >= 0 ? " on" : ""}" title="즐겨찾기" onclick="event.stopPropagation();favItem('${x.id}')">${favIdx(x) >= 0 ? "★" : "☆"}</button>
         <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button></div>${rowEdit === x.id ? rowEditHtml(x) : ""}`).join("")
         + `<div class="meal-act">
              <button class="btn" onclick="toggleMealForm('${m}')">${mealFormOpen === m ? "닫기" : "＋ 음식"}</button>
@@ -1683,6 +1684,23 @@ async function logFav(i) {
   render();
 }
 function saveFavs() { save("dt_presets", presets); setMeta("presets", presets); render(); }
+// 이 음식이 이미 즐겨찾기에 있나 (이름·열량으로 같은 음식인지 본다)
+function favIdx(x) { return presets.findIndex(pz => pz.fav && sameFood(pz, x)); }
+// 식단 화면에서 기록한 항목을 그대로 즐겨찾기에 넣는다.
+// 내 음식의 일반형("퀵오트 100g")이 아니라 실제로 먹은 양("퀵오트 건조 50g")이
+// 그대로 저장되는 게 요점이다 — 다음부터 칩 한 번이면 그 양으로 들어간다.
+function favItem(id) {
+  const x = dayLog(curDate).find(i => i.id === id);
+  if (!x) return;
+  const at = favIdx(x);
+  if (at >= 0) return toggleFav(at);            // 켜져 있으면 끈다
+  const same = presets.findIndex(pz => sameFood(pz, x));
+  if (same >= 0) return toggleFav(same);        // 같은 게 내 음식에 있으면 그걸 켠다
+  const { id: _i, date: _d, meal: _m, ...food } = x;   // amt·unit 은 남겨서 양을 기억한다
+  presets = [{ ...food, fav: 1 }, ...presets].slice(0, 300);
+  toast(`★ '${x.name}' 즐겨찾기`);
+  saveFavs();
+}
 function toggleFav(i) {
   if (!presets[i]) return;
   presets = presets.map((p, k) => k === i ? { ...p, fav: p.fav ? 0 : 1 } : p);
