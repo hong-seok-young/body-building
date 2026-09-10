@@ -405,7 +405,9 @@
       <label>단백질 g/제지방kg <span class="muted">2.2~2.6</span><input type="number" step="0.1" min="0" max="4" id="cPl"></label>
       <label>지방 하한 g/kg<input type="number" step="0.05" min="0" max="2" id="cFmin"></label>
       <label>지방 상한 g/kg<input type="number" step="0.05" min="0" max="2" id="cFmax"></label>
+      <label>웨이트 kcal/kg/h <span class="muted">2.3~2.7</span><input type="number" step="0.05" min="0" max="8" id="cLiftK"></label>
     </div>
+    <div class="hint">웨이트 계수는 <b>안정시를 뺀 순증분</b>입니다. 이 앱은 기초대사량 × 좌식계수로 하루 안정 대사를 이미 세기 때문에, 운동 어플이 보여주는 칼로리(안정시 포함 총량 — 내 로그 환산 약 4.6)를 그대로 쓰면 2배 가까이 이중 계산이 됩니다. 실제 볼륨·세트·시간에서 역산한 범위는 2.3~2.7 이고 기본값은 중간값 2.5 입니다.</div>
     <div class="hint"><b>단백질은 제지방량 기준 목표치입니다.</b> 체지방은 단백질을 쓰지 않으므로 체중이 아니라 <b>제지방량(체중 − 체지방량)</b> 에 겁니다. 그날 운동을 얼마나 했든 이 값을 먼저 떼어놓고, 열량 조절은 탄수와 지방에서만 합니다.<br><b>모자라는 것도, 넘치는 것도 손해입니다.</b> 이 값을 넘겨도 근성장이 더 되지는 않는데, 총 열량은 정해져 있어서 초과분만큼 탄수가 깎이고 훈련 볼륨이 떨어집니다. 그래서 일간 화면에서 +10% 까지는 초록(오차), 그보다 넘으면 노랑(초과)으로 표시합니다.<br>지방은 하한~상한 안에서 움직이고, 남는 열량은 전부 탄수가 받습니다 — 쉬는 날엔 지방이 하한에 걸리고, 많이 움직인 날엔 탄수가 늘어납니다.</div>
     <div class="btns mt">
       <button class="btn pri" onclick="saveCalc()">적용</button>
@@ -561,8 +563,8 @@
     <div class="hint" style="margin-top:0">별일 없으면 <b id="actDefLabel"></b> 로 계산합니다. 이 날이 달랐을 때만 고치세요.</div>
     <div class="fields g2 mt">
       <label>걸음수<input type="number" min="0" step="100" id="aSteps"></label>
-      <label>웨이트 (시간)<input type="number" min="0" step="0.25" id="aWh"></label>
-      <label>유산소 (시간)<input type="number" min="0" step="0.25" id="aCh"></label>
+      <label>웨이트 (분)<input type="number" min="0" step="5" id="aWh"></label>
+      <label>유산소 (분)<input type="number" min="0" step="5" id="aCh"></label>
       <label>유산소 강도<select id="aCi"></select></label>
     </div>
     <div class="btns mt">
@@ -642,7 +644,17 @@ const INTENSITY = ["저", "중", "고"];
 
 // 활동 소모 계수 — 사용자가 확인한 실측 앵커에 맞춰 역산한 값
 const STEP_K = 0.0004;                              // kcal / 보 / 체중kg  (3,000보·99kg ≈ 120kcal)
-const LIFT_K = 2.75;                                // kcal / 체중kg / 시간 (1.5h·99kg ≈ 408kcal)
+// 웨이트 순증분 계수 (kcal / 체중kg / 시간). 이 앱은 기초대사량 × 좌식계수로 하루
+// 안정 대사를 이미 세므로 운동은 "안정시를 뺀 순증분" 만 더한다 → MET 에서 1 을 뺀 값.
+// 운동 어플이 주는 칼로리는 안정시를 포함한 총량(그의 로그 환산 4.63 kcal/kg/h)이라
+// 그대로 쓰면 2배 가까이 이중 계산된다.
+// 실제 로그에서 역산 — 역학적 일(볼륨 × 가동범위 × 9.81 / 효율 20% × 1.3) +
+// 세트 사이 대사 상승(2.0~2.5 kcal/kg/h):
+//   하체 124분 44,002kg 37세트 → 583~665   (어플 1,195)
+//   가슴  96분 13,150kg 38세트 → 329~388   (어플   679)
+//   등   161분 18,163kg 48세트 → 559~665   (어플 1,039)
+//   합계 6.35h → 2.34~2.73 → 중간값 2.5
+const LIFT_K = 2.5;
 const CARDIO_K = { "저": 4.0, "중": 6.0, "고": 8.0 };  // kcal / 체중kg / 시간 (0.5h·99kg 중강도 ≈ 297kcal)
 
 // na/sug/sat/trans/chol 은 상한, fib 는 하한 (1일 영양성분 기준치 기반)
@@ -658,6 +670,7 @@ const DEFAULT_CALC = {
   fG: 0.7,                          // 지방 기준선 (g/kg) — 실제로는 아래 fMin~fMax 안에서 움직인다
   fMin: 0.6, fMax: 0.9,             // 지방 하한(호르몬)·상한. 이 안에서 열량 변동을 나눠 받는다
   fShare: 0.35,                     // 단백질 뺀 나머지 열량 중 지방이 받는 비율, 남는 건 탄수
+  liftK: LIFT_K,                    // 웨이트 순증분 계수 — 체중 추세 보고 조정 (위 LIFT_K 주석 참고)
   // 평소 하루. 별일 없으면 매일 이걸로 계산하고, 다른 날만 손으로 고친다
   dSteps: 4000, dWh: 2, dCh: 0, dCi: "중",
   pC: 45, pP: 30, pF: 25,           // byKg 를 끄면 쓰는 퍼센트 방식
@@ -1124,7 +1137,7 @@ function calcBase(ds) {
   return { bmr, wt, sed, stepK, rest: sed + stepK,
            src: ibB ? "인바디" : "수동", ibDate: ibB ? ibDateAt("bmr", ds) : "" };
 }
-function burnLift(h, wt) { return h * wt * LIFT_K; }
+function burnLift(h, wt) { return h * wt * (+calc.liftK || LIFT_K); }
 function burnCardio(h, wt, i) { return h * wt * (CARDIO_K[i] || CARDIO_K["중"]); }
 
 function calcWeek(ds) {
@@ -1185,11 +1198,20 @@ function defaultDay(ds) {
            ci: d.ci || calc.cI, def: 1, from: d.from };
 }
 function actOf(ds) { return act[ds] || defaultDay(ds); }
+// 화면은 분, 저장은 시간 (기존 기록과 계산식이 시간 단위다).
+// 운동 어플이 분으로 알려주고 실제 세션이 96~161분으로 들쭉날쭉해서 분이 맞다.
+const h2m = h => (+h > 0 ? Math.round(+h * 60) : "");
+const m2h = m => (+m > 0 ? +m / 60 : 0);
+// 시간이 딱 떨어지면 h, 아니면 분으로 (161분이 2.683333h 로 찍히던 것)
+function durLabel(h) {
+  const m = Math.round(+h * 60);
+  return m % 60 === 0 ? `${m / 60}h` : `${m}분`;
+}
 function actLabel(a) {
   const parts = [];
   if (+a.steps) parts.push(num(a.steps) + "보");
-  if (+a.wh) parts.push(`웨이트 ${+a.wh}h`);
-  if (+a.ch) parts.push(`유산소 ${+a.ch}h(${a.ci || calc.cI})`);
+  if (+a.wh) parts.push(`웨이트 ${durLabel(a.wh)}`);
+  if (+a.ch) parts.push(`유산소 ${durLabel(a.ch)}(${a.ci || calc.cI})`);
   return parts.length ? parts.join(" · ") : "완전 휴식";
 }
 // 그날 활동으로 TDEE 를 잡는다. 기록이 없으면 평소 하루를 쓴다
@@ -1205,15 +1227,15 @@ function dayTarget(ds) {
 }
 
 function saveAct() {
-  const a = { steps: +aSteps.value || 0, wh: +aWh.value || 0, ch: +aCh.value || 0, ci: aCi.value };
+  const a = { steps: +aSteps.value || 0, wh: m2h(aWh.value), ch: m2h(aCh.value), ci: aCi.value };
   if (!a.steps && !a.wh && !a.ch) act[curDate] = { ...a, rest: 1 }; else act[curDate] = a;
   closeAct(); pushAct();
 }
 // 지금 칸에 있는 값을 "이 날부터" 의 평소 하루로 등록한다.
 // 과거 날짜는 예전 기준을 그대로 쓴다 (dayDefs 가 시점별로 남으므로)
 function setDefaultDay() {
-  const e = { from: curDate, steps: +aSteps.value || 0, wh: +aWh.value || 0,
-              ch: +aCh.value || 0, ci: aCi.value };
+  const e = { from: curDate, steps: +aSteps.value || 0, wh: m2h(aWh.value),
+              ch: m2h(aCh.value), ci: aCi.value };
   const list = dayDefs().filter(x => x.from !== curDate).concat([e])
     .sort((x, y) => x.from < y.from ? -1 : 1).slice(-40);
   calc = { ...calc, dayDefs: list };
@@ -1239,7 +1261,7 @@ function clearAct() {
 function openAct() {
   const a = actOf(curDate);
   if (!aCi.options.length) aCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
-  aSteps.value = a.steps || ""; aWh.value = a.wh || ""; aCh.value = a.ch || "";
+  aSteps.value = a.steps || ""; aWh.value = h2m(a.wh); aCh.value = h2m(a.ch);
   aCi.value = a.ci || calc.cI;
   const dd = defaultDay(curDate);
   actTitle.textContent = `${dateLabel(curDate)} 활동`;
@@ -1254,7 +1276,7 @@ function actPreset(kind) {
   const a = kind === "yesterday" ? { ...actOf(addDays(curDate, -1)) }
                                  : { steps: 0, wh: 0, ch: 0, ci: calc.cI, rest: 1 };
   delete a.def;
-  aSteps.value = a.steps || ""; aWh.value = a.wh || ""; aCh.value = a.ch || ""; aCi.value = a.ci || calc.cI;
+  aSteps.value = a.steps || ""; aWh.value = h2m(a.wh); aCh.value = h2m(a.ch); aCi.value = a.ci || calc.cI;
   actInfo.textContent = kind === "yesterday" ? "어제 값을 넣었습니다. 저장을 누르세요."
                                              : "완전 휴식으로 채웠습니다. 저장을 누르세요.";
 }
@@ -1266,7 +1288,8 @@ function saveCalc() {
     cH: +cCh.value || 0, cD: Math.min(7, +cCd.value || 0), cI: cCi.value,
     deficit: +cDef.value || 0,
     byKg: true, pL: +cPl.value || DEFAULT_CALC.pL,
-    fMin: +cFmin.value || DEFAULT_CALC.fMin, fMax: +cFmax.value || DEFAULT_CALC.fMax };
+    fMin: +cFmin.value || DEFAULT_CALC.fMin, fMax: +cFmax.value || DEFAULT_CALC.fMax,
+    liftK: +cLiftK.value || DEFAULT_CALC.liftK };
   saveCalcMeta(); render();
 }
 function applyCalcGoals() {
@@ -1806,7 +1829,7 @@ function renderWeek() {
       (적자 ${num(calc.deficit)} × ${done.length}일 ÷ 7,700).<br>
       실제 기록으로는 <b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b> 입니다
       ${Math.abs(sumDiff) > 500 ? `— 목표 대비 ${num(Math.abs(sumDiff))}kcal ${sumDiff > 0 ? "더 먹었습니다" : "덜 먹었습니다"}` : "— 목표에 거의 맞았습니다"}.
-      <br><span style="color:var(--sub)">다음 인바디의 체지방량과 비교해보세요. 크게 다르면 ① 기록 누락 ② 활동 소모 추정 오차(웨이트 ${LIFT_K}kcal/kg/h) ③ 수분 변동 순으로 의심하면 됩니다.</span>
+      <br><span style="color:var(--sub)">다음 인바디의 체지방량과 비교해보세요. 크게 다르면 ① 기록 누락 ② 활동 소모 추정 오차(웨이트 ${+calc.liftK || LIFT_K}kcal/kg/h) ③ 수분 변동 순으로 의심하면 됩니다.</span>
     </div>`;
 
   // ── 일별 탄단지 (칼로리 기준 스택)
@@ -1905,6 +1928,7 @@ function renderCal() {
   cCh.value = calc.cH; cCd.value = calc.cD; cDef.value = calc.deficit;
   cPl.value = calc.pL ?? DEFAULT_CALC.pL;
   cFmin.value = calc.fMin ?? DEFAULT_CALC.fMin; cFmax.value = calc.fMax ?? DEFAULT_CALC.fMax;
+  cLiftK.value = calc.liftK ?? DEFAULT_CALC.liftK;
   if (!cCi.options.length) cCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
   cCi.value = calc.cI;
 
