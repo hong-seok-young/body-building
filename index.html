@@ -468,15 +468,8 @@
       </div>
       <button type="submit">내 음식에 등록</button>
     </form>
-    <div class="btns mt">
-      <button class="btn" type="button" onclick="dbSearch()">🌐 인터넷에서 찾기</button>
-      <button class="btn" type="button" onclick="barPhoto.click()">📷 바코드</button>
-    </div>
-    <input type="file" id="barPhoto" accept="image/*" capture="environment" hidden onchange="readBarcode(this)">
     <div class="msg" id="foodMsg"></div>
-    <div class="presets" id="dbResults"></div>
-    <div class="hint">찾거나 찍으면 위 칸이 채워집니다 — 확인하고 <b>내 음식에 등록</b>.
-      <b>인터넷에서 찾기</b> 는 아래 <b>검색</b> 칸에 적은 이름으로 찾습니다.
+    <div class="hint">한 번 등록하면 아래 목록에 남아 계속 씁니다. <b>☆</b> 를 켜면 식단 화면 즐겨찾기에 올라옵니다.
       먹은 기록은 식단 화면 끼니 카드의 <b>＋ 음식</b> 으로 넣으세요.</div>
   </div>
 
@@ -1652,11 +1645,10 @@ function renderFoods() {
 function addToDb(e) {
   e.preventDefault();
   const f = e.target;
-  // 검색·바코드로 채웠으면 폼에 칸이 없는 상세 성분(fib·sat·trans·chol)도 같이 넣는다
-  const ex = fillExtra || { fib: 0, sat: 0, trans: 0, chol: 0 };
+  const ex = { fib: 0, sat: 0, trans: 0, chol: 0 };
   const x = { name: f.nm.value.trim(), kcal: +f.kcal.value || 0, p: +f.p.value || 0, c: +f.c.value || 0,
               f: +f.f.value || 0, na: +f.na.value || 0, sug: +f.sug.value || 0, ...ex };
-  f.reset(); fillExtra = null;
+  f.reset();
   if (presets.some(z => z.name === x.name)) { foodMsg.textContent = "이미 등록된 이름입니다"; foodMsg.className = "msg err"; return; }
   presets.unshift(x); presets = presets.slice(0, 300);
   save("dt_presets", presets); setMeta("presets", presets);
@@ -2328,74 +2320,6 @@ function copyCfgLink() {
   const done = () => { cfgMsg.textContent = "✓ 링크를 복사했습니다. 다른 기기에서 열면 자동 설정됩니다."; cfgMsg.className = "msg ok"; };
   if (navigator.clipboard) navigator.clipboard.writeText(link).then(done).catch(() => prompt("복사하세요", link));
   else prompt("복사하세요", link);
-}
-
-// ═════════ 식약처 제품 검색 ═════════
-let dbHits = [];
-async function dbSearch() {
-  const q = ((fdQ && fdQ.value) || foodQ2 || "").trim();
-  const show = (t, c) => { foodMsg.textContent = t; foodMsg.className = "msg" + (c ? " " + c : ""); };
-  if (!q) { if (fdQ) fdQ.focus(); return; }
-  if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요 — 검색은 백엔드를 거칩니다.", "err"); return; }
-  show("검색 중…"); dbResults.innerHTML = "";
-  try {
-    // 1순위: 시트에 적재한 식약처 통합DB (인증키 불필요·빠름)
-    // 2순위: 식약처 OpenAPI → Open Food Facts (브랜드 상품 보완)
-    dbHits = [];
-    try { dbHits = (await api({ action: "dbSearch", q })).items || []; } catch (e) { /* 미적재면 넘어간다 */ }
-    let src = dbHits.length ? "시트 식약처DB" : "";
-    if (!dbHits.length) { dbHits = (await api({ action: "foodSearch", q })).items || []; src = "인터넷"; }
-    if (!dbHits.length) { show("결과 없음. 제품명을 줄여서 다시 해보세요 (예: '맛에반했닭' → '닭다리').", "err"); return; }
-    show(`${src} ${dbHits.length}건 — 누르면 칸이 채워집니다. 기준량(${esc(dbHits[0].serving || "100g")})을 꼭 확인하세요.`, "ok");
-    dbResults.innerHTML = dbHits.map((x, i) =>
-      `<span class="chip" onclick="fillFromDb(${i})">${esc(x.name)} · ${Math.round(x.kcal)}kcal/${esc(x.serving)}</span>`).join("");
-  } catch (e) { show("✗ " + e.message, "err"); }
-}
-function fillFromDb(i) { fillForm(scaled(dbHits[i], qtyVal())); }
-// 검색·바코드 결과를 "내 음식에 등록" 폼에 채운다. 눈으로 확인하고 등록 버튼을 누르게 —
-// 판독이 틀릴 수 있고 이 값이 앞으로 계속 쓰이기 때문이다
-function fillForm(x) {
-  const f = document.querySelector('#section-food form.addform');
-  if (!f) return;
-  f.nm.value = (x.serving ? `${x.name} ${x.serving}` : x.name).slice(0, 60);
-  ["kcal", "p", "c", "f", "na", "sug"].forEach(k => {
-    if (f[k]) f[k].value = +x[k] ? +x[k] : "";
-  });
-  // 상세 성분은 폼에 칸이 없다 — 등록 시 함께 넣도록 잠시 보관한다
-  fillExtra = { fib: +x.fib || 0, sat: +x.sat || 0, trans: +x.trans || 0, chol: +x.chol || 0 };
-  f.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-let fillExtra = null;
-
-// 바코드 사진 → 숫자 추출 → 백엔드 조회. 시중 제품에 가장 확실한 경로
-async function readBarcode(input) {
-  const file = input.files && input.files[0];
-  input.value = "";
-  if (!file) return;
-  const show = (t, c) => { foodMsg.textContent = t; foodMsg.className = "msg" + (c ? " " + c : ""); };
-  if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요.", "err"); return; }
-  if (!("BarcodeDetector" in window)) {
-    const t = prompt("이 브라우저는 바코드 인식을 지원하지 않습니다.\n제품 뒷면 바코드 숫자를 직접 입력해주세요:");
-    if (t) return lookupBarcode(t.trim(), show);
-    return;
-  }
-  show("바코드 읽는 중…");
-  try {
-    const bmp = await createImageBitmap(file);
-    const det = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"] });
-    const found = await det.detect(bmp);
-    bmp.close && bmp.close();
-    if (!found.length) { show("✗ 바코드를 찾지 못했습니다. 바코드가 화면을 채우게 다시 찍어주세요.", "err"); return; }
-    await lookupBarcode(found[0].rawValue, show);
-  } catch (e) { show("✗ " + e.message, "err"); }
-}
-async function lookupBarcode(code, show) {
-  show(`${code} 조회 중…`);
-  try {
-    const r = await api({ action: "barcode", code });
-    fillForm(r.data);
-    show(`✓ ${r.data.name} — 100g 기준입니다. 실제 먹은 양으로 고쳐서 추가하세요.`, "ok");
-  } catch (e) { show("✗ " + e.message, "err"); }
 }
 
 // ═════════ 내보내기 ═════════
