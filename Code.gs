@@ -249,38 +249,51 @@ function setMeta(key, value) {
  *        MFDS_KEY = 발급받은 인증키
  *   3) 배포 → 배포 관리 → ✏️ → 새 버전 → 배포
  */
+// 공공데이터포털(data.go.kr) 의 "식품의약품안전처_식품영양성분DB정보" 를 부른다.
+// 예전에 쓰던 식품안전나라 I2790 은 인증키 발급처도 응답 규격도 다른 별개 서비스다.
+//   신청: data.go.kr → "식품영양성분DB정보" → 활용신청(자동승인)
+//   키:   마이페이지 → 개발계정 → 일반 인증키
+const MFDS_URL = "https://apis.data.go.kr/1471000/FoodNtrCpntDbInfo02/getFoodNtrCpntDbInq02";
+
 function foodSearch(q, debug) {
   const key = PropertiesService.getScriptProperties().getProperty("MFDS_KEY");
   if (!key) throw new Error("MFDS_KEY 가 없습니다. Apps Script → 프로젝트 설정 → 스크립트 속성에 추가하세요");
   if (!q || !String(q).trim()) return [];
 
-  const url = "https://openapi.foodsafetykorea.go.kr/api/" + encodeURIComponent(key)
-            + "/I2790/json/1/30/DESC_KOR=" + encodeURIComponent(String(q).trim());
+  const url = MFDS_URL + "?serviceKey=" + encodeURIComponent(key)
+            + "&type=json&pageNo=1&numOfRows=30"
+            + "&FOOD_NM_KR=" + encodeURIComponent(String(q).trim());
   const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-  if (res.getResponseCode() !== 200) throw new Error("식약처 API " + res.getResponseCode());
+  const body = res.getContentText();
+  if (res.getResponseCode() !== 200) throw new Error("식약처 API " + res.getResponseCode() + ": " + body.slice(0, 200));
 
   let j;
-  try { j = JSON.parse(res.getContentText()); }
-  catch (e) { throw new Error("응답이 JSON 이 아닙니다: " + res.getContentText().slice(0, 200)); }
+  try { j = JSON.parse(body); }
+  catch (e) { throw new Error("응답이 JSON 이 아닙니다: " + body.slice(0, 200)); }
 
-  // 응답 껍데기가 서비스마다 달라서 첫 번째 객체에서 row 를 찾아낸다
-  let box = j.I2790 || null;
-  if (!box) for (const k in j) { if (j[k] && (j[k].row || j[k].RESULT)) { box = j[k]; break; } }
-  if (!box) throw new Error("예상과 다른 응답: " + JSON.stringify(j).slice(0, 200));
+  // 껍데기가 {header,body} 일 때도 {response:{header,body}} 일 때도 있다
+  const head = j.header || (j.response && j.response.header) || {};
+  const rc = String(head.resultCode || "");
+  if (rc && rc !== "00" && rc !== "0" && rc !== "INFO-000")
+    throw new Error("식약처: " + rc + " " + (head.resultMsg || ""));
 
-  const code = box.RESULT && box.RESULT.CODE;
-  if (code && code !== "INFO-000") {
-    if (String(code).indexOf("INFO-200") === 0) return [];        // 검색 결과 없음
-    throw new Error("식약처: " + code + " " + (box.RESULT.MSG || ""));
-  }
-  const rows = box.row || [];
+  const rows = mfdsItems(j);
   if (debug) return rows.slice(0, 1);        // 필드명 확인용 — 원본 한 건을 그대로 돌려준다
 
   const hits = rows.map(function (r) { return mapNutrient(r); }).filter(function (x) { return x.name; });
-  // 식약처는 원재료·일반음식 위주라 브랜드 상품이 잘 없다. 없으면 Open Food Facts 로 보완
+  // 식약처에 없으면 Open Food Facts 로 보완
   // (전세계 오픈 DB, 인증키 불필요. 한국 제품은 바코드로 등록된 것들이 잡힌다)
   if (!hits.length) return offSearch(q);
   return hits;
+}
+
+// items 가 배열일 때도, {item:[…]} 일 때도, 한 건만 객체로 올 때도 있다
+function mfdsItems(j) {
+  const b = j.body || (j.response && j.response.body) || {};
+  let it = b.items;
+  if (it && it.item) it = it.item;
+  if (!it) return [];
+  return Array.isArray(it) ? it : [it];
 }
 
 // ───────────────────────── Open Food Facts (키 불필요) ─────────────────────────
@@ -351,18 +364,24 @@ function numOf(v) {
 }
 function mapNutrient(r) {
   const name = String(pick(r, ["DESC_KOR", "FOOD_NM_KR", "PRDLST_NM", "food_name"])).trim();
-  const maker = String(pick(r, ["MAKER_NAME", "BSSH_NM", "maker_name"])).trim();
-  const serv = String(pick(r, ["SERVING_WT", "SERVING_SIZE", "serving_size"])).trim();
+  const maker = String(pick(r, ["MAKER_NM", "MAKER_NAME", "BSSH_NM", "maker_name"])).trim();
+  const serv = String(pick(r, ["SERVING_SIZE", "SERVING_WT", "serving_size"])).trim();
   return {
     name: (maker && name.indexOf(maker) < 0 ? maker + " " : "") + name,
-    serving: serv ? serv + "g" : "100g",
-    kcal: numOf(pick(r, ["NUTR_CONT1", "AMT_NUM1", "ENERC"])),
-    c:    numOf(pick(r, ["NUTR_CONT2", "AMT_NUM7", "CHOCDF"])),
-    p:    numOf(pick(r, ["NUTR_CONT3", "AMT_NUM3", "PROCNT"])),
-    f:    numOf(pick(r, ["NUTR_CONT4", "AMT_NUM4", "FATCE"])),
-    sug:  numOf(pick(r, ["NUTR_CONT5", "AMT_NUM8", "SUGAR"])),
-    na:   numOf(pick(r, ["NUTR_CONT6", "AMT_NUM9", "NAT"])),
-    fib:  numOf(pick(r, ["NUTR_CONT7", "AMT_NUM10", "FIBTG"])),
+    // 숫자만 오면 g 를 붙이고, "100g" 처럼 단위가 이미 있으면 그대로 둔다
+    serving: !serv ? "100g" : (/^[0-9.]+$/.test(serv) ? serv + "g" : serv),
+    // AMT_NUM 번호는 data.go.kr 명세 기준이다. 예전 코드가 탄수 자리에 당류(7),
+    // 당류 자리에 식이섬유(8), 나트륨 자리에 9 번을 읽고 있어 값이 서로 밀려 있었다.
+    kcal: numOf(pick(r, ["AMT_NUM1", "NUTR_CONT1", "ENERC"])),
+    c:    numOf(pick(r, ["AMT_NUM6", "NUTR_CONT2", "CHOCDF"])),
+    p:    numOf(pick(r, ["AMT_NUM3", "NUTR_CONT3", "PROCNT"])),
+    f:    numOf(pick(r, ["AMT_NUM4", "NUTR_CONT4", "FATCE"])),
+    sug:  numOf(pick(r, ["AMT_NUM7", "NUTR_CONT5", "SUGAR"])),
+    na:   numOf(pick(r, ["AMT_NUM13", "NUTR_CONT6", "NAT"])),
+    fib:  numOf(pick(r, ["AMT_NUM8", "NUTR_CONT7", "FIBTG"])),
+    chol: numOf(pick(r, ["AMT_NUM23", "CHOLE"])),
+    sat:  numOf(pick(r, ["AMT_NUM24", "FASAT"])),
+    trans: numOf(pick(r, ["AMT_NUM25", "FATRN"])),
   };
 }
 
