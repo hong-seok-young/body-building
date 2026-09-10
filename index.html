@@ -118,7 +118,6 @@
   /* 괄호 안 비율은 작고 흐리게 — 숫자를 읽는 데 방해가 되지 않게 */
   .macro .val small { font-size: 9.5px; color: var(--sub); }
   /* 단백질은 "이 밑으로 내려가지 않는다" 는 뜻의 바닥선 표시 */
-  .macro .val b.fl { font-size: 9px; color: var(--protein); vertical-align: 1px; font-weight: 700; }
   .macro .st { font-size: 11.5px; }
   /* 머리글의 글자만 작게 한다 — .macro 자체의 font-size 를 줄이면 em 기반 열 폭까지
      같이 줄어들어 아래 줄과 열이 어긋난다 */
@@ -308,12 +307,6 @@
 
 <!-- ══════════ 식단 ══════════ -->
 <section id="section-diet">
-  <div class="seg">
-    <button id="tab-day" class="on" onclick="setView('day')">일간</button>
-    <button id="tab-week" onclick="setView('week')">주간</button>
-    <button id="tab-month" onclick="setView('month')">월간</button>
-  </div>
-
   <div id="view-day">
     <div class="nav">
       <button onclick="moveDay(-1)">‹</button>
@@ -373,7 +366,16 @@
     </div>
   </div>
 
-  <div id="view-week" style="display:none">
+</section>
+
+<!-- ══════════ 리포트 ══════════ -->
+<section id="section-report" style="display:none">
+  <div class="seg">
+    <button id="tab-week" class="on" onclick="setView('week')">주간</button>
+    <button id="tab-month" onclick="setView('month')">월간</button>
+  </div>
+
+  <div id="view-week">
     <div class="nav">
       <button onclick="moveWeek(-1)">‹</button>
       <span class="label" id="weekLabel"></span>
@@ -543,6 +545,7 @@
 <!-- ══════════ 하단 탭 ══════════ -->
 <nav class="tabbar">
   <button id="sec-diet" class="on" onclick="setSection('diet')"><i>🥗</i>식단</button>
+  <button id="sec-report" onclick="setSection('report')"><i>📈</i>리포트</button>
   <button id="sec-cal" onclick="setSection('cal')"><i>🔥</i>열량</button>
   <button id="sec-food" onclick="setSection('food')"><i>🍽️</i>음식</button>
   <button id="sec-inbody" onclick="setSection('inbody')"><i>📊</i>인바디</button>
@@ -863,9 +866,10 @@ readHash();
 let sets = load("dt_sets", []);               // 자주 먹는 끼니 조합
 let mealCount = Math.max(1, Math.min(9, +load("dt_mealcount", 3) || 3));
 // 아래로 당겨 새로고침하면 매번 식단으로 돌아가던 것 — 보던 화면을 기억한다
-const SECTIONS = ["diet", "cal", "food", "inbody"];
+const SECTIONS = ["diet", "report", "cal", "food", "inbody"];
 let section = SECTIONS.includes(load("dt_section", "")) ? load("dt_section", "") : "diet";
-let view = ["day", "week", "month"].includes(load("dt_view", "")) ? load("dt_view", "") : "day";
+// 일간은 식단 탭 자체가 됐고, view 는 리포트 안의 주간/월간만 가리킨다
+let view = ["week", "month"].includes(load("dt_view", "")) ? load("dt_view", "") : "week";
 let calcOpen = load("dt_calc_open", false);   // 요약 카드의 계산 근거를 펼쳤나
 let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
@@ -1362,7 +1366,7 @@ function setSection(s) {
 function toggleCalcDetail() { calcOpen = !calcOpen; save("dt_calc_open", calcOpen); render(); }
 function setView(v) {
   view = v; save("dt_view", v);
-  ["day", "week", "month"].forEach(x => {
+  ["week", "month"].forEach(x => {
     document.getElementById("view-" + x).style.display = x === v ? "" : "none";
     document.getElementById("tab-" + x).classList.toggle("on", x === v);
   });
@@ -1382,9 +1386,8 @@ function render() {
   if (section === "cal") return renderCal();
   if (section === "food") return renderFoods();
   if (section === "inbody") return renderInbody();
-  if (view === "day") renderDay();
-  else if (view === "week") renderWeek();
-  else renderMonth();
+  if (section === "report") return view === "week" ? renderWeek() : renderMonth();
+  renderDay();
 }
 
 function renderDay() {
@@ -1412,7 +1415,7 @@ function renderDay() {
     `<div class="macro mhead"><span class="nm"></span><span class="val">섭취 (비율) / 목표 (비율)</span>
        <span></span><span class="st">남음</span></div>` +
     [{ l: "칼로리", v: t.kcal, g: g.kcal, d: 0, c: "var(--kcal)" },
-     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", more: true, floor: true, k: 4 },
+     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", more: true, k: 4 },
      { l: "탄수화물", v: t.c, g: g.c, d: 1, c: "var(--carb)", k: 4 },
      { l: "지방", v: t.f, g: g.f, d: 1, c: "var(--fat)", k: 9 }].map(r => {
       const pct = r.g ? Math.min(100, r.v / r.g * 100) : 0, over = r.v - r.g;
@@ -1423,7 +1426,7 @@ function renderDay() {
       const sh = (x, tot) => r.k && tot > 0 ? `<small>(${Math.round(x * r.k / tot * 100)}%)</small>` : "";
       return `<div class="macro">
         <span class="nm">${r.l}</span>
-        <span class="val">${n(r.v)}${sh(r.v, ak)} / ${n(r.g)}${sh(r.g, gk)}${r.floor ? "<b class=\"fl\">↑</b>" : ""}</span>
+        <span class="val">${n(r.v)}${sh(r.v, ak)} / ${n(r.g)}${sh(r.g, gk)}</span>
         <span class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.c}"></div></span>
         <span class="st">${st}</span></div>`;
     }).join("") + `</div>`
@@ -1462,7 +1465,7 @@ function renderDay() {
       </div>
       ${items.length ? `<div class="meal-sub">지방 <b>${fmt(mt.f)}</b> · 탄수 <b>${fmt(mt.c)}</b> · 단백질 <b>${fmt(mt.p)}</b> · 나트륨 <b>${num(mt.na)}</b>mg</div>` : ""}
       ${open ? items.map(x => `<div class="mrow" data-id="${x.id}">
-        <span class="nm" onclick="event.stopPropagation();toggleRowEdit('${x.id}')" style="cursor:pointer">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · Na " + num(x.na) : ""}${+x.sug ? " · 당 " + fmt(x.sug) : ""}${+x.sat ? " · 포화 " + fmt(x.sat) : ""} · <b>탭 = 양 수정 · 꾹 = 끼니 이동</b></small></span>
+        <span class="nm" onclick="event.stopPropagation();toggleRowEdit('${x.id}')" style="cursor:pointer">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · Na " + num(x.na) : ""}${+x.sug ? " · 당 " + fmt(x.sug) : ""}${+x.sat ? " · 포화 " + fmt(x.sat) : ""}</small></span>
         <span class="kc">${num(x.kcal)}</span>
         <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button></div>${rowEdit === x.id ? `<div class="mrow" style="background:var(--card2);flex-wrap:wrap;gap:7px">
         <span style="flex:1 0 100%;font-size:11.5px;color:var(--sub)">먹은 양을 고치세요 — 지금 <b>${amtStr(itemAmt(x).amt)}${itemAmt(x).unit}</b> / ${num(x.kcal)}kcal. 영양성분이 전부 같이 조정됩니다.</span>
@@ -2485,7 +2488,7 @@ function fromHash() {
   if (SECTIONS.includes(h) && h !== section) setSection(h);
 }
 addEventListener("hashchange", fromHash);
-// 기억해둔 화면을 실제로 띄운다 (마크업 기본값은 식단·일간이다)
+// 기억해둔 화면을 실제로 띄운다 (마크업 기본값은 식단, 리포트는 주간이다)
 setSection(section); setView(view);
 fromHash();
 render();
