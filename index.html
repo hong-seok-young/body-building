@@ -279,6 +279,9 @@
   .g4 { grid-template-columns: repeat(4, 1fr); }
   @media (max-width: 560px) { .g4 { grid-template-columns: repeat(2, 1fr); } }
   .fields label { font-size: 11px; color: var(--sub); display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  /* 라벨이 한 줄인 칸과 두 줄인 칸(예: "하루 걸음수 / 유산소 제외")이 한 행에 섞이면
+     입력칸 높이가 어긋난다. auto 마진으로 입력칸을 행 아래에 붙여 맞춘다 */
+  .fields label > input, .fields label > select { margin-top: auto; }
   .fields input, .fields select {
     border: 1px solid var(--line); border-radius: 10px; padding: 9px; width: 100%; min-width: 0; background: var(--card);
   }
