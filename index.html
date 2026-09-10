@@ -450,43 +450,6 @@
 <!-- ══════════ 음식 DB ══════════ -->
 <section id="section-food" style="display:none">
   <div class="card">
-    <h3>음식 추가 <span class="muted">보고 있는 날짜의 끼니로 기록</span></h3>
-    <form class="addform" onsubmit="addFood(event)">
-      <select id="fMeal"></select>
-      <input id="fName" placeholder="음식명" required>
-      <div class="nums" style="grid-template-columns:auto 1fr">
-        <input id="fQty" type="number" step="0.5" min="0.5" value="1" style="max-width:74px" title="수량 — 칩을 누를 때도 이 배수가 적용됩니다">
-        <span class="hint" style="margin:0;align-self:center">← 수량. 닭다리살 2개면 2 로 두고 칩을 한 번만 누르세요</span>
-      </div>
-      <div class="nums">
-        <input id="fKcal" type="number" step="any" min="0" placeholder="kcal" required>
-        <input id="fC" type="number" step="any" min="0" placeholder="탄수g">
-        <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
-        <input id="fF" type="number" step="any" min="0" placeholder="지방g">
-        <input id="fNa" type="number" step="any" min="0" placeholder="나트륨mg">
-        <input id="fSug" type="number" step="any" min="0" placeholder="당류g">
-      </div>
-      <div class="nums" id="fMore" style="display:none">
-        <input id="fFib" type="number" step="any" min="0" placeholder="식이섬유g">
-        <input id="fSat" type="number" step="any" min="0" placeholder="포화지방g">
-        <input id="fTrans" type="number" step="any" min="0" placeholder="트랜스지방g">
-        <input id="fChol" type="number" step="any" min="0" placeholder="콜레스테롤mg">
-      </div>
-      <button type="button" class="btn" id="fMoreBtn" style="grid-column:1/-1" onclick="toggleMore()">＋ 상세 (식이섬유·포화·트랜스·콜레스테롤)</button>
-      <button type="submit">추가</button>
-    </form>
-    <div class="btns mt">
-      <button class="btn" type="button" onclick="dbSearch()">🌐 인터넷에서 찾기</button>
-      <button class="btn" type="button" onclick="barPhoto.click()">📷 바코드</button>
-    </div>
-    <input type="file" id="barPhoto" accept="image/*" capture="environment" hidden onchange="readBarcode(this)">
-    <div class="msg" id="foodMsg"></div>
-    <div class="presets" id="dbResults"></div>
-    <div class="hint">여기는 <b>직접 입력</b>용입니다. 이미 등록해둔 음식은 아래 목록의 <b>＋</b> 로,
-      식단 화면에서는 끼니 카드의 <b>＋ 음식</b> 으로 넣으세요.</div>
-  </div>
-
-  <div class="card">
     <h3>내 음식에 등록 <span class="muted">한 번 넣으면 계속 씁니다</span></h3>
     <form class="addform" onsubmit="addToDb(event)">
       <input name="nm" placeholder="직접 등록 — 음식명 (예: 닭가슴살 100g)" required style="grid-column:1/-1">
@@ -500,6 +463,16 @@
       </div>
       <button type="submit">내 음식에 등록</button>
     </form>
+    <div class="btns mt">
+      <button class="btn" type="button" onclick="dbSearch()">🌐 인터넷에서 찾기</button>
+      <button class="btn" type="button" onclick="barPhoto.click()">📷 바코드</button>
+    </div>
+    <input type="file" id="barPhoto" accept="image/*" capture="environment" hidden onchange="readBarcode(this)">
+    <div class="msg" id="foodMsg"></div>
+    <div class="presets" id="dbResults"></div>
+    <div class="hint">찾거나 찍으면 위 칸이 채워집니다 — 확인하고 <b>내 음식에 등록</b>.
+      <b>인터넷에서 찾기</b> 는 아래 <b>검색</b> 칸에 적은 이름으로 찾습니다.
+      먹은 기록은 식단 화면 끼니 카드의 <b>＋ 음식</b> 으로 넣으세요.</div>
   </div>
 
   <div class="card">
@@ -1095,27 +1068,6 @@ function totals(list) {
   list.forEach(x => KEYS.forEach(k => a[k] += (+x[k] || 0)));
   return a;
 }
-function toggleMore() {
-  const on = fMore.style.display === "none";
-  fMore.style.display = on ? "grid" : "none";
-  fMoreBtn.textContent = on ? "− 상세 접기" : "＋ 상세 (식이섬유·포화·트랜스·콜레스테롤)";
-}
-async function addFood(e) {
-  e.preventDefault();
-  const meal = fMeal.value;
-  const item = { date: curDate, meal, name: fName.value.trim(), kcal: +fKcal.value || 0, p: +fP.value || 0,
-    c: +fC.value || 0, f: +fF.value || 0, na: +fNa.value || 0, sug: +fSug.value || 0,
-    fib: +fFib.value || 0, sat: +fSat.value || 0, trans: +fTrans.value || 0, chol: +fChol.value || 0 };
-  e.target.reset(); fMeal.value = meal; fName.focus();
-  await pushItem(item);
-  if (!presets.some(x => x.name === item.name)) {
-    const { date, meal: _m, ...food } = item;
-    presets.unshift(food);
-    if (presets.length > 300) presets.pop();
-    save("dt_presets", presets); setMeta("presets", presets);
-  }
-  render();
-}
 async function pushItem(item) {
   const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5);
   (cache[item.date] = cache[item.date] || []).push({ ...item, id: tmpId });
@@ -1144,7 +1096,8 @@ async function delItem(ds, id) {
     api({ action: "del", id }).catch(() => setStatus("● 삭제 동기화 실패", "var(--red)"));
   }
 }
-function qtyVal() { const q = +fQty.value; return q > 0 ? q : 1; }
+// 수량 칸을 없앴다 — 칩은 한 번에 1인분씩 들어가고, 양은 기록 후 탭해서 고친다
+function qtyVal() { return 1; }
 
 // ── 먹은 양을 숫자로 다룬다. 항목에 amt/unit 이 없으면 이름에서 뽑아낸다
 //    ("퀵오트 건조 50g" → 50 g,  "계란 1개 (50g)" → 50 g,  "아몬드 15알" → 15 알)
@@ -1209,7 +1162,7 @@ function scaled(x, k) {
   o.name = scaleName(x.name, k);
   return o;
 }
-function addPreset(i) { pushItem({ ...scaled(presets[i], qtyVal()), date: curDate, meal: fMeal.value || guessMeal() }); }
+function addPreset(i) { pushItem({ ...scaled(presets[i], qtyVal()), date: curDate, meal: fdMeal.value || guessMeal() }); }
 function delPreset(i) { presets.splice(i, 1); save("dt_presets", presets); setMeta("presets", presets); render(); }
 async function copyMealFrom(m) {
   const src = mealLog(addDays(curDate, -1), m);
@@ -1611,11 +1564,8 @@ function renderDay() {
     ["식이섬유 (하한)", `${fmt(t.fib)} / ${goals.fib} g`, t.fib >= goals.fib ? "good" : t.fib ? "bad" : null],
   ].map(([l, v, s]) => `<div><span class="lbl">${l}</span><span${cls(s)}>${v}</span></div>`).join("");
 
-  fMeal.innerHTML = meals().map(m => `<option>${m}</option>`).join("");
-  fMeal.value = meals().includes(fMeal.dataset.v) ? fMeal.dataset.v : guessMeal();
-  fMeal.onchange = () => { fMeal.dataset.v = fMeal.value; };
   mealsEl.innerHTML += `<div class="btns" style="margin-bottom:10px">
-    <button class="btn dash" onclick="setMealCount(mealCount + 1)">＋ 끼니 추가 (지금 ${mealCount}끼)</button>
+    <button class="btn dash" onclick="setMealCount(mealCount + 1)">＋ 끼니 추가</button>
     ${mealCount > 1 ? `<button class="btn dash" onclick="setMealCount(mealCount - 1)">− 마지막 끼니 제거</button>` : ""}
   </div>`;
   renderSets(g);
@@ -1696,13 +1646,15 @@ function renderFoods() {
 function addToDb(e) {
   e.preventDefault();
   const f = e.target;
+  // 검색·바코드로 채웠으면 폼에 칸이 없는 상세 성분(fib·sat·trans·chol)도 같이 넣는다
+  const ex = fillExtra || { fib: 0, sat: 0, trans: 0, chol: 0 };
   const x = { name: f.nm.value.trim(), kcal: +f.kcal.value || 0, p: +f.p.value || 0, c: +f.c.value || 0,
-              f: +f.f.value || 0, na: +f.na.value || 0, sug: +f.sug.value || 0, fib: 0, sat: 0, trans: 0, chol: 0 };
-  f.reset();
+              f: +f.f.value || 0, na: +f.na.value || 0, sug: +f.sug.value || 0, ...ex };
+  f.reset(); fillExtra = null;
   if (presets.some(z => z.name === x.name)) { foodMsg.textContent = "이미 등록된 이름입니다"; foodMsg.className = "msg err"; return; }
   presets.unshift(x); presets = presets.slice(0, 300);
   save("dt_presets", presets); setMeta("presets", presets);
-  foodMsg.textContent = `✓ '${x.name}' 등록`; foodMsg.className = "msg ok";
+  foodMsg.textContent = ""; toast(`✓ '${x.name}' 내 음식에 등록`);
   render();
 }
 // ── 자주 먹는 음식 — 최근 7일 기록에서 많이 먹은 순으로 5개.
@@ -1747,7 +1699,6 @@ async function logTop(i) {
   render();
 }
 function toggleMeal(m) { mealOpen[m] = (mealOpen[m] === false); render(); }
-function pickMeal(m) { fMeal.value = m; fName.focus(); fName.scrollIntoView({ behavior: "smooth", block: "center" }); }
 
 // ── 끼니 카드 안에서 바로 추가 (아래 폼까지 스크롤 안 하게)
 function toggleMealForm(m) { mealFormOpen = mealFormOpen === m ? null : m; rowEdit = null; render(); }
@@ -2393,14 +2344,20 @@ async function dbSearch() {
   } catch (e) { show("✗ " + e.message, "err"); }
 }
 function fillFromDb(i) { fillForm(scaled(dbHits[i], qtyVal())); }
+// 검색·바코드 결과를 "내 음식에 등록" 폼에 채운다. 눈으로 확인하고 등록 버튼을 누르게 —
+// 판독이 틀릴 수 있고 이 값이 앞으로 계속 쓰이기 때문이다
 function fillForm(x) {
-  fName.value = (x.serving ? `${x.name} ${x.serving}` : x.name).slice(0, 60);
-  const map = { kcal: fKcal, p: fP, c: fC, f: fF, na: fNa, sug: fSug, fib: fFib, sat: fSat, trans: fTrans, chol: fChol };
-  Object.keys(map).forEach(k => { map[k].value = +x[k] ? +x[k] : ""; });
-  // 상세값이 하나라도 있으면 접힌 칸을 펴서 눈에 보이게
-  if ((+x.fib || +x.sat || +x.trans || +x.chol) && fMore.style.display === "none") toggleMore();
-  fName.scrollIntoView({ behavior: "smooth", block: "center" });
+  const f = document.querySelector('#section-food form.addform');
+  if (!f) return;
+  f.nm.value = (x.serving ? `${x.name} ${x.serving}` : x.name).slice(0, 60);
+  ["kcal", "p", "c", "f", "na", "sug"].forEach(k => {
+    if (f[k]) f[k].value = +x[k] ? +x[k] : "";
+  });
+  // 상세 성분은 폼에 칸이 없다 — 등록 시 함께 넣도록 잠시 보관한다
+  fillExtra = { fib: +x.fib || 0, sat: +x.sat || 0, trans: +x.trans || 0, chol: +x.chol || 0 };
+  f.scrollIntoView({ behavior: "smooth", block: "center" });
 }
+let fillExtra = null;
 
 // 바코드 사진 → 숫자 추출 → 백엔드 조회. 시중 제품에 가장 확실한 경로
 async function readBarcode(input) {
