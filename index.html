@@ -61,7 +61,7 @@
   /* ── 하단 탭 ── */
   .tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-    display: grid; grid-template-columns: repeat(4, 1fr);
+    display: grid; grid-template-columns: repeat(5, 1fr);
     background: var(--card); border-top: 1px solid var(--line);
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -70,7 +70,8 @@
     display: flex; flex-direction: column; align-items: center; gap: 2px;
     color: var(--sub); font-size: 11px; font-weight: 600;
   }
-  .tabbar button i { font-style: normal; font-size: 19px; line-height: 1.15; filter: grayscale(1) opacity(.55); }
+  .tabbar button { font-size: 10.5px; }
+  .tabbar button i { font-style: normal; font-size: 18px; line-height: 1.15; filter: grayscale(1) opacity(.55); }
   .tabbar button.on { color: var(--accent); }
   .tabbar button.on i { filter: none; }
 
@@ -95,11 +96,11 @@
   .nav input[type=date] { border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; background: var(--card); }
 
   /* 매크로 바 */
-  .macro { margin-bottom: 11px; }
-  .macro:last-child { margin-bottom: 0; }
-  .macro .row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; margin-bottom: 5px; }
-  .bar { height: 9px; background: var(--card2); border-radius: 5px; overflow: hidden; }
-  .bar > div { height: 100%; border-radius: 5px; transition: width .3s; }
+  .macro { display: flex; align-items: center; gap: 9px; padding: 6px 0; }
+  .macro .lab { flex: 1 1 auto; min-width: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .macro .st { flex: 0 0 auto; font-size: 11.5px; white-space: nowrap; }
+  .bar { flex: 0 0 62px; width: 62px; height: 7px; background: var(--card2); border-radius: 4px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 4px; transition: width .3s; }
 
   /* 남은 칼로리 */
   .remain-big { display: flex; align-items: baseline; gap: 9px; padding-bottom: 13px; margin-bottom: 13px; border-bottom: 1px solid var(--line); }
@@ -319,14 +320,8 @@
       <input type="file" id="foodPhoto" accept="image/*" capture="environment" hidden onchange="readPhoto(this,'label')">
       <input type="file" id="barPhoto" accept="image/*" capture="environment" hidden onchange="readBarcode(this)">
       <div class="msg" id="foodOcrMsg"></div>
-      <div class="hint">새로 넣은 음식은 아래에 자동 등록됩니다. 칩을 누르면 위에서 고른 끼니로 바로 기록돼요.</div>
-      <div class="fields" style="margin-top:11px">
-        <input id="foodQ" placeholder="🔍 음식 검색 — 아몬드, 계란, 현미밥…" oninput="presetQ=this.value;renderPresets()"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();dbSearch();}">
-      </div>
-      <div class="presets" id="presetsEl"></div>
-      <div class="hint" id="presetCount"></div>
-      <div class="presets" id="dbResults"></div>
+      <div class="hint">여기는 <b>직접 입력</b>용입니다. 등록해둔 음식이나 기본 성분표에서 찾아 넣으려면
+        위 끼니 카드의 <b>＋ 음식</b> 을 누르거나 아래 <b>🍽️ 음식</b> 탭을 쓰세요.</div>
     </div>
   </div>
 
@@ -427,6 +422,48 @@
   </div>
 </section>
 
+<!-- ══════════ 음식 DB ══════════ -->
+<section id="section-food" style="display:none">
+  <div class="card">
+    <h3>음식 등록 <span class="muted">한 번 넣으면 계속 씁니다</span></h3>
+    <div class="btns">
+      <button class="btn" onclick="dbPhoto.click()">📷 라벨 촬영</button>
+      <button class="btn" onclick="dbBar.click()">📷 바코드</button>
+    </div>
+    <div class="btns" style="margin-top:7px">
+      <button class="btn" onclick="dbSearch()">🌐 인터넷에서 찾기</button>
+      <button class="btn" onclick="openImport()">📋 다른 앱에서 가져오기</button>
+    </div>
+    <input type="file" id="dbPhoto" accept="image/*" capture="environment" hidden onchange="readPhoto(this,'label')">
+    <input type="file" id="dbBar" accept="image/*" capture="environment" hidden onchange="readBarcode(this)">
+    <div class="msg" id="foodOcrMsg"></div>
+    <div class="presets" id="dbResults"></div>
+    <form class="addform" onsubmit="addToDb(event)" style="margin-top:11px">
+      <input name="nm" placeholder="직접 등록 — 음식명 (예: 닭가슴살 100g)" required style="grid-column:1/-1">
+      <div class="nums">
+        <input name="kcal" type="number" step="any" min="0" placeholder="kcal" required>
+        <input name="p" type="number" step="any" min="0" placeholder="단백질g">
+        <input name="c" type="number" step="any" min="0" placeholder="탄수g">
+        <input name="f" type="number" step="any" min="0" placeholder="지방g">
+        <input name="na" type="number" step="any" min="0" placeholder="나트륨mg">
+        <input name="sug" type="number" step="any" min="0" placeholder="당류g">
+      </div>
+      <button type="submit">내 음식에 등록</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="fields g2">
+      <label>검색<input id="fdQ" placeholder="🔍 음식명" oninput="foodQ2=this.value;renderFoods()"></label>
+      <label>＋ 누르면 기록될 끼니<select id="fdMeal" onchange="renderFoods()"></select></label>
+    </div>
+    <div class="hint"><b>＋</b> = 오늘 그 끼니로 기록 · <b>✕</b> = 내 음식에서 삭제. 기본 성분표는 지울 수 없습니다.</div>
+  </div>
+
+  <div class="card" id="myFoods"></div>
+  <div id="dbFoods"></div>
+</section>
+
 <!-- ══════════ 인바디 ══════════ -->
 <section id="section-inbody" style="display:none">
   <div class="card">
@@ -473,6 +510,7 @@
   <button id="sec-diet" class="on" onclick="setSection('diet')"><i>🥗</i>식단</button>
   <button id="sec-plan" onclick="setSection('plan')"><i>📋</i>계획</button>
   <button id="sec-cal" onclick="setSection('cal')"><i>🔥</i>열량</button>
+  <button id="sec-food" onclick="setSection('food')"><i>🍽️</i>음식</button>
   <button id="sec-inbody" onclick="setSection('inbody')"><i>📊</i>인바디</button>
 </nav>
 
@@ -610,7 +648,7 @@ const FOOD_DB_RAW = [
   ["올리브유 1큰술 (14g)",      119,  0,    0,   13.5,   0,  0,    0],
   ["아보카도 1개 (136g)",       227,  2.7, 11.7, 20.9,  10,  9.2,  0.9],
   ["── 내가 먹는 제품"],
-  ["CJ 더건강한 닭가슴살 스테이크 케이준 1개 100g", 120, 19.0, 6.0, 2.2, 550, 0, 3.0],
+  ["CJ 더건강한 닭가슴살 스테이크 케이준 100g", 120, 19.0, 6.0, 2.2, 550, 0, 3.0],
   ["퀵오트 건조 50g",                              190,  6.6, 33.9, 3.2,   3, 5.0, 0.4],
   ["퀵오트 건조 100g",                             379, 13.2, 67.7, 6.5,   6, 10.1, 0.8],
   ["서동 반했닭 양념치킨맛 1개 100g",  113, 16.0,  7.0,  2.3, 552, 0,   1],
@@ -637,8 +675,18 @@ const FOOD_DB_RAW = [
   ["사과 1개 (200g)",           104,  0.5, 27.6,  0.3,   2,  4.8, 20.8],
   ["블루베리 100g",              57,  0.7, 14.5,  0.3,   1,  2.4, 10.0],
 ];
-const FOOD_DB = FOOD_DB_RAW.filter(r => r.length > 1).map(r =>
-  ({ name: r[0], kcal: r[1], p: r[2], c: r[3], f: r[4], na: r[5], fib: r[6], sug: r[7] }));
+const toFood = r => ({ name: r[0], kcal: r[1], p: r[2], c: r[3], f: r[4], na: r[5], fib: r[6], sug: r[7] });
+const FOOD_DB = FOOD_DB_RAW.filter(r => r.length > 1).map(toFood);
+// 카테고리별로 묶어둔다 (음식 탭에서 그룹으로 보여주기 위해)
+const FOOD_GROUPS = (() => {
+  const g = []; let cur = null;
+  FOOD_DB_RAW.forEach(r => {
+    if (r.length === 1) { cur = { cat: String(r[0]).replace(/^──\s*/, ""), items: [] }; g.push(cur); return; }
+    if (!cur) { cur = { cat: "기타", items: [] }; g.push(cur); }
+    cur.items.push(toFood(r));
+  });
+  return g.filter(x => x.items.length);
+})();
 
 const MEAL_SET = [
   { name: "서동 닭다리살 1개", kcal: 115, p: 16, c: 8, f: 2.1, na: 552, fib: 0, sug: 1 },
@@ -885,10 +933,41 @@ async function delItem(ds, id) {
   }
 }
 function qtyVal() { const q = +fQty.value; return q > 0 ? q : 1; }
-// 수량 배수 적용. 이름에 ×2 를 붙여 나중에 봐도 몇 개였는지 알 수 있게
-function scaled(x, q) {
-  const o = { name: q !== 1 ? `${x.name} ×${q}` : x.name };
-  KEYS.forEach(k => { o[k] = Math.round((+x[k] || 0) * q * 10) / 10; });
+
+// ── 먹은 양을 숫자로 다룬다. 항목에 amt/unit 이 없으면 이름에서 뽑아낸다
+//    ("퀵오트 건조 50g" → 50 g,  "계란 1개 (50g)" → 50 g,  "아몬드 15알" → 15 알)
+const UNITS = "개|알|장|스쿱|컵|큰술|작은술|조각|마리|포|팩";
+function parseAmt(name) {
+  const s = String(name);
+  let m = s.match(/\((\d+(?:\.\d+)?)\s*(g|ml)\)/i);          // 괄호 안 그램을 우선
+  if (m) return { amt: +m[1], unit: m[2].toLowerCase() };
+  m = s.match(/(\d+(?:\.\d+)?)\s*(g|ml)(?![a-zA-Z])/i);
+  if (m) return { amt: +m[1], unit: m[2].toLowerCase() };
+  m = s.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*(" + UNITS + ")"));
+  if (m) return { amt: +m[1], unit: m[2] };
+  return null;
+}
+function itemAmt(x) {
+  if (+x.amt > 0 && x.unit) return { amt: +x.amt, unit: String(x.unit) };
+  return parseAmt(x.name) || { amt: 1, unit: "인분" };
+}
+const amtStr = n => String(Math.round(n * 100) / 100);
+// 이름 안의 양 표기를 새 값으로 바꾼다. 못 찾으면 뒤에 붙인다
+function setAmtInName(name, oldA, newA, unit) {
+  if (oldA === newA) return name;
+  const base = String(name).replace(/\s*×\s*[\d.]+\s*$/, "");
+  for (const pat of [amtStr(oldA) + unit, amtStr(oldA) + " " + unit]) {
+    if (base.indexOf(pat) >= 0) return base.replace(pat, amtStr(newA) + unit);
+  }
+  return `${base} ${amtStr(newA)}${unit}`;
+}
+// 양을 k 배로 (칩을 수량 2로 누르는 경우 등)
+function scaled(x, k) {
+  const o = { ...x };
+  KEYS.forEach(kk => { o[kk] = Math.round((+x[kk] || 0) * k * 10) / 10; });
+  const a = itemAmt(x), na = Math.round(a.amt * k * 100) / 100;
+  o.amt = na; o.unit = a.unit;
+  o.name = setAmtInName(x.name, a.amt, na, a.unit);
   return o;
 }
 function addPreset(i) { pushItem({ ...scaled(presets[i], qtyVal()), date: curDate, meal: fMeal.value || guessMeal() }); }
@@ -1017,7 +1096,7 @@ function applyCalcGoals() {
 // ═════════ 이동 ═════════
 function setSection(s) {
   section = s;
-  ["diet", "plan", "cal", "inbody"].forEach(x => {
+  ["diet", "plan", "cal", "food", "inbody"].forEach(x => {
     document.getElementById("section-" + x).style.display = x === s ? "" : "none";
     document.getElementById("sec-" + x).classList.toggle("on", x === s);
   });
@@ -1044,6 +1123,7 @@ async function moveMonth(n) {
 function render() {
   if (section === "plan") return renderPlan();
   if (section === "cal") return renderCal();
+  if (section === "food") return renderFoods();
   if (section === "inbody") return renderInbody();
   if (view === "day") renderDay();
   else if (view === "week") renderWeek();
@@ -1090,8 +1170,10 @@ function renderDay() {
       const pct = r.g ? Math.min(100, r.v / r.g * 100) : 0, over = r.v - r.g;
       const st = over > 0 ? (r.more ? `<span class="good">달성 +${fmt(over)}${r.u}</span>` : `<span class="over">${fmt(over)}${r.u} 초과</span>`)
                           : `<span class="remain">${fmt(r.g - r.v)}${r.u} 남음</span>`;
-      return `<div class="macro"><div class="row"><span><b>${r.l}</b> ${fmt(r.v)} / ${r.g}${r.u}</span>${st}</div>
-        <div class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.c}"></div></div></div>`;
+      return `<div class="macro">
+        <span class="lab"><b>${r.l}</b> ${fmt(r.v)} / ${r.g}${r.u}</span>
+        <span class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.c}"></div></span>
+        <span class="st">${st}</span></div>`;
     }).join("") +
     `<div class="diff" style="border-top:1px solid var(--line);padding-top:11px;margin-top:12px">
       <b>기초대사량 ${num(w.bmr)}</b> <span style="color:var(--sub)">(인바디 ${ibDateOf("bmr").slice(2) || "-"})</span><br>
@@ -1125,8 +1207,9 @@ function renderDay() {
         <span class="nm" onclick="event.stopPropagation();toggleRowEdit('${x.id}')" style="cursor:pointer">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · Na " + num(x.na) : ""}${+x.sug ? " · 당 " + fmt(x.sug) : ""}${+x.sat ? " · 포화 " + fmt(x.sat) : ""} · <b>탭 = 양 수정</b></small></span>
         <span class="kc">${num(x.kcal)}</span>
         <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button></div>${rowEdit === x.id ? `<div class="mrow" style="background:var(--card2);flex-wrap:wrap;gap:7px">
-        <span style="flex:1 0 100%;font-size:11.5px;color:var(--sub)">먹은 양 정정 — 지금 값(${num(x.kcal)}kcal)을 <b>1</b> 로 봅니다. 절반이면 0.5, 두 배면 2. 영양성분이 전부 같이 조정됩니다.</span>
-        <input id="rq" type="number" step="0.05" min="0.05" value="1" style="width:86px;border:1px solid var(--line);border-radius:9px;padding:8px;background:var(--card);color:var(--text)">
+        <span style="flex:1 0 100%;font-size:11.5px;color:var(--sub)">먹은 양을 고치세요 — 지금 <b>${amtStr(itemAmt(x).amt)}${itemAmt(x).unit}</b> / ${num(x.kcal)}kcal. 영양성분이 전부 같이 조정됩니다.</span>
+        <input id="rq" type="number" step="any" min="0" value="${amtStr(itemAmt(x).amt)}" style="width:92px;border:1px solid var(--line);border-radius:9px;padding:8px;background:var(--card);color:var(--text)">
+        <span style="align-self:center;font-size:13px;font-weight:700">${itemAmt(x).unit}</span>
         <button class="btn pri" style="flex:0 0 auto;padding:8px 15px" onclick="applyRowScale('${curDate}','${x.id}')">적용</button>
         <button class="btn" style="flex:0 0 auto;padding:8px 15px" onclick="toggleRowEdit(null)">취소</button></div>` : ""}`).join("")
         + `<div class="meal-act">
@@ -1176,27 +1259,51 @@ function renderDay() {
 
   if (!fMeal.options.length) fMeal.innerHTML = MEALS.map(m => `<option>${m}</option>`).join("");
   if (!fMeal.value) fMeal.value = guessMeal();
-  renderPresets();
   renderSets(g);
   renderStreak();
 }
-function renderPresets() {
-  const q = presetQ.trim().toLowerCase();
-  const mine = presets.map((x, i) => [x, i]).filter(([x]) => !q || x.name.toLowerCase().includes(q));
-  // 검색어가 있을 때만 내장 DB 를 같이 보여준다 (평소엔 자주 먹는 것만 깔끔하게)
-  const db = q ? FOOD_DB.map((x, i) => [x, i]).filter(([x]) => x.name.toLowerCase().includes(q)) : [];
-  presetsEl.innerHTML =
-    mine.slice(0, 40).map(([x, i]) =>
-      `<span class="chip" onclick="addPreset(${i})">${esc(x.name)} ${x.kcal}<span class="x" onclick="event.stopPropagation();delPreset(${i})">×</span></span>`).join("")
-    + db.slice(0, 40).map(([x, i]) =>
-      `<span class="chip" style="border-style:dashed" onclick="fillFromDbFood(${i})">${esc(x.name)} · ${x.kcal}</span>`).join("")
-    || `<span class="hint">결과 없음 — [🌐 인터넷에서 찾기] 나 [📷 라벨 촬영] 을 써보세요.</span>`;
-  presetCount.textContent = q
-    ? `내 음식 ${mine.length}개 · 기본 성분표 ${db.length}개 (점선 = 성분표, 누르면 칸에 채워짐)`
-    : `자주 먹는 음식 ${presets.length}개 · 검색하면 기본 성분표 ${FOOD_DB.length}개도 같이 나옵니다`;
+// ═════════ 음식 DB 탭 ═════════
+let foodQ2 = "";
+function foodRow(x, i, mine) {
+  const meal = (fdMeal && fdMeal.value) || guessMeal();
+  return `<div class="mrow">
+    <span class="nm">${esc(x.name)}<small>${num(x.kcal)}kcal · P${fmt(x.p)} C${fmt(x.c)} F${fmt(x.f)}${+x.na ? " · Na " + num(x.na) : ""}${+x.fib ? " · 섬유 " + fmt(x.fib) : ""}</small></span>
+    <button class="btn" style="flex:0 0 auto;padding:7px 13px" onclick="${mine ? `addPresetTo('${meal}',${i})` : `addDbTo('${meal}',${i})`}">＋</button>
+    ${mine ? `<button class="del" onclick="delPreset(${i})">✕</button>` : ""}
+  </div>`;
 }
-// 내장 성분표는 바로 기록하지 않고 칸에 채운다 — 양을 조절해야 하는 경우가 많다
-function fillFromDbFood(i) { fillForm(scaled(FOOD_DB[i], qtyVal())); }
+function renderFoods() {
+  if (!fdMeal.options.length) fdMeal.innerHTML = MEALS.map(m => `<option>${m}</option>`).join("");
+  if (!fdMeal.value) fdMeal.value = guessMeal();
+  const q = foodQ2.trim().toLowerCase();
+  const hit = x => !q || x.name.toLowerCase().includes(q);
+
+  const mine = presets.map((x, i) => [x, i]).filter(([x]) => hit(x));
+  myFoods.innerHTML = `<h3>내 음식 <span class="muted">${mine.length}${q ? " / " + presets.length : ""}개</span></h3>`
+    + (mine.length ? mine.map(([x, i]) => foodRow(x, i, true)).join("")
+       : `<div class="empty">${q ? "검색 결과 없음" : "아직 없습니다. 위에서 라벨을 찍거나 직접 등록하세요."}</div>`);
+
+  let n = 0;
+  dbFoods.innerHTML = FOOD_GROUPS.map(g => {
+    const rows = g.items.map(x => [x, FOOD_DB.indexOf(x)]).filter(([x]) => hit(x));
+    n += rows.length;
+    if (!rows.length) return "";
+    return `<div class="card"><h3>${esc(g.cat)} <span class="muted">${rows.length}개</span></h3>`
+      + rows.map(([x, i]) => foodRow(x, i, false)).join("") + `</div>`;
+  }).join("") + (n ? "" : `<div class="card"><div class="empty">기본 성분표에 결과 없음</div></div>`);
+}
+function addToDb(e) {
+  e.preventDefault();
+  const f = e.target;
+  const x = { name: f.nm.value.trim(), kcal: +f.kcal.value || 0, p: +f.p.value || 0, c: +f.c.value || 0,
+              f: +f.f.value || 0, na: +f.na.value || 0, sug: +f.sug.value || 0, fib: 0, sat: 0, trans: 0, chol: 0 };
+  f.reset();
+  if (presets.some(z => z.name === x.name)) { foodOcrMsg.textContent = "이미 등록된 이름입니다"; foodOcrMsg.className = "msg err"; return; }
+  presets.unshift(x); presets = presets.slice(0, 300);
+  save("dt_presets", presets); setMeta("presets", presets);
+  foodOcrMsg.textContent = `✓ '${x.name}' 등록`; foodOcrMsg.className = "msg ok";
+  render();
+}
 // 자주 먹는 끼니 조합 — 한 번 저장하면 그 뒤로는 칩 한 번에 끼니 전체가 들어간다
 function saveMealSet(m) {
   const items = mealLog(curDate, m);
@@ -1278,26 +1385,17 @@ async function addFoodInline(e, m) {
 
 // ── 기록한 항목의 양 정정 (영양성분 비례 조정)
 function toggleRowEdit(id) { rowEdit = rowEdit === id ? null : id; render(); }
-// 이름 끝의 ×N 을 곱해 누적한다 — 여러 번 고쳐도 표기가 맞게
-function nameWithQty(name, k) {
-  const m = String(name).match(/^(.*?)\s*×\s*([\d.]+)$/);
-  const base = m ? m[1] : String(name);
-  const q = Math.round((m ? +m[2] : 1) * k * 100) / 100;
-  return q === 1 ? base : `${base} ×${q}`;
-}
 async function applyRowScale(ds, id) {
   const el = document.getElementById("rq");
-  const k = el ? +el.value : 1;
   const x = dayLog(ds).find(i => i.id === id);
   rowEdit = null;
-  if (!x || !(k > 0) || k === 1) { render(); return; }
+  if (!x) { render(); return; }
+  const a = itemAmt(x), newA = el ? +el.value : a.amt;
+  if (!(newA > 0) || newA === a.amt) { render(); return; }
   const { id: _i, date: _d, ...rest } = x;
-  const next = { ...rest };
-  KEYS.forEach(kk => { next[kk] = Math.round((+rest[kk] || 0) * k * 10) / 10; });
-  next.name = nameWithQty(rest.name, k);
   // 백엔드에 update 액션이 없어 지우고 다시 넣는다 (구버전 Code.gs 에서도 동작)
   await delItem(ds, id);
-  await pushItem({ ...next, date: ds });
+  await pushItem({ ...scaled({ ...rest, amt: a.amt, unit: a.unit }, newA / a.amt), date: ds });
   render();
 }
 function renderStreak() {
@@ -1695,9 +1793,9 @@ function copyCfgLink() {
 // ═════════ 식약처 제품 검색 ═════════
 let dbHits = [];
 async function dbSearch() {
-  const q = foodQ.value.trim();
+  const q = ((fdQ && fdQ.value) || foodQ2 || "").trim();
   const show = (t, c) => { foodOcrMsg.textContent = t; foodOcrMsg.className = "msg" + (c ? " " + c : ""); };
-  if (!q) { dbQ.focus(); return; }
+  if (!q) { if (fdQ) fdQ.focus(); return; }
   if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요 — 검색은 백엔드를 거칩니다.", "err"); return; }
   show("검색 중…"); dbResults.innerHTML = "";
   try {
@@ -2000,7 +2098,7 @@ function fromHash() {
     return;
   }
   const h = (location.hash || "").replace("#", "");
-  if (["diet", "plan", "cal", "inbody"].includes(h) && h !== section) setSection(h);
+  if (["diet", "plan", "cal", "food", "inbody"].includes(h) && h !== section) setSection(h);
 }
 addEventListener("hashchange", fromHash);
 fromHash();
