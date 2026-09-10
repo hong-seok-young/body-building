@@ -421,7 +421,7 @@
     <h3>활동 기준 <span class="muted">평소 값</span></h3>
     <div class="fields g4">
       <label>활동계수 (좌식+소화열)<input type="number" step="0.01" min="1" id="cAf"></label>
-      <label>하루 걸음수<input type="number" step="100" min="0" id="cSteps"></label>
+      <label>하루 걸음수 <span class="muted">러닝 제외</span><input type="number" step="100" min="0" id="cSteps"></label>
       <label>웨이트 시간/회<input type="number" step="0.25" min="0" id="cWh"></label>
       <label>웨이트 주 횟수<input type="number" step="1" min="0" max="7" id="cWd"></label>
       <label id="cChWrap">유산소 시간/회<input type="number" step="0.25" min="0" id="cCh"></label>
@@ -582,9 +582,10 @@
 <div class="overlay" id="actOverlay">
   <div class="modal" style="max-width:400px">
     <h3 id="actTitle">활동</h3>
-    <div class="hint" style="margin-top:0">별일 없으면 <b id="actDefLabel"></b> 로 계산합니다. 이 날이 달랐을 때만 고치세요.</div>
+    <div class="hint" style="margin-top:0">별일 없으면 <b id="actDefLabel"></b> 로 계산합니다. 이 날이 달랐을 때만 고치세요.<br>
+      <b>걸음수에는 러닝한 걸음을 넣지 마세요</b> — 걸음과 유산소를 따로 더하므로 이중 계산이 됩니다 (5km ≈ 5,500보 ≈ 220kcal).</div>
     <div class="fields g2 mt">
-      <label>걸음수<input type="number" min="0" step="100" id="aSteps"></label>
+      <label>걸음수 <span class="muted">러닝 제외</span><input type="number" min="0" step="100" id="aSteps"></label>
       <label>웨이트 (분)<input type="number" min="0" step="5" id="aWh"></label>
       <label id="aChWrap">유산소 (분)<input type="number" min="0" step="5" id="aCh"></label>
       <label>유산소 종류<select id="aCi" onchange="onCardioType('a')"></select></label>
