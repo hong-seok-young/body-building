@@ -1818,6 +1818,15 @@ async function applyHashAdd() {
   const o = hashAdd; hashAdd = null;
   if (!o) return;
   const done = [];
+  // 삭제를 먼저 처리한다 — 나중에 하면 방금 추가한 것을 지워버린다.
+  // 정정할 때 잘못된 항목을 빼고 새 값을 넣는 걸 링크 하나로 하기 위한 것
+  for (const d of (o.del || [])) {
+    if (!d || !d.name) continue;
+    const ds = d.date || todayStr();
+    const hits = dayLog(ds).filter(x => x.name === d.name && (!d.meal || (x.meal || "간식") === d.meal));
+    for (const h of hits) { await delItem(ds, h.id); done.push(`🗑 ${ds} ${h.name}`); }
+    if (!hits.length) done.push(`🗑 ${d.name} (없어서 건너뜀)`);
+  }
   for (const r of (o.inbody || [])) {
     if (!r || !r.date) continue;
     if (inbody.some(x => x.date === r.date)) { done.push(`인바디 ${r.date} (이미 있음)`); continue; }
