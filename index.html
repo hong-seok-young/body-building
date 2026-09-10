@@ -1692,17 +1692,20 @@ function renderSets(g) {
     <span class="muted">에 추가</span></h3>
     <div class="presets">` + favPick.map(([x], i) => {
       // 이름이 길면 칩이 한 줄을 다 먹는다 — 잘라서 두 개씩 들어가게
-      const nm = x.name.length > 16 ? x.name.slice(0, 15) + "…" : x.name;
-      return `<span class="chip${favEdit === i ? " on" : ""}" onclick="logFav(${i})" title="${esc(x.name)}">${esc(nm)}
+      // 별명이 있으면 그걸 띄운다. 제품 정식명이 너무 길어 칩이 한 줄을 다 먹는다
+      const lbl = x.nick || x.name;
+      const nm = lbl.length > 16 ? lbl.slice(0, 15) + "…" : lbl;
+      return `<span class="chip${favEdit === i ? " on" : ""}" onclick="logFav(${i})" title="${esc(x.nick ? x.nick + " — " + x.name : x.name)}">${esc(nm)}
         <span style="color:var(--sub)">${num(x.kcal)}</span>
-        <i class="ed" title="양 고치기" onclick="event.stopPropagation();toggleFavEdit(${i})">✎</i></span>`;
+        <i class="ed" title="별명·양 고치기" onclick="event.stopPropagation();toggleFavEdit(${i})">✎</i></span>`;
     }).join("") + `</div>`
     + (favEdit !== null && favPick[favEdit] ? favEditHtml(favPick[favEdit][0]) : "");
 }
 async function logFav(i) {
   const e = favPick[i];
   if (!e) return;
-  const { fav, ...food } = e[0];
+  // 별명은 즐겨찾기 칩에서만 쓴다 — 기록에는 원래 이름이 남아야 나중에 알아본다
+  const { fav, nick, ...food } = e[0];
   await pushItem({ ...food, date: curDate, meal: favMealVal() });
   render();
 }
@@ -1712,18 +1715,21 @@ function toggleFavEdit(i) { favEdit = favEdit === i ? null : i; rowEdit = null; 
 function favEditHtml(x) {
   const a = rowAmts(x);
   const per = a.c && a.g ? a.g.amt / a.c.amt : 0;
-  return `<div class="mrow rowedit" data-per="${per}" style="background:var(--card2);flex-wrap:wrap;gap:7px;margin-top:9px">
-    <span style="flex:1 0 100%;font-size:11.5px;color:var(--sub)">즐겨찾기에 저장할 양 — 지금 <b>${esc(x.name)}</b> ${num(x.kcal)}kcal.
-      ${per ? `한쪽만 고치면 나머지가 따라 바뀝니다 (1${a.c.unit} = ${amtStr(per)}${a.g.unit}).` : "영양성분이 전부 같이 조정됩니다."}</span>
+  return `<div class="mrow rowedit" data-per="${per}" data-nm="${esc(x.name)}" style="background:var(--card2);flex-wrap:wrap;gap:7px;margin-top:9px">
+    <span style="flex:1 0 100%;font-size:11.5px;color:var(--sub)">별명은 <b>칩에만</b> 보입니다 — 기록에는 <b>${esc(x.name)}</b> 로 남습니다. 지금 ${num(x.kcal)}kcal.
+      ${per ? `양은 한쪽만 고치면 나머지가 따라 바뀝니다 (1${a.c.unit} = ${amtStr(per)}${a.g.unit}).` : "양을 고치면 영양성분이 전부 같이 조정됩니다."}</span>
+    <input id="rqn" value="${esc(x.nick || "")}" placeholder="별명 (비우면 원래 이름)" style="flex:1 0 100%;border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:var(--card);color:var(--text);font:inherit">
     ${a.c ? amtBox("rqc", a.c.amt, a.c.unit, per) : ""}
     ${a.c && a.g ? `<span style="align-self:center;color:var(--sub)">=</span>` : ""}
     ${a.g ? amtBox("rqg", a.g.amt, a.g.unit, per) : ""}
-    <button class="btn pri" style="flex:0 0 auto;padding:8px 15px" onclick="applyFavScale()">적용</button>
+    <button class="btn pri" style="flex:0 0 auto;padding:8px 15px" onclick="applyFavEdit()">적용</button>
     <button class="btn" style="flex:0 0 auto;padding:8px 15px" onclick="toggleFavEdit(null)">취소</button></div>`;
 }
-function applyFavScale() {
+function applyFavEdit() {
   const e = favPick[favEdit];
   const cE = document.getElementById("rqc"), gE = document.getElementById("rqg");
+  const nE = document.getElementById("rqn");
+  const nick = nE ? nE.value.trim() : "";
   favEdit = null;
   if (!e) { render(); return; }
   const [x, at] = e, a = rowAmts(x);
@@ -1731,8 +1737,16 @@ function applyFavScale() {
   let k = 0;
   if (a.c && cE && +cE.value > 0) k = +cE.value / a.c.amt;
   else if (a.g && gE && +gE.value > 0) k = +gE.value / a.g.amt;
-  if (!(k > 0) || Math.abs(k - 1) < 1e-9) { render(); return; }
-  presets = presets.map((pz, i) => i === at ? { ...scaled(pz, k), fav: 1 } : pz);
+  const rescale = k > 0 && Math.abs(k - 1) > 1e-9;
+  const renick = nick !== (x.nick || "");
+  if (!rescale && !renick) { render(); return; }
+  presets = presets.map((pz, i) => {
+    if (i !== at) return pz;
+    const next = rescale ? scaled(pz, k) : { ...pz };
+    // 별명은 원래 이름을 건드리지 않는다. 비우면 별명을 뗀다
+    if (renick) { if (nick) next.nick = nick.slice(0, 30); else delete next.nick; }
+    return { ...next, fav: 1 };
+  });
   saveFavs();
 }
 function saveFavs() { save("dt_presets", presets); setMeta("presets", presets); render(); }
