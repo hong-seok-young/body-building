@@ -224,8 +224,13 @@
   /* 꾹 눌러 다른 끼니로 옮기기 */
   .mrow[data-id] { touch-action: pan-y; }
   .mrow.dragsrc { opacity: .32; }
-  .meal.dragon { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .meal.dragon .meal-head .nm::after { content: " ← 여기로"; color: var(--accent); font-size: 11px; }
+  /* 드롭 대상 표시 — 레이아웃을 건드리지 않는 것만 쓴다.
+     텍스트를 덧붙이면 카드 높이가 바뀌고, 드래그 중 리플로우는 터치를 흔든다 */
+  .meal.dragon { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--card2); }
+  /* 잡고 있는 동안 글자 선택·오버스크롤·스크롤 관여를 모두 막는다 */
+  body.dragging { overscroll-behavior: none; }
+  body.dragging #mealsEl { touch-action: none; }
+  body.dragging * { user-select: none; -webkit-user-select: none; }
   #dragGhost { position: fixed; z-index: 60; pointer-events: none; left: 0; top: 0;
     background: var(--card2); border: 1px solid var(--accent); border-radius: 10px;
     padding: 9px 13px; font-size: 13px; font-weight: 700; box-shadow: 0 10px 26px rgba(0,0,0,.45);
@@ -1041,6 +1046,31 @@ async function api(params) {
   if (!j.ok) throw new Error(j.error || "api-error");
   return j;
 }
+// ── 팝업(오버레이) 열고 닫기.
+// 열 때 히스토리를 한 칸 밀어 넣어서, 폰 뒤로가기가 앱을 닫는 대신 팝업만 닫게 한다.
+// 실제로 닫는 곳은 popstate 한 곳뿐이다 — 버튼으로 닫을 때도 history.back() 을 거친다.
+let modalStack = [];
+function openOverlay(id, onClose) {
+  const el = document.getElementById(id);
+  if (!el || modalStack.some(m => m.id === id)) return;
+  el.classList.add("show");
+  modalStack.push({ id, onClose });
+  history.pushState({ dtModal: id }, "");
+}
+function closeOverlay(id) {
+  if (modalStack.some(m => m.id === id)) { history.back(); return; }
+  const el = document.getElementById(id);            // 히스토리에 없으면 그냥 닫는다
+  if (el) el.classList.remove("show");
+}
+function popOverlay() {
+  const m = modalStack.pop();
+  if (!m) return false;
+  const el = document.getElementById(m.id);
+  if (el) el.classList.remove("show");
+  if (m.onClose) m.onClose();
+  return true;
+}
+addEventListener("popstate", () => { popOverlay(); });   // 팝업이 없으면 아무것도 안 한다
 function setStatus(txt, color) { statusEl.textContent = txt; statusEl.style.color = color || "var(--sub)"; }
 // 알림창을 띄우지 않는다 — 내가 고치고 내가 보고 있으므로 조용히 알려주면 된다
 let toastT = null;
@@ -1552,9 +1582,9 @@ function openAct() {
   actDefLabel.textContent = actLabel(dd)
     + (dd.from > "0000-01-01" ? ` (${dd.from.slice(5)} 부터)` : "");
   actInfo.textContent = act[curDate] ? "이 날은 따로 고친 기록입니다." : "지금은 평소 하루 기준입니다.";
-  actOverlay.classList.add("show");
+  openOverlay("actOverlay");
 }
-function closeAct() { actOverlay.classList.remove("show"); }
+function closeAct() { closeOverlay("actOverlay"); }
 function saveCalc() {
   calc = { ...calc,
     af: +cAf.value || DEFAULT_CALC.af, steps: +cSteps.value || 0,
@@ -1584,11 +1614,11 @@ function dateLabel(ds) {
 }
 async function openCal() {
   calMonth = curDate.slice(0, 7);
-  calOverlay.classList.add("show");
+  openOverlay("calOverlay");
   renderCalendar();
   await calLoad();
 }
-function closeCal() { calOverlay.classList.remove("show"); }
+function closeCal() { closeOverlay("calOverlay"); }
 async function calMove(n) { calMonth = moveMonthStr(calMonth, n); renderCalendar(); await calLoad(); }
 // 표시할 달의 기록을 받아온다 (동기화 범위 밖의 과거 달일 수 있다)
 async function calLoad() {
@@ -1651,7 +1681,10 @@ async function moveMonth(n) {
 }
 
 // ═════════ 렌더 ═════════
+let renderPending = false;
 function render() {
+  if (drag) { renderPending = true; return; }
+  renderPending = false;
   if (section === "cal") return renderCal();
   if (section === "food") return renderFoods();
   if (section === "inbody") return renderInbody();
@@ -2061,7 +2094,9 @@ function dragStop() {
   if (drag.ghost) drag.ghost.remove();
   if (drag.row) drag.row.classList.remove("dragsrc");
   document.querySelectorAll(".meal.dragon").forEach(el => el.classList.remove("dragon"));
+  document.body.classList.remove("dragging");
   const d = drag; drag = null; dragEndAt = Date.now();
+  if (renderPending) render();                      // 드래그 중에 밀린 렌더를 이제 한다
   return d;
 }
 function dragDown(e) {
@@ -2075,6 +2110,7 @@ function dragDown(e) {
   dragT = setTimeout(() => {
     dragT = null;
     drag = { id, row, from: mealOf(x), name: x.name, ghost: dragGhostEl(x.name), moved: false, p0 };
+    document.body.classList.add("dragging");
     row.classList.add("dragsrc");
     drag.ghost.style.transform = `translate(${p0.x - 40}px,${p0.y - 22}px)`;
     if (navigator.vibrate) navigator.vibrate(18);   // 잡혔다는 감각 신호
@@ -2118,9 +2154,10 @@ async function moveItemMeal(ds, id, to) {
 mealsEl.addEventListener("touchstart", e => {
   const p = pointOf(e); dragStartX = p.x; dragStartY = p.y; dragDown(e);
 }, { passive: true });
-mealsEl.addEventListener("touchmove", dragMove, { passive: false });
-mealsEl.addEventListener("touchend", dragUp);
-mealsEl.addEventListener("touchcancel", () => { dragStop(); render(); });
+// document 에 걸어야 mealsEl 이 다시 그려져도 이동·종료 이벤트를 놓치지 않는다
+document.addEventListener("touchmove", dragMove, { passive: false });
+document.addEventListener("touchend", dragUp);
+document.addEventListener("touchcancel", () => { if (dragStop()) render(); });
 mealsEl.addEventListener("mousedown", e => {
   const p = pointOf(e); dragStartX = p.x; dragStartY = p.y; dragDown(e);
 });
@@ -2407,9 +2444,9 @@ function openIb(id) {
   ibFormTitle.textContent = r ? `${r.date} 기록 수정` : "인바디 기록 추가";
   ibSubmit.textContent = r ? "저장" : "기록 추가";
   ibDelRow.hidden = !r;
-  ibOverlay.classList.add("show");
+  openOverlay("ibOverlay", () => { ibEdit = null; });
 }
-function closeIb() { ibOverlay.classList.remove("show"); ibEdit = null; }
+function closeIb() { closeOverlay("ibOverlay"); }
 // 측정값은 사실이라 되돌릴 수 없다 — 확인을 한 번 받는다
 async function askDelInbody() {
   const r = inbody.find(x => x.id === ibEdit);
@@ -2587,9 +2624,9 @@ function openSettings() {
   gNa.value = goals.na; gFib.value = goals.fib; gSug.value = goals.sug;
   gSat.value = goals.sat; gTrans.value = goals.trans; gChol.value = goals.chol;
   cfgMsg.textContent = ""; cfgMsg.className = "msg";
-  settingsOverlay.classList.add("show");
+  openOverlay("settingsOverlay");
 }
-function closeSettings() { settingsOverlay.classList.remove("show"); }
+function closeSettings() { closeOverlay("settingsOverlay"); }
 async function saveSettings() {
   goals = { kcal: +gKcal.value || 0, p: +gP.value || 0, c: +gC.value || 0, f: +gF.value || 0,
     na: +gNa.value || DEFAULT_GOALS.na, fib: +gFib.value || DEFAULT_GOALS.fib,
