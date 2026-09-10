@@ -131,6 +131,13 @@
   .remain-big b { font-size: 31px; line-height: 1; letter-spacing: -1px; }
   .remain-big em { font-size: 12px; color: var(--sub); font-style: normal; }
   .remain-big .r { margin-left: auto; font-size: 11.5px; color: var(--sub); text-align: right; line-height: 1.55; }
+  /* 활동 칩 = 누르면 그날 활동을 고치는 버튼. 평소 하루(기본값) 일 때는 흐리게 */
+  .actchip { margin-left: auto; border: 1px solid var(--line); background: var(--card2);
+    color: var(--text); border-radius: 999px; padding: 6px 11px; font-size: 11.5px;
+    font-weight: 600; cursor: pointer; white-space: nowrap; align-self: center; }
+  .actchip.def { color: var(--sub); font-weight: 500; }
+  .actchip i { font-style: normal; color: var(--sub); font-size: 10px; margin-left: 2px; }
+  .actchip:active { background: var(--line); }
 
   /* 끼니 카드 */
   .meal { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 10px; overflow: hidden; box-shadow: var(--shadow); }
@@ -302,27 +309,6 @@
 
     <div class="card" id="summaryCard"></div>
     <div class="card" id="setsCard"></div>
-
-    <div class="card">
-      <h3>오늘 활동 <span class="muted">그날 목표에 반영</span></h3>
-      <div class="fields g4">
-        <label>걸음수<input type="number" min="0" step="100" id="aSteps" placeholder="예 4200"></label>
-        <label>웨이트 (시간)<input type="number" min="0" step="0.25" id="aWh" placeholder="예 2"></label>
-        <label>유산소 (시간)<input type="number" min="0" step="0.25" id="aCh" placeholder="예 0.5"></label>
-        <label>유산소 강도<select id="aCi"></select></label>
-      </div>
-      <div class="btns mt">
-        <button class="btn pri" onclick="saveAct()">저장</button>
-        <button class="btn" onclick="clearAct()">지우기</button>
-      </div>
-      <div class="btns" style="margin-top:7px">
-        <button class="btn" onclick="actPreset('yesterday')">어제와 동일</button>
-        <button class="btn" onclick="actPreset('lift')">웨이트일</button>
-        <button class="btn" onclick="actPreset('cardio')">유산소일</button>
-        <button class="btn" onclick="actPreset('rest')">휴식일</button>
-      </div>
-      <div class="hint" id="actInfo"></div>
-    </div>
 
     <div id="mealsEl"></div>
 
@@ -597,6 +583,33 @@
   </div>
 </div>
 
+<!-- 활동 수정 -->
+<div class="overlay" id="actOverlay">
+  <div class="modal" style="max-width:400px">
+    <h3 id="actTitle">활동</h3>
+    <div class="hint" style="margin-top:0">별일 없으면 <b id="actDefLabel"></b> 로 계산합니다. 이 날이 달랐을 때만 고치세요.</div>
+    <div class="fields g2 mt">
+      <label>걸음수<input type="number" min="0" step="100" id="aSteps"></label>
+      <label>웨이트 (시간)<input type="number" min="0" step="0.25" id="aWh"></label>
+      <label>유산소 (시간)<input type="number" min="0" step="0.25" id="aCh"></label>
+      <label>유산소 강도<select id="aCi"></select></label>
+    </div>
+    <div class="btns mt">
+      <button class="btn" onclick="actPreset('rest')">완전 휴식</button>
+      <button class="btn" onclick="actPreset('yesterday')">어제와 동일</button>
+    </div>
+    <div class="hint" id="actInfo"></div>
+    <div class="btns mt">
+      <button class="btn" onclick="clearAct()">기본값으로</button>
+      <button class="btn pri" onclick="saveAct()">저장</button>
+    </div>
+    <div class="btns" style="margin-top:7px">
+      <button class="btn" onclick="setDefaultDay()">이 값을 평소 하루로 저장</button>
+    </div>
+    <div class="btns mt"><button class="btn" onclick="closeAct()">닫기</button></div>
+  </div>
+</div>
+
 <!-- 설정 -->
 <div class="overlay" id="settingsOverlay">
   <div class="modal">
@@ -672,6 +685,8 @@ const DEFAULT_CALC = {
   fG: 0.7,                          // 지방 기준선 (g/kg) — 실제로는 아래 fMin~fMax 안에서 움직인다
   fMin: 0.6, fMax: 0.9,             // 지방 하한(호르몬)·상한. 이 안에서 열량 변동을 나눠 받는다
   fShare: 0.35,                     // 단백질 뺀 나머지 열량 중 지방이 받는 비율, 남는 건 탄수
+  // 평소 하루. 별일 없으면 매일 이걸로 계산하고, 다른 날만 손으로 고친다
+  dSteps: 4000, dWh: 2, dCh: 0, dCi: "중",
   pC: 45, pP: 30, pF: 25,           // byKg 를 끄면 쓰는 퍼센트 방식
   bmr: 0, wt: 0,        // 인바디 기록이 없을 때만 쓰는 수동값
 };
@@ -847,7 +862,6 @@ let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
 let weekChart = null, monthChart = null, ratioChart = null, ibChart1 = null, ibChart2 = null;
 let mealOpen = {};
-let actFilledFor = null;                      // 활동 입력칸을 어느 날짜로 채웠는지
 let mealFormOpen = null;                      // 인라인 음식추가 폼이 열린 끼니
 let rowEdit = null;                           // 수량 정정 중인 항목 id
 let presetQ = "";                             // 음식 검색어
@@ -1167,26 +1181,45 @@ function macrosFor(kcal, ds) {
   }
   return { kcal, c: Math.round(kcal * calc.pC / 400), p: Math.round(kcal * calc.pP / 400), f: Math.round(kcal * calc.pF / 900) };
 }
-// 그날 활동이 기록돼 있으면 그날 TDEE 로, 없으면 주 평균 목표로
-function dayTarget(ds) {
-  const a = act[ds], w = calcWeek(ds);
-  if (!a || !w.wt) return { ...goals, kcal: goals.kcal, src: "주 평균 목표", adjusted: false, ibDate: w.ibDate };
-  const b = calcBase(ds);
-  const tdee = b.sed + (+a.steps || 0) * b.wt * STEP_K
-             + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci);
-  const m = macrosFor(floorBmr(tdee - calc.deficit, b.bmr), ds);
+// 평소 하루 — 손으로 고친 기록이 없는 날은 이 값으로 계산한다.
+// 매일 같은 걸 입력하게 만들 이유가 없다. 다른 날만 고치면 된다.
+function defaultDay() {
+  return { steps: +calc.dSteps || 0, wh: +calc.dWh || 0, ch: +calc.dCh || 0,
+           ci: calc.dCi || calc.cI, def: 1 };
+}
+function actOf(ds) { return act[ds] || defaultDay(); }
+function actLabel(a) {
   const parts = [];
   if (+a.steps) parts.push(num(a.steps) + "보");
   if (+a.wh) parts.push(`웨이트 ${+a.wh}h`);
   if (+a.ch) parts.push(`유산소 ${+a.ch}h(${a.ci || calc.cI})`);
+  return parts.length ? parts.join(" · ") : "완전 휴식";
+}
+// 그날 활동으로 TDEE 를 잡는다. 기록이 없으면 평소 하루를 쓴다
+function dayTarget(ds) {
+  const a = actOf(ds), w = calcWeek(ds);
+  if (!w.wt) return { ...goals, kcal: goals.kcal, src: "주 평균 목표", adjusted: false, ibDate: w.ibDate };
+  const b = calcBase(ds);
+  const tdee = b.sed + (+a.steps || 0) * b.wt * STEP_K
+             + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci);
+  const m = macrosFor(floorBmr(tdee - calc.deficit, b.bmr), ds);
   return { ...goals, ...m, tdee, bmr: b.bmr, ibDate: b.ibDate,
-           src: parts.length ? parts.join(" · ") : "완전 휴식", adjusted: true };
+           src: actLabel(a), adjusted: true, isDefault: !!a.def };
 }
 
 function saveAct() {
   const a = { steps: +aSteps.value || 0, wh: +aWh.value || 0, ch: +aCh.value || 0, ci: aCi.value };
   if (!a.steps && !a.wh && !a.ch) act[curDate] = { ...a, rest: 1 }; else act[curDate] = a;
-  pushAct();
+  closeAct(); pushAct();
+}
+// 지금 칸에 있는 값을 "평소 하루" 로 승격 — 이 날 기록은 지워서 기본값을 따르게
+function setDefaultDay() {
+  calc = { ...calc, dSteps: +aSteps.value || 0, dWh: +aWh.value || 0,
+           dCh: +aCh.value || 0, dCi: aCi.value };
+  saveCalcMeta();
+  delete act[curDate];
+  closeAct(); pushAct();
+  alert(`평소 하루를 ${actLabel(defaultDay())} 로 바꿨습니다.\n따로 고치지 않은 날은 모두 이 기준으로 계산됩니다.`);
 }
 // act 는 meta 셀 하나에 JSON 으로 들어가고 시트 셀 한도는 5만 자다.
 // 하루치가 약 50자라 그냥 쌓으면 2.6년쯤에서 저장이 막힌다. 최근 400일만 남긴다
@@ -1194,27 +1227,31 @@ function saveAct() {
 function pushAct() {
   const keep = addDays(todayStr(), -400);
   Object.keys(act).forEach(d => { if (d < keep) delete act[d]; });
-  save("dt_act", act); setMeta("act", act); actFilledFor = null; render();
+  save("dt_act", act); setMeta("act", act); render();
 }
 function clearAct() {
   delete act[curDate];
-  aSteps.value = aWh.value = aCh.value = "";
-  pushAct();
+  closeAct(); pushAct();
 }
+function openAct() {
+  const a = actOf(curDate);
+  if (!aCi.options.length) aCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
+  aSteps.value = a.steps || ""; aWh.value = a.wh || ""; aCh.value = a.ch || "";
+  aCi.value = a.ci || calc.cI;
+  actTitle.textContent = `${dateLabel(curDate)} 활동`;
+  actDefLabel.textContent = actLabel(defaultDay());
+  actInfo.textContent = act[curDate] ? "이 날은 따로 고친 기록입니다." : "지금은 평소 하루 기준입니다.";
+  actOverlay.classList.add("show");
+}
+function closeAct() { actOverlay.classList.remove("show"); }
 // 자주 쓰는 활동 한 번에 — 폰에서 매일 입력하는 마찰을 줄인다
 function actPreset(kind) {
-  if (kind === "yesterday") {
-    const y = act[addDays(curDate, -1)];
-    if (!y) { alert("어제 활동 기록이 없어요"); return; }
-    act[curDate] = { ...y };
-  } else if (kind === "lift") {
-    act[curDate] = { steps: calc.steps, wh: calc.wH, ch: 0, ci: calc.cI };
-  } else if (kind === "cardio") {
-    act[curDate] = { steps: calc.steps, wh: 0, ch: calc.cH, ci: calc.cI };
-  } else {
-    act[curDate] = { steps: calc.steps, wh: 0, ch: 0, ci: calc.cI, rest: 1 };
-  }
-  pushAct();
+  const a = kind === "yesterday" ? { ...actOf(addDays(curDate, -1)) }
+                                 : { steps: 0, wh: 0, ch: 0, ci: calc.cI, rest: 1 };
+  delete a.def;
+  aSteps.value = a.steps || ""; aWh.value = a.wh || ""; aCh.value = a.ch || ""; aCi.value = a.ci || calc.cI;
+  actInfo.textContent = kind === "yesterday" ? "어제 값을 넣었습니다. 저장을 누르세요."
+                                             : "완전 휴식으로 채웠습니다. 저장을 누르세요.";
 }
 
 function saveCalc() {
@@ -1325,22 +1362,7 @@ function renderDay() {
   const list = dayLog(curDate), t = totals(list);
   const g = dayTarget(curDate);
 
-  // 활동 입력 채우기
-  if (!aCi.options.length) aCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
-  // 날짜가 바뀔 때만 채운다 — 매 render 마다 덮으면 타이핑 중인 값이 날아간다
-  const a = act[curDate] || {};
-  if (actFilledFor !== curDate) {
-    actFilledFor = curDate;
-    aSteps.value = a.steps || ""; aWh.value = a.wh || ""; aCh.value = a.ch || ""; aCi.value = a.ci || calc.cI;
-  }
   const w = calcWeek(curDate);          // 이 날짜에 유효했던 인바디 기준
-  actInfo.innerHTML = !w.wt
-    ? `인바디 탭에서 <b>체중·기초대사량</b>을 먼저 넣어주세요. 그때부터 활동량이 목표에 반영됩니다.`
-    : g.adjusted ? `이날 목표 <b>${num(g.kcal)}kcal</b>`
-                 : `활동을 넣으면 이날 목표를 다시 계산합니다`;
-  // 완전휴식일엔 조정 목표가 기초대사량 밑으로 떨어질 수 있다
-  if (g.adjusted && w.bmr && g.kcal <= r25(w.bmr) && (g.tdee - calc.deficit) < w.bmr)
-    actInfo.innerHTML += ` <span style="color:var(--sub)">· 기초대사량 바닥선 적용</span>`;
 
   // 요약
   const left = g.kcal - t.kcal;
@@ -1351,7 +1373,9 @@ function renderDay() {
     <div class="remain-big">
       <b style="color:${left < 0 ? "var(--red)" : "var(--text)"}">${num(Math.abs(left))}</b>
       <em>kcal ${left < 0 ? "초과" : "남음"}</em>
-      <span class="r">${g.adjusted ? "🔥 " + esc(g.src) : "주 평균 목표"}</span>
+      ${g.adjusted
+        ? `<button class="actchip${g.isDefault ? " def" : ""}" onclick="openAct()">🔥 ${esc(g.src)} <i>✎</i></button>`
+        : `<span class="r">주 평균 목표</span>`}
     </div>` +
     `<div class="macro mhead"><span class="nm"></span><span class="val">섭취 / 목표</span>
        <span></span><span class="st">남음</span></div>` +
