@@ -594,11 +594,13 @@
     <div class="hint" id="aCardioInfo" style="margin-top:7px"></div>
     <div class="hint" id="actInfo"></div>
     <div class="btns mt">
-      <button class="btn" onclick="setDefaultDay()">기본값으로 (오늘부터)</button>
+      <button class="btn" onclick="clearAct()">기본값으로</button>
       <button class="btn pri" onclick="saveAct()">저장</button>
     </div>
-    <div class="hint"><b>저장</b> = 이 날만 이 값으로. <b>기본값으로</b> = 지금 칸에 있는 값을 오늘부터의 평소 하루로 삼습니다.<br>
-      둘 다 <b>이전 날짜의 목표는 바꾸지 않습니다.</b></div>
+    <div class="btns" style="margin-top:7px">
+      <button class="btn" onclick="setDefaultDay()">이 날부터 평소 하루로</button>
+    </div>
+    <div class="hint">이 날과 <b>그 이후</b>에만 적용됩니다. 이전 날짜의 목표는 바뀌지 않습니다.</div>
     <div class="btns mt"><button class="btn" onclick="closeAct()">닫기</button></div>
   </div>
 </div>
@@ -1432,6 +1434,10 @@ function pushAct() {
   const keep = addDays(todayStr(), -400);
   Object.keys(act).forEach(d => { if (d < keep) delete act[d]; });
   save("dt_act", act); setMeta("act", act); render();
+}
+function clearAct() {
+  delete act[curDate];
+  closeAct(); pushAct();
 }
 function openAct() {
   const a = actOf(curDate);
