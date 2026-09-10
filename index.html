@@ -592,10 +592,6 @@
       <div id="aCp" style="display:contents"></div>
     </div>
     <div class="hint" id="aCardioInfo" style="margin-top:7px"></div>
-    <div class="btns mt">
-      <button class="btn" onclick="actPreset('rest')">완전 휴식</button>
-      <button class="btn" onclick="actPreset('yesterday')">어제와 동일</button>
-    </div>
     <div class="hint" id="actInfo"></div>
     <div class="btns mt">
       <button class="btn" onclick="clearAct()">기본값으로</button>
@@ -1458,20 +1454,6 @@ function openAct() {
   actOverlay.classList.add("show");
 }
 function closeAct() { actOverlay.classList.remove("show"); }
-// 자주 쓰는 활동 한 번에 — 폰에서 매일 입력하는 마찰을 줄인다
-function actPreset(kind) {
-  const a = kind === "yesterday" ? { ...actOf(addDays(curDate, -1)) }
-                                 : { steps: 0, wh: 0, ch: 0, ci: calc.cI, cp: calc.cP, rest: 1 };
-  delete a.def;
-  aSteps.value = a.steps || ""; aWh.value = h2m(a.wh); aCh.value = h2m(a.ch);
-  const [pci, pcp] = unLegacy(a.ci || calc.cI, a.cp);
-  fillCardioSelect(aCi, pci);
-  aCp.innerHTML = cardioFieldsHtml("a_", aCi.value, cpOf(aCi.value, pci, pcp));
-  onCardioType("a", 1);
-  actInfo.textContent = kind === "yesterday" ? "어제 값을 넣었습니다. 저장을 누르세요."
-                                             : "완전 휴식으로 채웠습니다. 저장을 누르세요.";
-}
-
 function saveCalc() {
   calc = { ...calc,
     af: +cAf.value || DEFAULT_CALC.af, steps: +cSteps.value || 0,
