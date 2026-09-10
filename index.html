@@ -85,6 +85,10 @@
     background: var(--warnbg); color: var(--warntext); border: 1px solid var(--warnline); }
   .burnoff .lbl { display: block; font-weight: 700; margin-bottom: 3px; }
   .burnoff b { font-weight: 800; }
+  /* 누적이 마이너스(계획보다 덜 먹음)면 경고색이 아니라 초록으로 */
+  .burnoff.ok { background: var(--okbg, rgba(34,197,94,.12)); color: var(--text);
+    border-color: rgba(34,197,94,.35); }
+  .burnoff .muted { font-weight: 400; }
 
   /* 칩 안의 연필 — 평소엔 흐리게, 올리면 또렷하게 (터치에선 늘 보인다) */
   .chip .ed { font-style: normal; margin-left: 5px; padding: 0 1px; opacity: .35; }
@@ -1325,6 +1329,26 @@ function onCardioType(which, keep) {
   }
 }
 
+// 기록된 모든 날의 (섭취 − 목표) 합. 초과한 날은 쌓이고 미달한 날은 깎인다.
+// 하루 초과분만 보면 오늘로 끝나는데, 실제로 언젠가 빼야 하는 건 이 누적분이다.
+// (동기화가 최근 92일을 받아오므로 그 범위의 기록이 대상이다)
+function cumBalance() {
+  const today = todayStr();
+  let sum = 0, days = 0, over = 0, worst = null;
+  for (const ds of Object.keys(cache)) {
+    if (ds > today) continue;
+    const log = cache[ds];
+    if (!log || !log.length) continue;
+    const t = totals(log);
+    if (!t.kcal) continue;
+    const g = dayTarget(ds);
+    if (!g.kcal) continue;
+    const d = t.kcal - g.kcal;
+    sum += d; days++;
+    if (d > 0) { over++; if (!worst || d > worst.d) worst = { ds, d }; }
+  }
+  return { sum, days, over, worst };
+}
 // 초과한 열량을 없애려면 유산소를 얼마나 해야 하나.
 // 각 종류의 순증분(kcal/체중kg/시간)으로 나눈다. 내가 쓰는 페이스가 설정돼 있으면
 // 그 값으로, 없으면 종류별 기본값으로 계산한다.
@@ -1593,6 +1617,7 @@ function renderDay() {
 
   // 요약
   const left = g.kcal - t.kcal;
+  const cum = cumBalance();
   // 유지 열량(TDEE) 대비 실제 적자 — 목표를 넘겨도 적자일 수 있다
   const tdeeToday = g.adjusted ? g.tdee : w.avg;
   const realDef = tdeeToday - t.kcal;
@@ -1604,9 +1629,16 @@ function renderDay() {
         ? `<button class="actchip${g.isDefault ? " def" : ""}" onclick="openAct()">🔥 ${esc(g.src)} <i>✎</i></button>`
         : `<span class="r">주 평균 목표</span>`}
     </div>` +
-    // 초과했을 때만 — 이걸 없애려면 뭘 얼마나 해야 하는지
-    (left < 0 && burnOff(-left, w.wt) ? `<div class="burnoff">
-      <span class="lbl">이 초과분을 없애려면</span>${burnOff(-left, w.wt)}</div>` : "") +
+    // 하루 초과분이 아니라 기록 전체의 누적분을 보여준다 — 빼야 하는 건 그쪽이다
+    (cum.days ? `<div class="burnoff${cum.sum > 0 ? "" : " ok"}">
+      <span class="lbl">누적 ${cum.sum > 0 ? "초과" : "적립"}
+        <b>${cum.sum > 0 ? "+" : "−"}${num(Math.abs(cum.sum))}kcal</b>
+        <span class="muted">= 체지방 ${(Math.abs(cum.sum) / 7700).toFixed(2)}kg · 기록 ${cum.days}일 중 초과 ${cum.over}일</span></span>
+      ${cum.sum > 0
+        ? (burnOff(cum.sum, w.wt) || "인바디에 체중을 넣으면 필요한 유산소를 알려줍니다")
+          + (cum.worst ? `<div class="muted" style="margin-top:3px">가장 큰 초과: ${cum.worst.ds.slice(5)} +${num(cum.worst.d)}</div>` : "")
+        : `목표보다 덜 먹은 쪽이 많습니다 — 지금 따로 태울 게 없습니다`}
+    </div>` : "") +
     // 괄호 안은 칼로리 기준 비율 (P·C ×4, F ×9). 도넛 대신 여기서 바로 읽는다
     ((ak, gk) => `<div class="macros">` +
     `<div class="macro mhead"><span class="nm"></span><span class="val">섭취 (비율) / 목표 (비율)</span>
