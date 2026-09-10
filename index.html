@@ -210,6 +210,24 @@
   .msg.ok { color: var(--green); } .msg.err { color: var(--red); }
 
   canvas { max-height: 250px; }
+  /* 달력 */
+  .datebtn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px;
+             padding: 8px 14px; font-size: 14px; font-weight: 700; cursor: pointer; min-width: 160px; }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal .dow { text-align: center; font-size: 10.5px; color: var(--sub); padding: 3px 0 5px; }
+  .cal .dow.sun { color: var(--red); }
+  .cal button { border: 1px solid transparent; background: var(--card2); color: var(--text); border-radius: 10px;
+                padding: 6px 1px 5px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .cal button:disabled { background: none; opacity: .25; cursor: default; }
+  .cal button b { font-size: 13px; font-weight: 600; line-height: 1.1; }
+  .cal button small { font-size: 9px; line-height: 1; opacity: .85; }
+  .cal button.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cal button.today b { text-decoration: underline; }
+  .cal button.ok    { background: rgba(34,197,94,.22); }
+  .cal button.over  { background: rgba(239,68,68,.22); }
+  .cal button.under { background: rgba(245,158,11,.25); }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: var(--sub); margin-top: 11px; }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
   /* 설치 안내 배너 */
   #installBar { display: none; }
   #installBar.show { display: block; }
@@ -242,7 +260,7 @@
   <div id="view-day">
     <div class="nav">
       <button onclick="moveDay(-1)">‹</button>
-      <input type="date" id="datePicker" onchange="curDate=this.value;render()">
+      <button class="datebtn" id="datePicker" onclick="openCal()"></button>
       <button onclick="moveDay(1)">›</button>
     </div>
 
@@ -331,10 +349,15 @@
       <span class="label" id="weekLabel"></span>
       <button onclick="moveWeek(1)">›</button>
     </div>
+    <div class="card" id="weekLedger"></div>
     <div class="card">
-      <h3>끼니별 칼로리 <span class="muted">점선 = 그날 목표</span></h3>
+      <h3>일별 탄단지 <span class="muted">칼로리 기준 · 점선 = 그날 목표</span></h3>
       <canvas id="weekChart"></canvas>
-      <div id="weekMealBreak" style="margin-top:11px"></div>
+    </div>
+    <div class="card">
+      <h3>일별 과부족</h3>
+      <table><thead><tr><th>날짜</th><th>섭취</th><th>목표</th><th>과부족</th><th>탄/단/지</th></tr></thead>
+        <tbody id="weekRows"></tbody><tfoot id="weekFoot"></tfoot></table>
     </div>
     <div class="card">
       <h3>주간 평균 <span class="muted">기록한 날 기준</span></h3>
@@ -363,7 +386,7 @@
 <section id="section-plan" style="display:none">
   <div class="nav">
     <button onclick="moveDay(-1)">‹</button>
-    <input type="date" id="planDate" onchange="curDate=this.value;render()">
+    <button class="datebtn" id="planDate" onclick="openCal()"></button>
     <button onclick="moveDay(1)">›</button>
   </div>
   <div class="card" id="planSummary"></div>
@@ -536,6 +559,28 @@
   </div>
 </div>
 
+<!-- 달력 -->
+<div class="overlay" id="calOverlay">
+  <div class="modal" style="max-width:400px">
+    <div class="nav" style="margin-bottom:9px">
+      <button onclick="calMove(-1)">‹</button>
+      <span class="label" id="calLabel"></span>
+      <button onclick="calMove(1)">›</button>
+    </div>
+    <div class="cal" id="calGrid"></div>
+    <div class="legend">
+      <span><i style="background:rgba(34,197,94,.5)"></i>목표 ±10%</span>
+      <span><i style="background:rgba(239,68,68,.5)"></i>초과</span>
+      <span><i style="background:rgba(245,158,11,.6)"></i>미달</span>
+      <span><i style="background:var(--card2)"></i>기록 없음</span>
+    </div>
+    <div class="btns mt">
+      <button class="btn" onclick="closeCal()">닫기</button>
+      <button class="btn pri" onclick="pickDay(todayStr())">오늘</button>
+    </div>
+  </div>
+</div>
+
 <!-- 설정 -->
 <div class="overlay" id="settingsOverlay">
   <div class="modal">
@@ -580,9 +625,18 @@
 // ═════════ 기본값 ═════════
 // 한국 영양성분표 의무 9종 + 식이섬유
 const KEYS = ["kcal", "p", "c", "f", "na", "fib", "sug", "sat", "trans", "chol"];
-const MEALS = ["아침", "점심", "저녁", "간식"];
-const MEAL_COLOR = { "아침": "#f59e0b", "점심": "#2563eb", "저녁": "#fb923c", "간식": "#8b5cf6" };
-const MEAL_ICON = { "아침": "🌅", "점심": "☀️", "저녁": "🌆", "간식": "🌙" };
+// 끼니는 "1끼 2끼 3끼…" 로 부르고 개수는 사용자가 정한다 (기본 3끼)
+const LEGACY_MEAL = { "아침": "1끼", "점심": "2끼", "저녁": "3끼", "간식": "4끼" };
+const MEAL_PALETTE = ["#2563eb", "#f59e0b", "#fb923c", "#8b5cf6", "#16a34a", "#ef4444", "#0ea5e9", "#a855f7"];
+const mealName = i => `${i + 1}끼`;
+const mealColor = i => MEAL_PALETTE[i % MEAL_PALETTE.length];
+function meals() { return Array.from({ length: mealCount }, (_, i) => mealName(i)); }
+// 예전 기록(아침/점심/저녁/간식)도 번호 끼니로 읽는다
+function mealOf(x) {
+  const m = String(x.meal || "");
+  return LEGACY_MEAL[m] || (/^\d+끼$/.test(m) ? m : mealName(0));
+}
+const mealIdx = m => Math.max(0, (parseInt(m, 10) || 1) - 1);
 const INTENSITY = ["저", "중", "고"];
 
 // 활동 소모 계수 — 사용자가 확인한 실측 앵커에 맞춰 역산한 값
@@ -712,8 +766,8 @@ function save(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
 // 편의를 택한 것. 실수로 지워져도 구글 시트의 [파일 → 버전 기록]에서 복구된다.
 // 되돌리려면 url 을 빈 문자열로 두면 ⚙️ 에서 직접 입력하는 예전 방식이 된다.
 const BUILTIN_CFG = {
-  url: "https://script.google.com/macros/s/AKfycbytKK3MFfrhE1rP88lz_sMRaEaYPqrP_e9qySdldZNemlIm8E13vZ06PwT4Y4B-YGsF/exec",
-  secret: "wlsrur93",
+  url: "http://localhost:8764/gs",
+  secret: "test-secret",
 };
 let cfg = load("dt_cfg", null) || (BUILTIN_CFG.url ? { ...BUILTIN_CFG } : null);
 let cache = load("dt_cache", {});
@@ -761,6 +815,7 @@ function readHash() {
 readHash();
 let plan = load("dt_plan", DEFAULT_PLAN);
 let sets = load("dt_sets", []);               // 자주 먹는 끼니 조합
+let mealCount = Math.max(1, Math.min(9, +load("dt_mealcount", 3) || 3));
 let planFormOpen = -1;
 let section = "diet", view = "day";
 let curDate = todayStr();
@@ -788,7 +843,12 @@ const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(
 const sign = n => (n >= 0 ? "+" : "") + fmt(n);
 const num = n => Math.round(n).toLocaleString("ko-KR");
 function cmpDate(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }
-function slotOf(t) { const h = +String(t).slice(0, 2) || 0; return h < 11 ? "아침" : h < 16 ? "점심" : h < 22 ? "저녁" : "간식"; }
+// 기상~취침(7~22시)을 끼니 수로 나눠 현재 시각이 몇 끼째인지 추정
+function slotOf(t) {
+  const h = +String(t).slice(0, 2) || 0;
+  const i = Math.floor((h - 7) / (15 / mealCount));
+  return mealName(Math.min(mealCount - 1, Math.max(0, i)));
+}
 function guessMeal() { return slotOf(String(new Date().getHours()).padStart(2, "0")); }
 // Chart.js 가 못 올라와도(오프라인·CDN 차단) 화면이 죽지 않게
 function newChart(el, c) {
@@ -812,7 +872,7 @@ function setMeta(key, value) {
     .catch(() => { metaDirty[key] = 1; save("dt_meta_dirty", metaDirty); });
 }
 // 로컬의 최신 설정값을 돌려주는 표 — flushMeta 가 무엇을 올릴지 여기서 찾는다
-function localMeta() { return { goals, presets, plan, calc, act, sets }; }
+function localMeta() { return { goals, presets, plan, calc, act, sets, mealcount: mealCount }; }
 async function flushMeta() {
   const local = localMeta();
   for (const k of Object.keys(metaDirty)) {
@@ -832,6 +892,8 @@ async function syncRange(from, to) {
   if (r.calc) { calc = { ...DEFAULT_CALC, ...r.calc }; save("dt_calc", calc); }
   if (r.act) { act = r.act; save("dt_act", act); }
   if (r.sets) { sets = r.sets; save("dt_sets", sets); }
+  if (+r.mealcount > 0) { mealCount = Math.max(1, Math.min(9, +r.mealcount)); save("dt_mealcount", mealCount); }
+  syncMealCount();
   save("dt_cache", cache);
 }
 async function ensureRange(from, to) {
@@ -877,7 +939,24 @@ async function fullSync() {
 
 // ═════════ 기록 ═════════
 function dayLog(ds) { return cache[ds] || []; }
-function mealLog(ds, meal) { return dayLog(ds).filter(x => (x.meal || "간식") === meal); }
+function mealLog(ds, meal) { return dayLog(ds).filter(x => mealOf(x) === meal); }
+// 기록에 있는 끼니 번호가 지금 끼니 수보다 크면 자동으로 늘린다 (기록이 숨지 않게)
+function syncMealCount() {
+  let mx = mealCount;
+  Object.keys(cache).forEach(d => dayLog(d).forEach(x => { mx = Math.max(mx, mealIdx(mealOf(x)) + 1); }));
+  if (mx !== mealCount) { mealCount = Math.min(9, mx); save("dt_mealcount", mealCount); }
+}
+function setMealCount(n) {
+  const v = Math.max(1, Math.min(9, n));
+  // 줄일 때 그 끼니에 기록이 있으면 막는다
+  if (v < mealCount) {
+    for (let i = v; i < mealCount; i++) {
+      if (mealLog(curDate, mealName(i)).length) { alert(`${mealName(i)} 에 기록이 있어 줄일 수 없습니다. 먼저 비워주세요.`); return; }
+    }
+  }
+  mealCount = v; save("dt_mealcount", mealCount); setMeta("mealcount", mealCount);
+  mealFormOpen = null; render();
+}
 function totals(list) {
   const a = {}; KEYS.forEach(k => a[k] = 0);
   list.forEach(x => KEYS.forEach(k => a[k] += (+x[k] || 0)));
@@ -1093,6 +1172,56 @@ function applyCalcGoals() {
   save("dt_goals", goals); setMeta("goals", goals); render();
 }
 
+// ═════════ 달력 ═════════
+let calMonth = null;
+const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+function dateLabel(ds) {
+  const d = new Date(ds + "T00:00:00");
+  const tag = ds === todayStr() ? " · 오늘" : ds === addDays(todayStr(), -1) ? " · 어제" : "";
+  return `${+ds.slice(5, 7)}월 ${+ds.slice(8)}일 (${DOW[d.getDay()]})${tag}`;
+}
+async function openCal() {
+  calMonth = curDate.slice(0, 7);
+  calOverlay.classList.add("show");
+  renderCalendar();
+  await calLoad();
+}
+function closeCal() { calOverlay.classList.remove("show"); }
+async function calMove(n) { calMonth = moveMonthStr(calMonth, n); renderCalendar(); await calLoad(); }
+// 표시할 달의 기록을 받아온다 (동기화 범위 밖의 과거 달일 수 있다)
+async function calLoad() {
+  const [from, to] = monthRange(calMonth);
+  try { await ensureRange(from, to > todayStr() ? todayStr() : to); } catch (e) {}
+  renderCalendar();
+}
+function pickDay(ds) { curDate = ds; closeCal(); render(); }
+// 그날 목표는 활동 기록에 따라 달라지므로 dayTarget 을 그대로 쓴다
+function dayState(ds) {
+  const t = totals(dayLog(ds));
+  if (!t.kcal) return { cls: "", kcal: 0 };
+  const g = dayTarget(ds).kcal || goals.kcal;
+  const r = t.kcal / g;
+  return { cls: r > 1.1 ? "over" : r < 0.9 ? "under" : "ok", kcal: t.kcal };
+}
+function renderCalendar() {
+  const [from] = monthRange(calMonth);
+  calLabel.textContent = calMonth.replace("-", "년 ") + "월";
+  const first = new Date(from + "T00:00:00");
+  const lead = first.getDay();                       // 1일의 요일(일=0)
+  const last = +monthRange(calMonth)[1].slice(8);
+  const today = todayStr();
+  let html = DOW.map((d, i) => `<span class="dow${i === 0 ? " sun" : ""}">${d}</span>`).join("");
+  for (let i = 0; i < lead; i++) html += `<button disabled></button>`;
+  for (let d = 1; d <= last; d++) {
+    const ds = `${calMonth}-${String(d).padStart(2, "0")}`;
+    const st = dayState(ds);
+    const cls = [st.cls, ds === curDate ? "sel" : "", ds === today ? "today" : ""].filter(Boolean).join(" ");
+    html += `<button class="${cls}" onclick="pickDay('${ds}')">
+      <b>${d}</b><small>${st.kcal ? num(st.kcal) : "·"}</small></button>`;
+  }
+  calGrid.innerHTML = html;
+}
+
 // ═════════ 이동 ═════════
 function setSection(s) {
   section = s;
@@ -1131,7 +1260,7 @@ function render() {
 }
 
 function renderDay() {
-  datePicker.value = curDate;
+  datePicker.textContent = dateLabel(curDate);
   const list = dayLog(curDate), t = totals(list);
   const g = dayTarget(curDate);
 
@@ -1157,12 +1286,22 @@ function renderDay() {
 
   // 요약
   const left = g.kcal - t.kcal;
+  // 유지 열량(TDEE) 대비 실제 적자 — 목표를 넘겨도 적자일 수 있다
+  const tdeeToday = g.adjusted ? g.tdee : w.avg;
+  const realDef = tdeeToday - t.kcal;
   summaryCard.innerHTML = `
     <div class="remain-big">
       <b style="color:${left < 0 ? "var(--red)" : "var(--text)"}">${num(Math.abs(left))}</b>
-      <em>kcal ${left < 0 ? "초과" : "남음"}</em>
+      <em>kcal 목표 ${left < 0 ? "초과" : "남음"}</em>
       <span class="r">섭취 ${num(t.kcal)} / 목표 ${num(g.kcal)}<br>${g.adjusted ? "🔥 " + esc(g.src) : "주 평균 목표"}</span>
-    </div>` +
+    </div>
+    ${t.kcal ? `<div class="diff" style="margin-top:-4px;margin-bottom:12px">
+      유지 열량 <b>${num(tdeeToday)}</b> 대비
+      <b style="color:${realDef > 0 ? "var(--green)" : "var(--red)"}">${realDef > 0 ? "−" + num(realDef) + " 적자" : "+" + num(-realDef) + " 흑자"}</b>
+      · 이 페이스면 주당 <b>${(Math.abs(realDef) * 7 / 7700).toFixed(2)}kg</b> ${realDef > 0 ? "감량" : "증량"}
+      ${realDef > 0 && left < 0 ? `<br><span style="color:var(--sub)">목표는 넘겼지만 여전히 적자입니다 — 감량은 계속 됩니다. 다만 속도는 목표(${(calc.deficit*7/7700).toFixed(2)}kg/주)보다 느려집니다.</span>` : ""}
+      ${realDef < 0 ? `<br><span style="color:var(--sub)">유지 열량을 넘겼습니다. 오늘은 적자가 없습니다.</span>` : ""}
+    </div>` : ""}` +
     [{ l: "칼로리", v: t.kcal, g: g.kcal, u: "kcal", c: "var(--kcal)" },
      { l: "단백질", v: t.p, g: g.p, u: "g", c: "var(--protein)", more: true },
      { l: "탄수화물", v: t.c, g: g.c, u: "g", c: "var(--carb)" },
@@ -1192,12 +1331,12 @@ function renderDay() {
     "";
 
   // 끼니 카드
-  mealsEl.innerHTML = MEALS.map(m => {
+  mealsEl.innerHTML = meals().map((m, mi) => {
     const items = mealLog(curDate, m), mt = totals(items), open = mealOpen[m] !== false;
     return `<div class="meal">
       <div class="meal-head" onclick="toggleMeal('${m}')">
-        <span>${MEAL_ICON[m]}</span>
-        <span class="nm">${m === "간식" ? "간식/기타" : m + " 식사"}</span>
+        <span style="width:9px;height:9px;border-radius:3px;background:${mealColor(mi)};flex:none"></span>
+        <span class="nm">${m}</span>
         <span class="kc">${items.length ? num(mt.kcal) : "-"}</span>
         <span class="pct">${items.length && g.kcal ? Math.round(mt.kcal / g.kcal * 100) + "%" : ""}</span>
         <span class="arw">${open ? "▲" : "▼"}</span>
@@ -1257,8 +1396,13 @@ function renderDay() {
     ["식이섬유 (하한)", `${fmt(t.fib)} / ${goals.fib} g`, t.fib >= goals.fib ? "good" : t.fib ? "bad" : null],
   ].map(([l, v, s]) => `<div><span class="lbl">${l}</span><span${cls(s)}>${v}</span></div>`).join("");
 
-  if (!fMeal.options.length) fMeal.innerHTML = MEALS.map(m => `<option>${m}</option>`).join("");
-  if (!fMeal.value) fMeal.value = guessMeal();
+  fMeal.innerHTML = meals().map(m => `<option>${m}</option>`).join("");
+  fMeal.value = meals().includes(fMeal.dataset.v) ? fMeal.dataset.v : guessMeal();
+  fMeal.onchange = () => { fMeal.dataset.v = fMeal.value; };
+  mealsEl.innerHTML += `<div class="btns" style="margin-bottom:10px">
+    <button class="btn dash" onclick="setMealCount(mealCount + 1)">＋ 끼니 추가 (지금 ${mealCount}끼)</button>
+    ${mealCount > 1 ? `<button class="btn dash" onclick="setMealCount(mealCount - 1)">− 마지막 끼니 제거</button>` : ""}
+  </div>`;
   renderSets(g);
   renderStreak();
 }
@@ -1273,8 +1417,9 @@ function foodRow(x, i, mine) {
   </div>`;
 }
 function renderFoods() {
-  if (!fdMeal.options.length) fdMeal.innerHTML = MEALS.map(m => `<option>${m}</option>`).join("");
-  if (!fdMeal.value) fdMeal.value = guessMeal();
+  const prev = fdMeal.value;
+  fdMeal.innerHTML = meals().map(m => `<option>${m}</option>`).join("");
+  fdMeal.value = meals().includes(prev) ? prev : guessMeal();
   const q = foodQ2.trim().toLowerCase();
   const hit = x => !q || x.name.toLowerCase().includes(q);
 
@@ -1330,7 +1475,7 @@ function renderSets(g) {
   setsCard.innerHTML = `<h3>자주 먹는 끼니 <span class="muted">칩 한 번 = 끼니 전체 기록</span></h3>
     <div class="presets">` + sets.map((st, i) => {
       const t = totals(st.items);
-      return `<span class="chip" onclick="logSet(${i})">${MEAL_ICON[st.meal] || ""} ${esc(st.name)} · ${num(t.kcal)}kcal P${fmt(t.p)}<span class="x" onclick="event.stopPropagation();delSet(${i})">×</span></span>`;
+      return `<span class="chip" onclick="logSet(${i})">${esc(st.meal || "")} ${esc(st.name)} · ${num(t.kcal)}kcal P${fmt(t.p)}<span class="x" onclick="event.stopPropagation();delSet(${i})">×</span></span>`;
     }).join("") + `</div>`;
 }
 function toggleMeal(m) { mealOpen[m] = (mealOpen[m] === false); render(); }
@@ -1411,50 +1556,90 @@ function renderWeek() {
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   weekLabel.textContent = `${start.slice(5).replace("-", "/")} ~ ${days[6].slice(5).replace("-", "/")}`;
   const names = ["월", "화", "수", "목", "금", "토", "일"];
+  const today = todayStr();
 
+  const rows = days.map((d, i) => {
+    const t = totals(dayLog(d));
+    const g = dayTarget(d).kcal || goals.kcal;
+    return { d, dow: names[i], t, g, diff: t.kcal - g, logged: t.kcal > 0, future: d > today };
+  });
+  const done = rows.filter(r => r.logged);
+  const sumDiff = done.reduce((a, r) => a + r.diff, 0);
+  const sumEat = done.reduce((a, r) => a + r.t.kcal, 0);
+  const sumGoal = done.reduce((a, r) => a + r.g, 0);
+  const fatKg = sumDiff / 7700;                       // 지방 1kg = 7,700kcal
+
+  // ── 이번 주 장부: 적자 합계 → 예상 체지방 변화 (인바디와 크로스체크용)
+  const wk = calcWeek();
+  weekLedger.innerHTML = `
+    <h3>이번 주 장부 <span class="muted">기록한 ${done.length}일 기준</span></h3>
+    <div class="stats">
+      <div class="stat"><span>섭취 합계</span><b>${num(sumEat)}</b></div>
+      <div class="stat"><span>목표 합계</span><b>${num(sumGoal)}</b></div>
+      <div class="stat"><span>과부족</span><b style="color:${sumDiff > 0 ? "var(--red)" : "var(--green)"}">${sumDiff > 0 ? "+" : ""}${num(sumDiff)}</b></div>
+      <div class="stat"><span>예상 체지방</span><b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b></div>
+    </div>
+    <div class="diff">
+      목표를 그대로 지켰다면 기록한 ${done.length}일 동안 <b>체지방 ${(done.length * calc.deficit / 7700).toFixed(2)}kg</b> 이 줄어야 합니다
+      (적자 ${num(calc.deficit)} × ${done.length}일 ÷ 7,700).<br>
+      실제 기록으로는 <b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b> 입니다
+      ${Math.abs(sumDiff) > 500 ? `— 목표 대비 ${num(Math.abs(sumDiff))}kcal ${sumDiff > 0 ? "더 먹었습니다" : "덜 먹었습니다"}` : "— 목표에 거의 맞았습니다"}.
+      <br><span style="color:var(--sub)">다음 인바디의 체지방량과 비교해보세요. 크게 다르면 ① 기록 누락 ② 활동 소모 추정 오차(웨이트 ${LIFT_K}kcal/kg/h) ③ 수분 변동 순으로 의심하면 됩니다.</span>
+    </div>`;
+
+  // ── 일별 탄단지 (칼로리 기준 스택)
   if (weekChart) { weekChart.destroy(); weekChart = null; }
   weekChart = newChart(document.getElementById("weekChart"), {
     type: "bar",
-    data: { labels: names.map((n, i) => `${n} ${+days[i].slice(8)}`),
-      datasets: MEALS.map(m => ({ label: m, stack: "eaten", backgroundColor: MEAL_COLOR[m], borderRadius: 3,
-        data: days.map(d => Math.round(totals(mealLog(d, m)).kcal)) }))
-        .concat([{ label: "목표", type: "line", stack: "goal", data: days.map(d => dayTarget(d).kcal),
-          borderColor: "#9ca3af", borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5 }]) },
+    data: { labels: rows.map((r, i) => `${r.dow} ${+r.d.slice(8)}`),
+      datasets: [
+        { label: "탄수", stack: "m", backgroundColor: "#f59e0b", borderRadius: 3, data: rows.map(r => Math.round(r.t.c * 4)) },
+        { label: "단백질", stack: "m", backgroundColor: "#ef4444", borderRadius: 3, data: rows.map(r => Math.round(r.t.p * 4)) },
+        { label: "지방", stack: "m", backgroundColor: "#8b5cf6", borderRadius: 3, data: rows.map(r => Math.round(r.t.f * 9)) },
+        { label: "목표", type: "line", stack: "g", data: rows.map(r => r.g),
+          borderColor: "#9ca3af", borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5 },
+      ] },
     options: { plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
-      scales: { y: { stacked: true, beginAtZero: true, suggestedMax: goals.kcal * 1.2, grid: { color: "rgba(148,163,184,.18)" } },
+      scales: { y: { stacked: true, beginAtZero: true, grid: { color: "rgba(148,163,184,.18)" } },
         x: { stacked: true, grid: { display: false } } } },
   });
 
-  const weekAll = days.flatMap(d => dayLog(d)), weekKcal = totals(weekAll).kcal;
-  weekMealBreak.innerHTML = MEALS.map(m => {
-    const mk = totals(days.flatMap(d => mealLog(d, m))).kcal;
-    return `<div class="mrow" style="padding:8px 0">
-      <span style="width:11px;height:11px;border-radius:3px;background:${MEAL_COLOR[m]};flex:none"></span>
-      <span class="nm">${m === "간식" ? "간식/기타" : m + " 식사"}</span>
-      <span style="color:var(--sub);font-size:12px">(${weekKcal ? Math.round(mk / weekKcal * 100) : 0}%)</span>
-      <span class="kc" style="color:var(--green)">${mk ? num(mk) : "-"}</span></div>`;
+  // ── 일별 표
+  weekRows.innerHTML = rows.map(r => {
+    if (!r.logged) return `<tr style="opacity:.45"><td>${r.dow} ${+r.d.slice(8)}</td><td colspan="4">${r.future ? "—" : "기록 없음"}</td></tr>`;
+    const ak = r.t.p * 4 + r.t.c * 4 + r.t.f * 9;
+    const pc = k => ak ? Math.round(k / ak * 100) : 0;
+    return `<tr><td>${r.dow} ${+r.d.slice(8)}${r.d === today ? " ●" : ""}</td>
+      <td>${num(r.t.kcal)}</td><td>${num(r.g)}</td>
+      <td style="color:${r.diff > 0 ? "var(--red)" : "var(--green)"};font-weight:700">${r.diff > 0 ? "+" : ""}${num(r.diff)}</td>
+      <td style="font-size:11px">${fmt(r.t.c)}/${fmt(r.t.p)}/${fmt(r.t.f)}g<br><span style="color:var(--sub)">${pc(r.t.c*4)}:${pc(r.t.p*4)}:${pc(r.t.f*9)}%</span></td></tr>`;
   }).join("");
+  weekFoot.innerHTML = done.length ? `<tr><td>합계 ${done.length}일</td><td>${num(sumEat)}</td><td>${num(sumGoal)}</td>
+    <td style="color:${sumDiff > 0 ? "var(--red)" : "var(--green)"}">${sumDiff > 0 ? "+" : ""}${num(sumDiff)}</td>
+    <td style="font-size:11px">${fmt(done.reduce((a,r)=>a+r.t.c,0))}/${fmt(done.reduce((a,r)=>a+r.t.p,0))}/${fmt(done.reduce((a,r)=>a+r.t.f,0))}g</td></tr>` : "";
 
-  const logged = days.map(d => totals(dayLog(d))).filter(x => x.kcal > 0);
-  const n = logged.length || 1, avg = k => Math.round(logged.reduce((s, x) => s + x[k], 0) / n);
-  const actDays = days.filter(d => act[d]).length;
-  weekStats.innerHTML = logged.length ? `
+  // ── 주간 평균
+  const n = done.length || 1, avg = k => Math.round(done.reduce((a, r) => a + r.t[k], 0) / n);
+  weekStats.innerHTML = done.length ? `
     <div class="stat"><span>평균 칼로리</span><b>${num(avg("kcal"))}</b></div>
     <div class="stat"><span>평균 단백질</span><b>${avg("p")}g</b></div>
     <div class="stat"><span>평균 탄수</span><b>${avg("c")}g</b></div>
     <div class="stat"><span>평균 지방</span><b>${avg("f")}g</b></div>
     <div class="stat"><span>평균 나트륨</span><b style="color:${avg("na") > goals.na ? "var(--red)" : "var(--text)"}">${num(avg("na"))}mg</b></div>
     <div class="stat"><span>평균 식이섬유</span><b style="color:${avg("fib") < goals.fib ? "var(--red)" : "var(--green)"}">${avg("fib")}g</b></div>
-    <div class="stat"><span>기록한 날</span><b>${logged.length}일</b></div>
-    <div class="stat"><span>활동 기록</span><b>${actDays}일</b></div>
+    <div class="stat"><span>기록한 날</span><b>${done.length}일</b></div>
+    <div class="stat"><span>활동 기록</span><b>${days.filter(d => act[d]).length}일</b></div>
   ` : `<div class="stat" style="grid-column:1/-1"><span>이번 주 기록 없음</span></div>`;
 
+  // ── 섭취한 음식
   const freq = {};
-  weekAll.forEach(x => { const f = freq[x.name] || (freq[x.name] = { n: 0, kcal: 0 }); f.n++; f.kcal += (+x.kcal || 0); });
+  days.flatMap(d => dayLog(d)).forEach(x => {
+    const f = freq[x.name] || (freq[x.name] = { n: 0, kcal: 0 }); f.n++; f.kcal += (+x.kcal || 0);
+  });
   const fr = Object.entries(freq).sort((a, b) => b[1].kcal - a[1].kcal);
   freqEmpty.style.display = fr.length ? "none" : "block";
   freqBody.innerHTML = fr.map(([nm, v]) => `<tr><td>${esc(nm)}</td><td>x${v.n} =</td><td>${num(v.kcal)}</td></tr>`).join("");
-  freqFoot.innerHTML = fr.length ? `<tr><td>총</td><td>x${fr.reduce((s, [, v]) => s + v.n, 0)} =</td><td>${num(weekKcal)}</td></tr>` : "";
+  freqFoot.innerHTML = fr.length ? `<tr><td>총</td><td>x${fr.reduce((a, [, v]) => a + v.n, 0)} =</td><td>${num(sumEat)}</td></tr>` : "";
   renderStreak();
 }
 
@@ -1649,7 +1834,7 @@ function planLoggedFlags(ds) {
   });
 }
 async function logMeal(i) {
-  const m = plan[i], meal = slotOf(m.time);
+  const m = plan[i], meal = mealName(Math.min(mealCount - 1, i));
   for (const it of m.items) await pushItem({ date: curDate, meal, name: it.name, kcal: it.kcal, p: it.p, c: it.c,
     f: it.f, na: +it.na || 0, fib: +it.fib || 0, sug: +it.sug || 0 });
   render();
@@ -1683,7 +1868,7 @@ function addPlanItem(e, i) {
   f.reset(); savePlan(); render();
 }
 function renderPlan() {
-  planDate.value = curDate;
+  planDate.textContent = dateLabel(curDate);
   const t = planTotals(), g = dayTarget(curDate);
   const wt = calcBase().wt, bmr = calcBase().bmr;
   const minFat = wt ? Math.round(wt * 0.6) : 60, minCarb = wt ? Math.round(wt) : 100;
@@ -1716,7 +1901,7 @@ function renderPlan() {
       <div class="plan-head">
         <input type="time" value="${esc(m.time)}" onchange="setPlanTime(${i}, this.value)">
         <input class="pname" value="${esc(m.name)}" onchange="setPlanName(${i}, this.value)">
-        <span class="kc">${MEAL_ICON[slotOf(m.time)]}${slotOf(m.time)} · ${num(mt.kcal)}kcal</span>
+        <span class="kc">${mealName(Math.min(mealCount - 1, i))} · ${num(mt.kcal)}kcal</span>
         <button class="del" title="끼니 삭제" onclick="delPlanMeal(${i})">✕</button>
       </div>
       ${m.items.length ? m.items.map((it, j) => `<div class="plan-item">
@@ -2066,7 +2251,7 @@ async function applyPayload(o) {
   for (const it of (o.food || [])) {
     if (!it || !it.name) continue;
     const d = it.date || todayStr(), m = it.meal || guessMeal();
-    if (dayLog(d).some(x => (x.meal || "간식") === m && x.name === it.name
+    if (dayLog(d).some(x => mealOf(x) === m && x.name === it.name
                             && Math.abs((+x.kcal || 0) - (+it.kcal || 0)) < 1)) { skipped++; continue; }
     await pushItem({ ...it, date: d, meal: m });
     done.push(`${d} ${m} · ${it.name}`);
