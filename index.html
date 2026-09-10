@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>바디빌딩 트래커</title>
 <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<!-- 갤럭시 설치앱의 상단 상태바(카메라 줄)를 앱 배경과 같은 색으로 칠한다.
+     media 속성만으로는 설치앱에서 안 먹는 기기가 있어 아래 스크립트가 실제 테마를 보고 다시 넣는다 -->
+<meta name="theme-color" id="themeColor" content="#f4f5f7">
+<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -49,6 +52,8 @@
     display: flex; align-items: center; gap: 8px;
     background: var(--bg); border-bottom: 1px solid var(--line);
   }
+  /* 상태바·카메라 줄 뒤까지 같은 배경이 깔리게 (viewport-fit=cover 와 짝) */
+  html { background: var(--bg); }
   .appbar .logo { font-size: 16px; font-weight: 800; letter-spacing: -.3px; }
   .appbar .spacer { flex: 1; }
   .appbar button { background: none; border: none; cursor: pointer; font-size: 17px; padding: 2px 4px; }
@@ -91,7 +96,8 @@
   .seg button { flex: 1; border: none; background: none; padding: 8px; border-radius: 8px; cursor: pointer; color: var(--sub); font-weight: 600; }
   .seg button.on { background: var(--card); color: var(--text); font-weight: 700; box-shadow: var(--shadow); }
   .nav { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 11px; }
-  .nav button { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; width: 34px; height: 34px; font-size: 15px; cursor: pointer; }
+  /* 날짜 버튼은 제외한다 — .nav button 쪽 명시도가 더 높아서 width:34px 이 이겨버린다 */
+  .nav > button:not(.datebtn) { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; width: 34px; height: 34px; font-size: 15px; cursor: pointer; flex: 0 0 34px; }
   .nav .label { font-size: 15px; font-weight: 700; min-width: 150px; text-align: center; }
   .nav input[type=date] { border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; background: var(--card); }
 
@@ -101,6 +107,13 @@
   .macro .st { flex: 0 0 auto; font-size: 11.5px; white-space: nowrap; }
   .bar { flex: 0 0 62px; width: 62px; height: 7px; background: var(--card2); border-radius: 4px; overflow: hidden; }
   .bar > div { height: 100%; border-radius: 4px; transition: width .3s; }
+
+  /* 계산 근거 한 줄 (눌러서 펼침) */
+  .calcline { display: flex; align-items: center; gap: 12px; cursor: pointer;
+    margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--sub); }
+  .calcline b { color: var(--text); font-size: 13px; }
+  .calcline i { margin-left: auto; font-style: normal; font-size: 9px; }
 
   /* 남은 칼로리 */
   .remain-big { display: flex; align-items: baseline; gap: 9px; padding-bottom: 13px; margin-bottom: 13px; border-bottom: 1px solid var(--line); }
@@ -220,9 +233,12 @@
 
   canvas { max-height: 250px; }
   /* 달력 */
+  /* 화살표와 달리 남는 폭을 차지한다. 글자가 커도 버튼 밖으로 새지 않게 잘라낸다
+     (.nav button 의 width:34px 을 반드시 되돌려야 한다 — 안 그러면 버튼이 화살표 크기로 쪼그라든다) */
   .datebtn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px;
              padding: 8px 12px; font-size: 14px; font-weight: 700; cursor: pointer;
-             white-space: nowrap; flex: 0 1 auto; min-width: 0; }
+             width: auto; height: auto; flex: 1 1 auto; min-width: 0; max-width: 100%;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
   .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
   .cal .dow { text-align: center; font-size: 10.5px; color: var(--sub); padding: 3px 0 5px; }
   .cal .dow.sun { color: var(--red); }
@@ -391,24 +407,6 @@
   </div>
 </section>
 
-<!-- ══════════ 계획 ══════════ -->
-<section id="section-plan" style="display:none">
-  <div class="nav">
-    <button onclick="moveDay(-1)">‹</button>
-    <button class="datebtn" id="planDate" onclick="openCal()"></button>
-    <button onclick="moveDay(1)">›</button>
-  </div>
-  <div class="card" id="planSummary"></div>
-  <div id="planMeals"></div>
-  <div class="card">
-    <div class="btns">
-      <button class="btn dash" onclick="addPlanMeal()">＋ 끼니 추가</button>
-      <button class="btn dash" onclick="resetPlan()">기본 계획으로 초기화</button>
-    </div>
-    <div class="hint">시간·이름은 눌러서 바로 수정. [기록]을 누르면 위 날짜의 식단으로 들어가고, 시간대에 맞는 끼니로 자동 분류됩니다.</div>
-  </div>
-</section>
-
 <!-- ══════════ 열량 ══════════ -->
 <section id="section-cal" style="display:none">
   <div class="card" id="calBase"></div>
@@ -540,7 +538,6 @@
 <!-- ══════════ 하단 탭 ══════════ -->
 <nav class="tabbar">
   <button id="sec-diet" class="on" onclick="setSection('diet')"><i>🥗</i>식단</button>
-  <button id="sec-plan" onclick="setSection('plan')"><i>📋</i>계획</button>
   <button id="sec-cal" onclick="setSection('cal')"><i>🔥</i>열량</button>
   <button id="sec-food" onclick="setSection('food')"><i>🍽️</i>음식</button>
   <button id="sec-inbody" onclick="setSection('inbody')"><i>📊</i>인바디</button>
@@ -666,12 +663,8 @@ const DEFAULT_CALC = {
 const DEFAULT_PRESETS = [
   // 제품 영양정보표 실측값
   { name: "서동 닭다리살 1개", kcal: 115, p: 16, c: 8, f: 2.1, na: 552, fib: 0, sug: 1 },
-  { name: "BSN 아이솔레이트 1스쿱", kcal: 140, p: 25, c: 6, f: 2, na: 135, fib: 0, sug: 2 },
-  { name: "양반 현미밥 130g", kcal: 210, p: 3, c: 45, f: 1.8, na: 15, fib: 1.5, sug: 0 },
   { name: "아몬드 15알", kcal: 105, p: 4, c: 4, f: 9, na: 0, fib: 2.3, sug: 0.8 },
   { name: "채소 한 접시 150g", kcal: 45, p: 3, c: 8, f: 0.3, na: 30, fib: 3, sug: 2 },
-  { name: "계란 1개", kcal: 72, p: 6.3, c: 0.4, f: 5, na: 70, fib: 0, sug: 0.2 },
-  { name: "고등어구이 300g", kcal: 569, p: 52.8, c: 1.1, f: 37.8, na: 400, fib: 0, sug: 0 },
   { name: "귀리 80g", kcal: 304, p: 10.4, c: 52.8, f: 5.6, na: 2, fib: 8, sug: 0.8 },
   { name: "고구마 200g", kcal: 172, p: 2, c: 40, f: 0.2, na: 20, fib: 4.6, sug: 8 },
 ];
@@ -756,15 +749,17 @@ const MEAL_SET = [
   { name: "양반 현미밥 130g", kcal: 210, p: 3, c: 45, f: 1.8, na: 15, fib: 1.5, sug: 0 },
   { name: "채소 한 접시 150g", kcal: 45, p: 3, c: 8, f: 0.3, na: 30, fib: 3, sug: 2 },
 ];
-const DEFAULT_PLAN = [
-  { time: "09:00", name: "기상 후", items: [{ name: "BSN 아이솔레이트 1스쿱", kcal: 140, p: 25, c: 6, f: 2, na: 135, fib: 0, sug: 2 }] },
-  { time: "10:30", name: "1식", items: MEAL_SET.map(x => ({ ...x })) },
-  { time: "13:00", name: "쉐이크", items: [{ name: "BSN 아이솔레이트 1스쿱", kcal: 140, p: 25, c: 6, f: 2, na: 135, fib: 0, sug: 2 }] },
-  { time: "16:30", name: "2식", items: MEAL_SET.map(x => ({ ...x })) },
-  { time: "20:00", name: "3식", items: MEAL_SET.map(x => ({ ...x })) },
-];
 
 // ═════════ 상태 ═════════
+// 상단 상태바 색을 지금 테마의 배경색으로 맞춘다 — 밝은 화면에 검은 띠가 남지 않게
+(function syncThemeColor() {
+  const mq = matchMedia("(prefers-color-scheme: dark)");
+  const put = () => {
+    const el = document.getElementById("themeColor");
+    if (el) el.setAttribute("content", mq.matches ? "#0b1220" : "#f4f5f7");
+  };
+  put(); mq.addEventListener ? mq.addEventListener("change", put) : mq.addListener(put);
+})();
 function load(k, fb) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? fb; } catch { return fb; } }
 function save(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
 
@@ -826,11 +821,13 @@ function readHash() {
   return got;
 }
 readHash();
-let plan = load("dt_plan", DEFAULT_PLAN);
 let sets = load("dt_sets", []);               // 자주 먹는 끼니 조합
 let mealCount = Math.max(1, Math.min(9, +load("dt_mealcount", 3) || 3));
-let planFormOpen = -1;
-let section = "diet", view = "day";
+// 아래로 당겨 새로고침하면 매번 식단으로 돌아가던 것 — 보던 화면을 기억한다
+const SECTIONS = ["diet", "cal", "food", "inbody"];
+let section = SECTIONS.includes(load("dt_section", "")) ? load("dt_section", "") : "diet";
+let view = ["day", "week", "month"].includes(load("dt_view", "")) ? load("dt_view", "") : "day";
+let calcOpen = load("dt_calc_open", false);   // 요약 카드의 계산 근거를 펼쳤나
 let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
 let weekChart = null, monthChart = null, ratioChart = null, ibChart1 = null, ibChart2 = null;
@@ -895,7 +892,7 @@ const nowIso = () => new Date().toISOString();
 function saveGoals() { goals = { ...goals, at: nowIso() }; save("dt_goals", goals); return setMeta("goals", goals); }
 function saveCalcMeta() { calc = { ...calc, at: nowIso() }; save("dt_calc", calc); return setMeta("calc", calc); }
 // 로컬의 최신 설정값을 돌려주는 표 — flushMeta 가 무엇을 올릴지 여기서 찾는다
-function localMeta() { return { goals, presets, plan, calc, act, sets, mealcount: mealCount }; }
+function localMeta() { return { goals, presets, calc, act, sets, mealcount: mealCount }; }
 async function flushMeta() {
   const local = localMeta();
   for (const k of Object.keys(metaDirty)) {
@@ -911,7 +908,6 @@ async function syncRange(from, to) {
   r.items.forEach(it => { (cache[it.date] = cache[it.date] || []).push(it); });
   if (r.goals) { goals = { ...DEFAULT_GOALS, ...r.goals }; save("dt_goals", goals); }
   if (r.presets) { presets = r.presets; save("dt_presets", presets); }
-  if (r.plan) { plan = r.plan; save("dt_plan", plan); }
   if (r.calc) { calc = { ...DEFAULT_CALC, ...r.calc }; save("dt_calc", calc); }
   if (r.act) { act = r.act; save("dt_act", act); }
   if (r.sets) { sets = r.sets; save("dt_sets", sets); }
@@ -1220,7 +1216,7 @@ const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 function dateLabel(ds) {
   const d = new Date(ds + "T00:00:00");
   const tag = ds === todayStr() ? " · 오늘" : ds === addDays(todayStr(), -1) ? " · 어제" : "";
-  return `${+ds.slice(5, 7)}월 ${+ds.slice(8)}일 (${DOW[d.getDay()]})${tag}`;
+  return `${+ds.slice(5, 7)}/${+ds.slice(8)} (${DOW[d.getDay()]})${tag}`;
 }
 async function openCal() {
   calMonth = curDate.slice(0, 7);
@@ -1265,15 +1261,16 @@ function renderCalendar() {
 
 // ═════════ 이동 ═════════
 function setSection(s) {
-  section = s;
-  ["diet", "plan", "cal", "food", "inbody"].forEach(x => {
+  section = s; save("dt_section", s);
+  SECTIONS.forEach(x => {
     document.getElementById("section-" + x).style.display = x === s ? "" : "none";
     document.getElementById("sec-" + x).classList.toggle("on", x === s);
   });
   window.scrollTo({ top: 0 }); render();
 }
+function toggleCalcDetail() { calcOpen = !calcOpen; save("dt_calc_open", calcOpen); render(); }
 function setView(v) {
-  view = v;
+  view = v; save("dt_view", v);
   ["day", "week", "month"].forEach(x => {
     document.getElementById("view-" + x).style.display = x === v ? "" : "none";
     document.getElementById("tab-" + x).classList.toggle("on", x === v);
@@ -1291,7 +1288,6 @@ async function moveMonth(n) {
 
 // ═════════ 렌더 ═════════
 function render() {
-  if (section === "plan") return renderPlan();
   if (section === "cal") return renderCal();
   if (section === "food") return renderFoods();
   if (section === "inbody") return renderInbody();
@@ -1316,14 +1312,11 @@ function renderDay() {
   const w = calcWeek(curDate);          // 이 날짜에 유효했던 인바디 기준
   actInfo.innerHTML = !w.wt
     ? `인바디 탭에서 <b>체중·기초대사량</b>을 먼저 넣어주세요. 그때부터 활동량이 목표에 반영됩니다.`
-    : g.adjusted
-      ? `이날 TDEE <b>${num(g.tdee)}</b> − 적자 ${calc.deficit} → 목표 <b>${num(g.kcal)}kcal</b> · ${esc(g.src)}`
-      : `활동 미입력 — 주 평균 목표 <b>${num(goals.kcal)}kcal</b>를 씁니다. 저장하면 이날 것만 다시 계산됩니다.`;
+    : g.adjusted ? `이날 목표 <b>${num(g.kcal)}kcal</b>`
+                 : `활동을 넣으면 이날 목표를 다시 계산합니다`;
   // 완전휴식일엔 조정 목표가 기초대사량 밑으로 떨어질 수 있다
   if (g.adjusted && w.bmr && g.kcal <= r25(w.bmr) && (g.tdee - calc.deficit) < w.bmr)
-    actInfo.innerHTML += `<div class="hint">ℹ️ 적자 ${calc.deficit} 를 그대로 빼면 ${num(g.tdee - calc.deficit)}kcal 로 기초대사량(${num(w.bmr)}) 아래가 됩니다. 그래서 <b>기초대사량을 바닥으로 잡아</b> ${num(g.kcal)}kcal 로 올렸습니다 — 이날 실제 적자는 ${num(g.tdee - g.kcal)}kcal 입니다.</div>`;
-  if (false && g.adjusted && w.bmr && g.kcal < w.bmr)
-    actInfo.innerHTML += `<div class="warn">⚠️ 이날 목표 ${num(g.kcal)}kcal 이 기초대사량 ${num(w.bmr)}kcal 보다 낮습니다. 휴식일이라도 기초대사량 아래로는 내리지 마세요 — 적자를 줄이거나 걸음 수를 늘리는 쪽이 낫습니다.</div>`;
+    actInfo.innerHTML += ` <span style="color:var(--sub)">· 기초대사량 바닥선 적용</span>`;
 
   // 요약
   const left = g.kcal - t.kcal;
@@ -1333,43 +1326,41 @@ function renderDay() {
   summaryCard.innerHTML = `
     <div class="remain-big">
       <b style="color:${left < 0 ? "var(--red)" : "var(--text)"}">${num(Math.abs(left))}</b>
-      <em>kcal 목표 ${left < 0 ? "초과" : "남음"}</em>
-      <span class="r">섭취 ${num(t.kcal)} / 목표 ${num(g.kcal)}<br>${g.adjusted ? "🔥 " + esc(g.src) : "주 평균 목표"}</span>
-    </div>
-    ${t.kcal ? `<div class="diff" style="margin-top:-4px;margin-bottom:12px">
-      유지 열량 <b>${num(tdeeToday)}</b> 대비
-      <b style="color:${realDef > 0 ? "var(--green)" : "var(--red)"}">${realDef > 0 ? "−" + num(realDef) + " 적자" : "+" + num(-realDef) + " 흑자"}</b>
-      · 이 페이스면 주당 <b>${(Math.abs(realDef) * 7 / 7700).toFixed(2)}kg</b> ${realDef > 0 ? "감량" : "증량"}
-      ${realDef > 0 && left < 0 ? `<br><span style="color:var(--sub)">목표는 넘겼지만 여전히 적자입니다 — 감량은 계속 됩니다. 다만 속도는 목표(${(calc.deficit*7/7700).toFixed(2)}kg/주)보다 느려집니다.</span>` : ""}
-      ${realDef < 0 ? `<br><span style="color:var(--sub)">유지 열량을 넘겼습니다. 오늘은 적자가 없습니다.</span>` : ""}
-    </div>` : ""}` +
+      <em>kcal ${left < 0 ? "초과" : "남음"}</em>
+      <span class="r">${g.adjusted ? "🔥 " + esc(g.src) : "주 평균 목표"}</span>
+    </div>` +
     [{ l: "칼로리", v: t.kcal, g: g.kcal, u: "kcal", c: "var(--kcal)" },
      { l: "단백질", v: t.p, g: g.p, u: "g", c: "var(--protein)", more: true },
      { l: "탄수화물", v: t.c, g: g.c, u: "g", c: "var(--carb)" },
      { l: "지방", v: t.f, g: g.f, u: "g", c: "var(--fat)" }].map(r => {
       const pct = r.g ? Math.min(100, r.v / r.g * 100) : 0, over = r.v - r.g;
-      const st = over > 0 ? (r.more ? `<span class="good">달성 +${fmt(over)}${r.u}</span>` : `<span class="over">${fmt(over)}${r.u} 초과</span>`)
-                          : `<span class="remain">${fmt(r.g - r.v)}${r.u} 남음</span>`;
+      const st = over > 0 ? (r.more ? `<span class="good">+${fmt(over)}${r.u}</span>` : `<span class="over">+${fmt(over)}${r.u}</span>`)
+                          : `<span class="remain">${fmt(r.g - r.v)}${r.u}</span>`;
       return `<div class="macro">
         <span class="lab"><b>${r.l}</b> ${fmt(r.v)} / ${r.g}${r.u}</span>
         <span class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.c}"></div></span>
         <span class="st">${st}</span></div>`;
     }).join("") +
-    `<div class="diff" style="border-top:1px solid var(--line);padding-top:11px;margin-top:12px">
-      <b>기초대사량 ${num(w.bmr)}</b> <span style="color:var(--sub)">(인바디 ${(w.ibDate || "").slice(2) || "-"} 기준)</span><br>
-      ＋ 좌식·소화열 ×${calc.af} <b>${num(w.sed)}</b><br>
+    // 계산 근거는 기본으로 접어둔다 — 매일 볼 필요는 없고, 궁금할 때만 펼치면 된다
+    `<div class="calcline" onclick="toggleCalcDetail()">
+      <span>유지 <b>${num(tdeeToday)}</b></span>
+      <span>${realDef >= 0 ? "적자" : "흑자"} <b style="color:${realDef >= 0 ? "var(--green)" : "var(--red)"}">${num(Math.abs(realDef))}</b></span>
+      <span>주 <b>${(Math.abs(realDef) * 7 / 7700).toFixed(2)}kg</b></span>
+      <i>${calcOpen ? "▲" : "▼"}</i>
+    </div>` +
+    (calcOpen ? `<div class="diff" style="padding-top:9px">
+      <b>기초대사량 ${num(w.bmr)}</b> <span style="color:var(--sub)">(인바디 ${(w.ibDate || "").slice(2) || "-"})</span><br>
+      ＋ 좌식·소화열 ×${calc.af} → <b>${num(w.sed)}</b><br>
       ${g.adjusted
         ? `＋ 오늘 활동 <b>+${num(g.tdee - w.sed)}</b> <span style="color:var(--sub)">(${esc(g.src)})</span><br>
-           ＝ <b>오늘 유지 열량 ${num(g.tdee)}</b><br>
-           − 적자 <b>${num(calc.deficit)}</b> → 목표 <b style="color:var(--accent)">${num(g.kcal)}</b>
-           ${g.kcal > g.tdee - calc.deficit ? `<span style="color:var(--sub)">(기초대사량 바닥선 적용 · 실제 적자 ${num(g.tdee - g.kcal)})</span>` : ""}`
+           ＝ 유지 열량 <b>${num(g.tdee)}</b> − 적자 ${num(calc.deficit)} → 목표 <b style="color:var(--accent)">${num(g.kcal)}</b>
+           ${g.kcal > g.tdee - calc.deficit ? `<br><span style="color:var(--sub)">기초대사량 바닥선 적용 · 실제 적자 ${num(g.tdee - g.kcal)}</span>` : ""}`
         : `＋ 평소 활동 <b>+${num(w.avg - w.sed)}</b> <span style="color:var(--sub)">(주 평균)</span><br>
-           ＝ <b>유지 열량 ${num(w.avg)}</b><br>
-           − 적자 <b>${num(calc.deficit)}</b> → 목표 <b style="color:var(--accent)">${num(goals.kcal)}</b>
-           <span style="color:var(--sub)">· 오늘 활동을 넣으면 오늘 기준으로 다시 계산됩니다</span>`}<br>
-      <span style="color:var(--sub)">적자 ${num(calc.deficit)} = 주당 약 ${(calc.deficit * 7 / 7700).toFixed(2)}kg 감량 속도</span>
-    </div>` +
-    "";
+           ＝ 유지 열량 <b>${num(w.avg)}</b> − 적자 ${num(calc.deficit)} → 목표 <b style="color:var(--accent)">${num(goals.kcal)}</b><br>
+           <span style="color:var(--sub)">오늘 활동을 넣으면 오늘 기준으로 다시 계산됩니다</span>`}<br>
+      <span style="color:var(--sub)">설정한 적자 ${num(calc.deficit)} = 주 ${(calc.deficit * 7 / 7700).toFixed(2)}kg 속도</span>
+      ${realDef > 0 && left < 0 ? `<br><span style="color:var(--sub)">목표는 넘겼지만 유지 열량 아래라 감량은 계속됩니다 (속도만 느려짐)</span>` : ""}
+    </div>` : "");
 
   // 끼니 카드
   mealsEl.innerHTML = meals().map((m, mi) => {
@@ -1395,7 +1386,6 @@ function renderDay() {
         + `<div class="meal-act">
              <button class="btn" onclick="toggleMealForm('${m}')">${mealFormOpen === m ? "닫기" : "＋ 음식"}</button>
              <button class="btn" onclick="copyMealFrom('${m}')">전날 복사</button>
-             ${items.length ? `<button class="btn" onclick="saveMealSet('${m}')">💾 세트 저장</button>` : ""}
            </div>${mealFormOpen === m ? mealFormHtml(m) : ""}` : ""}
     </div>`;
   }).join("");
@@ -1413,10 +1403,10 @@ function renderDay() {
       tooltip: { callbacks: { label: c => `${c.label} ${Math.round(c.parsed / ak * 100)}%` } } } },
   });
   const gk = g.p * 4 + g.c * 4 + g.f * 9;
-  ratioBox.innerHTML = (ak > 0
-    ? `<div class="hint">실제 — 탄 ${Math.round(t.c * 4 / ak * 100)}% : 단 ${Math.round(t.p * 4 / ak * 100)}% : 지 ${Math.round(t.f * 9 / ak * 100)}%</div>`
-    : `<div class="empty">기록 없음</div>`)
-    + `<div class="hint" style="margin-top:2px">목표 — 탄 ${Math.round(g.c * 4 / gk * 100)}% : 단 ${Math.round(g.p * 4 / gk * 100)}% : 지 ${Math.round(g.f * 9 / gk * 100)}%</div>`;
+  ratioBox.innerHTML = ak > 0
+    ? `<div class="hint">탄 ${Math.round(t.c * 4 / ak * 100)} : 단 ${Math.round(t.p * 4 / ak * 100)} : 지 ${Math.round(t.f * 9 / ak * 100)}
+       <span style="color:var(--sub)">(목표 ${Math.round(g.c * 4 / gk * 100)} : ${Math.round(g.p * 4 / gk * 100)} : ${Math.round(g.f * 9 / gk * 100)})</span></div>`
+    : `<div class="empty">기록 없음</div>`;
 
   // 영양소
   const cls = s => s === "bad" ? ' class="over"' : s === "good" ? ' class="good"' : "";
@@ -1457,6 +1447,44 @@ function foodRow(x, i, mine) {
     ${mine ? `<button class="del" onclick="delPreset(${i})">✕</button>` : ""}
   </div>`;
 }
+// ── 음식 DB 중복 정리
+// 같은 제품이 "BSN 아이솔레이트 1스쿱" 과 "BSN 아이솔레이트 1스쿱 38g" 처럼
+// 두 줄로 남는다. 이름이 같거나, 한쪽이 다른 쪽 이름으로 시작하면서 열량이
+// 5% 안쪽이면 같은 음식으로 본다. 양이 다른 것("귀리 50g" vs "귀리 80g")은
+// 열량이 달라서 합쳐지지 않는다.
+const pkey = n => String(n).toLowerCase().replace(/[\s·,()×x]/g, "");
+function sameFood(a, b) {
+  const ka = pkey(a.name), kb = pkey(b.name);
+  if (ka === kb) return true;
+  if (!(ka.startsWith(kb) || kb.startsWith(ka))) return false;
+  const x = +a.kcal || 0, y = +b.kcal || 0;
+  return x > 0 && y > 0 && Math.abs(x - y) / Math.max(x, y) <= 0.05;
+}
+// 영양 항목이 더 많이 채워진 쪽을 남기고, 이름은 양이 적힌 쪽(더 긴 쪽)을 쓴다
+const fillCount = x => KEYS.filter(k => +x[k] > 0).length;
+function dedupeFoods(list) {
+  const out = [];
+  for (const x of list) {
+    const i = out.findIndex(y => sameFood(x, y));
+    if (i < 0) { out.push(x); continue; }
+    const keep = fillCount(x) > fillCount(out[i]) ? x : out[i];
+    out[i] = { ...keep, name: x.name.length > out[i].name.length ? x.name : out[i].name };
+  }
+  return out;
+}
+// 기본 성분표에 이미 있는 것도 "내 음식"에서 뺀다 (같은 게 두 군데 보이지 않게)
+function tidyPresets(loud) {
+  const before = presets.length;
+  let out = dedupeFoods(presets);
+  out = out.filter(x => !FOOD_DB.some(d => sameFood(x, d)));
+  const removed = before - out.length;
+  if (removed > 0) {
+    presets = out; save("dt_presets", presets); setMeta("presets", presets);
+  }
+  if (loud) alert(removed > 0 ? `중복 ${removed}개를 정리했습니다.` : "중복이 없습니다.");
+  if (removed > 0) render();
+  return removed;
+}
 function renderFoods() {
   const prev = fdMeal.value;
   fdMeal.innerHTML = meals().map(m => `<option>${m}</option>`).join("");
@@ -1465,7 +1493,10 @@ function renderFoods() {
   const hit = x => !q || x.name.toLowerCase().includes(q);
 
   const mine = presets.map((x, i) => [x, i]).filter(([x]) => hit(x));
-  myFoods.innerHTML = `<h3>내 음식 <span class="muted">${mine.length}${q ? " / " + presets.length : ""}개</span></h3>`
+  const dups = presets.length - dedupeFoods(presets).filter(x => !FOOD_DB.some(d => sameFood(x, d))).length;
+  myFoods.innerHTML = `<h3>내 음식 <span class="muted">${mine.length}${q ? " / " + presets.length : ""}개</span>`
+    + (dups > 0 ? `<button class="btn" style="float:right;padding:5px 11px;font-size:12px" onclick="tidyPresets(true)">중복 ${dups}개 정리</button>` : "")
+    + `</h3>`
     + (mine.length ? mine.map(([x, i]) => foodRow(x, i, true)).join("")
        : `<div class="empty">${q ? "검색 결과 없음" : "아직 없습니다. 위에서 라벨을 찍거나 직접 등록하세요."}</div>`);
 
@@ -1490,34 +1521,46 @@ function addToDb(e) {
   foodOcrMsg.textContent = `✓ '${x.name}' 등록`; foodOcrMsg.className = "msg ok";
   render();
 }
-// 자주 먹는 끼니 조합 — 한 번 저장하면 그 뒤로는 칩 한 번에 끼니 전체가 들어간다
-function saveMealSet(m) {
-  const items = mealLog(curDate, m);
-  if (!items.length) { alert(`${m} 기록이 없어요`); return; }
-  const name = prompt("세트 이름", items.length + "개 · " + items[0].name.slice(0, 12));
-  if (!name || !name.trim()) return;
-  sets.unshift({ name: name.trim(), meal: m,
-    items: items.map(x => { const { id, date, meal, ...r } = x; return r; }) });
-  sets = sets.slice(0, 30);
-  save("dt_sets", sets); setMeta("sets", sets); render();
+// ── 자주 먹는 음식 — 최근 7일 기록에서 많이 먹은 순으로 5개.
+// 손으로 등록해두는 게 아니라 실제로 먹은 걸 세기 때문에 관리할 게 없다.
+function topFoods(n) {
+  const bucket = {};
+  for (let d = addDays(curDate, -6); d <= curDate; d = addDays(d, 1)) {
+    for (const x of dayLog(d)) {
+      const k = pkey(x.name);
+      if (!k) continue;
+      const b = bucket[k] || (bucket[k] = { n: 0, last: null, lastDate: "" });
+      b.n++;
+      if (d >= b.lastDate) { b.last = x; b.lastDate = d; }   // 가장 최근에 먹은 값(양·성분)을 쓴다
+    }
+  }
+  return Object.values(bucket).filter(b => b.last)
+    .sort((a, b) => b.n - a.n || (a.lastDate < b.lastDate ? 1 : -1)).slice(0, n);
 }
-async function logSet(i) {
-  const st = sets[i], q = qtyVal();
-  for (const it of st.items) await pushItem({ ...scaled(it, q), date: curDate, meal: st.meal || guessMeal() });
-  render();
-}
-function delSet(i) { sets.splice(i, 1); save("dt_sets", sets); setMeta("sets", sets); render(); }
+let topPick = [];
 function renderSets(g) {
-  if (!sets.length) {
-    setsCard.innerHTML = `<h3>자주 먹는 끼니 <span class="muted">아직 없음</span></h3>
-      <div class="hint" style="margin-top:0">아래 끼니 카드에서 <b>💾 세트 저장</b> 을 누르면, 그 조합이 여기 칩으로 올라옵니다. 그 뒤로는 칩 한 번에 끼니 전체가 기록됩니다.</div>`;
+  topPick = topFoods(5);
+  if (!topPick.length) {
+    setsCard.innerHTML = `<h3>자주 먹는 음식 <span class="muted">기록이 쌓이면 채워집니다</span></h3>
+      <div class="hint" style="margin-top:0">최근 7일 동안 많이 먹은 음식 5개가 여기 칩으로 올라옵니다. 누르면 아래 끼니에 바로 들어갑니다.</div>`;
     return;
   }
-  setsCard.innerHTML = `<h3>자주 먹는 끼니 <span class="muted">칩 한 번 = 끼니 전체 기록</span></h3>
-    <div class="presets">` + sets.map((st, i) => {
-      const t = totals(st.items);
-      return `<span class="chip" onclick="logSet(${i})">${esc(st.meal || "")} ${esc(st.name)} · ${num(t.kcal)}kcal P${fmt(t.p)}<span class="x" onclick="event.stopPropagation();delSet(${i})">×</span></span>`;
+  const m = guessMeal();
+  setsCard.innerHTML = `<h3>자주 먹는 음식 <span class="muted">최근 7일 · 누르면 ${m}에 추가</span></h3>
+    <div class="presets">` + topPick.map((b, i) => {
+      const x = b.last;
+      // 이름이 길면 칩이 한 줄을 다 먹는다 — 잘라서 두 개씩 들어가게
+      const nm = x.name.length > 16 ? x.name.slice(0, 15) + "…" : x.name;
+      return `<span class="chip" onclick="logTop(${i})" title="${esc(x.name)}">${esc(nm)}
+        <span style="color:var(--sub)">${b.n}회</span></span>`;
     }).join("") + `</div>`;
+}
+async function logTop(i) {
+  const b = topPick[i];
+  if (!b || !b.last) return;
+  const { id, date, meal, ...food } = b.last;
+  await pushItem({ ...food, date: curDate, meal: guessMeal() });
+  render();
 }
 function toggleMeal(m) { mealOpen[m] = (mealOpen[m] === false); render(); }
 function pickMeal(m) { fMeal.value = m; fName.focus(); fName.scrollIntoView({ behavior: "smooth", block: "center" }); }
@@ -1970,123 +2013,6 @@ function renderInbody() {
     <td><button class="del" onclick="delInbodyRec('${r.id}')">✕</button></td></tr>`).join("");
 }
 
-// ═════════ 계획 ═════════
-function planTotals() { return totals(plan.flatMap(m => m.items)); }
-function savePlan() {
-  plan.sort((a, b) => a.time < b.time ? -1 : a.time > b.time ? 1 : 0);
-  save("dt_plan", plan); setMeta("plan", plan);
-}
-function planLoggedFlags(ds) {
-  const pool = {};
-  dayLog(ds).forEach(x => { pool[x.name] = (pool[x.name] || 0) + 1; });
-  return plan.map(m => {
-    if (!m.items.length) return false;
-    const need = {};
-    m.items.forEach(it => { need[it.name] = (need[it.name] || 0) + 1; });
-    const ok = Object.keys(need).every(n => (pool[n] || 0) >= need[n]);
-    if (ok) Object.keys(need).forEach(n => { pool[n] -= need[n]; });
-    return ok;
-  });
-}
-async function logMeal(i) {
-  const m = plan[i], meal = mealName(Math.min(mealCount - 1, i));
-  for (const it of m.items) await pushItem({ date: curDate, meal, name: it.name, kcal: it.kcal, p: it.p, c: it.c,
-    f: it.f, na: +it.na || 0, fib: +it.fib || 0, sug: +it.sug || 0 });
-  render();
-}
-async function logAllPlan() {
-  const flags = planLoggedFlags(curDate);
-  for (let i = 0; i < plan.length; i++) if (!flags[i]) await logMeal(i);
-  render();
-}
-function applyPlanAsGoals() {
-  const t = planTotals();
-  goals = { ...goals, kcal: Math.round(t.kcal), p: Math.round(t.p), c: Math.round(t.c), f: Math.round(t.f) };
-  saveGoals(); render();
-}
-function resetPlan() {
-  if (!confirm("지금 계획을 지우고 기본 계획으로 되돌릴까요?")) return;
-  plan = JSON.parse(JSON.stringify(DEFAULT_PLAN)); planFormOpen = -1; savePlan(); render();
-}
-function setPlanTime(i, v) { plan[i].time = v || "00:00"; planFormOpen = -1; savePlan(); render(); }
-function setPlanName(i, v) { plan[i].name = v.trim() || "끼니"; savePlan(); render(); }
-function addPlanMeal() { const m = { time: "12:00", name: "새 끼니", items: [] }; plan.push(m); savePlan(); planFormOpen = plan.indexOf(m); render(); }
-function delPlanMeal(i) { plan.splice(i, 1); planFormOpen = -1; savePlan(); render(); }
-function delPlanItem(i, j) { plan[i].items.splice(j, 1); savePlan(); render(); }
-function togglePlanForm(i) { planFormOpen = planFormOpen === i ? -1 : i; render(); }
-function addPlanPreset(i, k) { plan[i].items.push({ ...presets[k] }); savePlan(); render(); }
-function addPlanItem(e, i) {
-  e.preventDefault();
-  const f = e.target;
-  plan[i].items.push({ name: f.pname.value.trim(), kcal: +f.pkcal.value || 0, p: +f.pp.value || 0,
-    c: +f.pc.value || 0, f: +f.pf.value || 0, na: +f.pna.value || 0, fib: +f.pfib.value || 0, sug: 0 });
-  f.reset(); savePlan(); render();
-}
-function renderPlan() {
-  planDate.textContent = dateLabel(curDate);
-  const t = planTotals(), g = dayTarget(curDate);
-  const bs = calcBase(curDate), wt = bs.wt, bmr = bs.bmr;
-  const minFat = wt ? Math.round(wt * 0.6) : 60, minCarb = wt ? Math.round(wt) : 100;
-  planSummary.innerHTML = `
-    <h3>계획 하루 합계 <span class="muted">${plan.length}끼니</span></h3>
-    <div class="stats">
-      <div class="stat"><span>칼로리</span><b>${num(t.kcal)}</b></div>
-      <div class="stat"><span>단백질</span><b>${fmt(t.p)}g</b></div>
-      <div class="stat"><span>탄수</span><b>${fmt(t.c)}g</b></div>
-      <div class="stat"><span>지방</span><b>${fmt(t.f)}g</b></div>
-      <div class="stat"><span>나트륨</span><b style="color:${t.na > goals.na ? "var(--red)" : "var(--text)"}">${num(t.na)}mg</b></div>
-      <div class="stat"><span>식이섬유</span><b style="color:${t.fib < goals.fib ? "var(--red)" : "var(--green)"}">${fmt(t.fib)}g</b></div>
-    </div>
-    <div class="hint">이 날짜 목표(${num(g.kcal)}kcal · ${g.adjusted ? esc(g.src) : "주 평균"}) 대비 —
-      칼로리 ${sign(t.kcal - g.kcal)} · 단백질 ${sign(t.p - g.p)}g · 탄수 ${sign(t.c - g.c)}g · 지방 ${sign(t.f - g.f)}g</div>
-    ${bmr && t.kcal < bmr ? `<div class="warn">⚠️ 계획 ${num(t.kcal)}kcal 이 기초대사량 ${num(bmr)}kcal 보다 낮습니다.</div>` : ""}
-    ${t.na > goals.na ? `<div class="warn">⚠️ 나트륨 ${num(t.na)}mg — 상한 ${num(goals.na)}mg 의 ${(t.na / goals.na).toFixed(1)}배. 혈압·수분 저류로 체중 추세가 왜곡됩니다. 양념 제품을 무양념으로 바꾸는 게 가장 빠릅니다.</div>` : ""}
-    ${t.fib < goals.fib ? `<div class="warn">⚠️ 식이섬유 ${fmt(t.fib)}g — 목표 ${goals.fib}g. 끼니마다 채소를 넣으세요.</div>` : ""}
-    ${t.f < minFat ? `<div class="warn">⚠️ 지방 ${fmt(t.f)}g — 체중 kg당 0.6g 기준 최소 ${minFat}g 은 채우세요.</div>` : ""}
-    ${t.c < minCarb ? `<div class="warn">⚠️ 탄수 ${fmt(t.c)}g — 체중 kg당 1g(${minCarb}g) 아래면 세트 볼륨이 떨어집니다.</div>` : ""}
-    <div class="btns mt">
-      <button class="btn" onclick="applyPlanAsGoals()">계획을 목표로</button>
-      <button class="btn ok" onclick="logAllPlan()">이 날짜에 전체 기록</button>
-    </div>`;
-
-  const flags = planLoggedFlags(curDate);
-  planMeals.innerHTML = plan.map((m, i) => {
-    const mt = totals(m.items), done = flags[i];
-    return `<div class="plan-meal" style="${done ? "border-color:var(--green)" : ""}">
-      <div class="plan-head">
-        <input type="time" value="${esc(m.time)}" onchange="setPlanTime(${i}, this.value)">
-        <input class="pname" value="${esc(m.name)}" onchange="setPlanName(${i}, this.value)">
-        <span class="kc">${mealName(Math.min(mealCount - 1, i))} · ${num(mt.kcal)}kcal</span>
-        <button class="del" title="끼니 삭제" onclick="delPlanMeal(${i})">✕</button>
-      </div>
-      ${m.items.length ? m.items.map((it, j) => `<div class="plan-item">
-        <span class="nm">${esc(it.name)}</span>
-        <span class="mc">${num(it.kcal)} · P${fmt(it.p)} C${fmt(it.c)} F${fmt(it.f)}${+it.na ? " · Na" + num(it.na) : ""}</span>
-        <button class="del" onclick="delPlanItem(${i},${j})">✕</button></div>`).join("")
-        : `<div class="empty" style="padding:10px 0">음식을 추가해주세요</div>`}
-      <div class="btns mt">
-        <button class="btn" onclick="togglePlanForm(${i})">${planFormOpen === i ? "닫기" : "＋ 음식"}</button>
-        <button class="btn ${done ? "ok" : "pri"}" onclick="logMeal(${i})">${done ? "✓ 기록됨" : "이 끼니 기록"}</button>
-      </div>
-      ${planFormOpen === i ? `<div class="plan-form">
-        <form class="addform" onsubmit="addPlanItem(event, ${i})">
-          <input name="pname" placeholder="음식명" required style="grid-column:1/-1">
-          <div class="nums">
-            <input name="pkcal" type="number" step="any" min="0" placeholder="kcal" required>
-            <input name="pp" type="number" step="any" min="0" placeholder="단백질g">
-            <input name="pc" type="number" step="any" min="0" placeholder="탄수g">
-            <input name="pf" type="number" step="any" min="0" placeholder="지방g">
-            <input name="pna" type="number" step="any" min="0" placeholder="나트륨mg">
-            <input name="pfib" type="number" step="any" min="0" placeholder="섬유g">
-          </div>
-          <button type="submit">추가</button>
-        </form>
-        <div class="presets">${presets.map((x, k) => `<span class="chip" onclick="addPlanPreset(${i},${k})">${esc(x.name)}</span>`).join("")}</div>
-      </div>` : ""}
-    </div>`;
-  }).join("");
-}
-
 // ═════════ 설정 ═════════
 function openSettings() {
   cfgUrl.value = cfg?.url || ""; cfgSecret.value = cfg?.secret || "";
@@ -2315,7 +2241,7 @@ function exportCsv(kind) {
 }
 function exportJson() {
   download(`bb-backup-${todayStr()}.json`,
-    JSON.stringify({ exportedAt: new Date().toISOString(), goals, calc, plan, presets, act, inbody, cache }, null, 2),
+    JSON.stringify({ exportedAt: new Date().toISOString(), goals, calc, presets, act, inbody, cache }, null, 2),
     "application/json");
 }
 
@@ -2490,9 +2416,11 @@ function fromHash() {
     return;
   }
   const h = (location.hash || "").replace("#", "");
-  if (["diet", "plan", "cal", "food", "inbody"].includes(h) && h !== section) setSection(h);
+  if (SECTIONS.includes(h) && h !== section) setSection(h);
 }
 addEventListener("hashchange", fromHash);
+// 기억해둔 화면을 실제로 띄운다 (마크업 기본값은 식단·일간이다)
+setSection(section); setView(view);
 fromHash();
 render();
 // 순서가 중요하다: 시트 동기화를 먼저 끝내야 중복 검사가 제대로 걸린다.
