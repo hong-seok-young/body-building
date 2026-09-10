@@ -2411,18 +2411,34 @@ function renderWeek() {
   });
 
   // ── 일별 표
+  // 탄단지 칸은 일별 행과 합계 행이 같은 꼴이어야 눈으로 비교가 된다 — 한 함수로 찍는다.
+  // 셋을 각각 반올림하면 합이 101% 이 되므로 남는 1%p 는 소수부가 큰 쪽에 붙인다.
+  const macroPct = (c, p, f) => {
+    const kc = [c * 4, p * 4, f * 9], ak = kc.reduce((x, y) => x + y, 0);
+    if (!ak) return [0, 0, 0];
+    const raw = kc.map(k => k / ak * 100), out = raw.map(Math.floor);
+    let left = 100 - out.reduce((x, y) => x + y, 0);
+    [0, 1, 2].sort((i, j) => (raw[j] - out[j]) - (raw[i] - out[i]))
+      .forEach(i => { if (left > 0) { out[i]++; left--; } });
+    return out;
+  };
+  const macroCell = (c, p, f) => {
+    const [pc, pp, pf] = macroPct(c, p, f);
+    return `<td style="font-size:11px">${fmt(c)}/${fmt(p)}/${fmt(f)}g<br>`
+      + `<span style="color:var(--sub)">${pc}:${pp}:${pf}%</span></td>`;
+  };
   weekRows.innerHTML = rows.map(r => {
     if (!r.logged) return `<tr style="opacity:.45"><td>${r.dow} ${+r.d.slice(8)}</td><td colspan="4">${r.future ? "—" : "기록 없음"}</td></tr>`;
-    const ak = r.t.p * 4 + r.t.c * 4 + r.t.f * 9;
-    const pc = k => ak ? Math.round(k / ak * 100) : 0;
     return `<tr><td>${r.dow} ${+r.d.slice(8)}${r.d === today ? " ●" : ""}</td>
       <td>${num(r.t.kcal)}</td><td>${num(r.g)}</td>
       <td style="color:${r.diff > 0 ? "var(--red)" : "var(--green)"};font-weight:700">${r.diff > 0 ? "+" : ""}${num(r.diff)}</td>
-      <td style="font-size:11px">${fmt(r.t.c)}/${fmt(r.t.p)}/${fmt(r.t.f)}g<br><span style="color:var(--sub)">${pc(r.t.c*4)}:${pc(r.t.p*4)}:${pc(r.t.f*9)}%</span></td></tr>`;
+      ${macroCell(r.t.c, r.t.p, r.t.f)}</tr>`;
   }).join("");
+  const sumC = done.reduce((a, r) => a + r.t.c, 0), sumP = done.reduce((a, r) => a + r.t.p, 0),
+        sumF = done.reduce((a, r) => a + r.t.f, 0);
   weekFoot.innerHTML = done.length ? `<tr><td>합계 ${done.length}일</td><td>${num(sumEat)}</td><td>${num(sumGoal)}</td>
     <td style="color:${sumDiff > 0 ? "var(--red)" : "var(--green)"}">${sumDiff > 0 ? "+" : ""}${num(sumDiff)}</td>
-    <td style="font-size:11px">${fmt(done.reduce((a,r)=>a+r.t.c,0))}/${fmt(done.reduce((a,r)=>a+r.t.p,0))}/${fmt(done.reduce((a,r)=>a+r.t.f,0))}g</td></tr>` : "";
+    ${macroCell(sumC, sumP, sumF)}</tr>` : "";
 
   // ── 주간 평균
   const n = done.length || 1, avg = k => Math.round(done.reduce((a, r) => a + r.t[k], 0) / n);
