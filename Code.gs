@@ -41,7 +41,6 @@ function doPost(e) {
       case "add":     return out({ ok: true, item: addItem(type, req.item) });
       case "del":     return out({ ok: true, id: delItem(type, req.id) });
       case "setMeta": return out({ ok: true, key: req.key, value: setMeta(req.key, req.value) });
-      case "ocr":     return out({ ok: true, data: ocr(req.image, req.kind, req.text) });
       case "foodSearch": return out({ ok: true, items: foodSearch(req.q, req.debug) });
       case "barcode":    return out({ ok: true, data: barcodeLookup(req.code) });
       case "dbSearch":   return out({ ok: true, items: localDbSearch(req.q) });
@@ -214,94 +213,6 @@ function setMeta(key, value) {
   } finally {
     lock.releaseLock();
   }
-}
-
-// ───────────────────────── 사진 판독 (OCR) ─────────────────────────
-/**
- * 인바디 결과지·식품 영양정보표 사진을 읽어 숫자로 돌려줍니다.
- * Gemini 를 씁니다 — 표 레이아웃을 알아서 이해하므로 인바디 기종이 달라도 됩니다.
- *
- * 설정 (키를 코드에 넣지 않는 이유: 배포 버전에 그대로 박혀 남습니다)
- *   1) https://aistudio.google.com/apikey 에서 무료 API 키 발급
- *   2) Apps Script 좌측 ⚙️ 프로젝트 설정 → 스크립트 속성 → 속성 추가
- *        GEMINI_KEY   = 발급받은 키
- *        GEMINI_MODEL = (선택) 기본값은 아래 DEFAULT_MODEL. 모델을 못 찾는다는
- *                       에러가 나면 AI Studio 에서 쓸 수 있는 모델명으로 바꾸세요
- */
-const DEFAULT_MODEL = "gemini-2.5-flash";
-
-const OCR_PROMPT = {
-  inbody:
-    "이 사진은 인바디(InBody) 체성분 분석 결과지다. 아래 스키마의 JSON 만 출력해라.\n" +
-    "숫자만 넣고 단위·쉼표는 빼라. 사진에서 확실히 찾을 수 없는 항목은 null 로 둬라.\n" +
-    "추측하지 마라 — 안 보이면 null 이다.\n" +
-    '{"date":"검사일시의 날짜를 YYYY-MM-DD 로","weight":체중kg,"smm":골격근량kg,' +
-    '"bfm":체지방량kg,"pbf":체지방률퍼센트,"bmi":BMI,"bmr":기초대사량kcal,"score":인바디점수}',
-  list:
-    "입력은 식단 기록 앱의 화면 캡처이거나, 거기서 복사한 텍스트다.\n" +
-    "등장하는 음식·제품을 전부 뽑아 아래 스키마의 JSON 배열만 출력해라.\n" +
-    "합계·소계·끼니 이름(아침/점심/저녁)·날짜·목표치는 음식이 아니므로 제외해라.\n" +
-    "name 은 브랜드+제품명+양(예: '양반 현미밥 130g'). 같은 음식이 여러 번 나오면 한 번만.\n" +
-    "수치가 안 보이는 항목은 null 로 두고 절대 추측하지 마라.\n" +
-    '[{"name":"","kcal":,"p":단백질g,"c":탄수g,"f":지방g,"na":나트륨mg,"sug":당류g,' +
-    '"sat":포화지방g,"trans":트랜스지방g,"chol":콜레스테롤mg,"fib":식이섬유g}]',
-  label:
-    "이 사진은 식품 포장의 영양정보표다. 아래 스키마의 JSON 만 출력해라.\n" +
-    "name 은 브랜드+제품명으로 30자 이내. serving 은 기준 표기(예: '100g', '1스쿱(38g)').\n" +
-    "영양성분은 그 serving 1회분 기준으로 맞춰라. 표가 100g당으로만 적혀 있고 총 내용량이 다르면\n" +
-    "총 내용량 기준으로 환산해서 넣고 serving 에 총 내용량을 적어라.\n" +
-    "표에 있는 항목은 전부 채워라. 표에 없는 항목만 null 로 두고 추측하지 마라.\n" +
-    '{"name":"","serving":"","kcal":,"p":단백질g,"c":탄수화물g,"f":지방g,' +
-    '"na":나트륨mg,"sug":당류g,"sat":포화지방g,"trans":트랜스지방g,' +
-    '"chol":콜레스테롤mg,"fib":식이섬유g}',
-};
-
-function ocr(imageB64, kind, text) {
-  const props = PropertiesService.getScriptProperties();
-  const key = props.getProperty("GEMINI_KEY");
-  if (!key) throw new Error("GEMINI_KEY 가 없습니다. Apps Script → 프로젝트 설정 → 스크립트 속성에 추가하세요");
-  if (!imageB64 && !text) throw new Error("이미지도 텍스트도 비었습니다");
-  const prompt = OCR_PROMPT[OCR_PROMPT[kind] ? kind : "label"];
-  const model = props.getProperty("GEMINI_MODEL") || DEFAULT_MODEL;
-
-  const res = UrlFetchApp.fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent",
-    {
-      method: "post",
-      contentType: "application/json",
-      headers: { "x-goog-api-key": key },     // 키를 URL 에 넣지 않는다 (로그에 남음)
-      muteHttpExceptions: true,
-      payload: JSON.stringify({
-        contents: [{ parts: imageB64
-          ? [{ text: prompt }, { inline_data: { mime_type: "image/jpeg", data: imageB64 } }]
-          : [{ text: prompt + "\n\n── 입력 ──\n" + String(text).slice(0, 20000) }] }],
-        generationConfig: { temperature: 0, responseMimeType: "application/json" },
-      }),
-    });
-
-  const code = res.getResponseCode();
-  const body = res.getContentText();
-  if (code !== 200) {
-    let msg = body.slice(0, 300);
-    try { msg = JSON.parse(body).error.message; } catch (e) {}
-    throw new Error("Gemini " + code + ": " + msg);
-  }
-  let out_text;
-  try {
-    out_text = JSON.parse(body).candidates[0].content.parts[0].text;
-  } catch (e) {
-    throw new Error("응답을 해석할 수 없습니다: " + body.slice(0, 200));
-  }
-  let data;
-  try {
-    data = JSON.parse(out_text);
-  } catch (e) {
-    // 코드펜스나 설명이 섞여 오면 첫 JSON 덩어리만 건져낸다 (배열/객체 둘 다)
-    const m = out_text.match(/[\[\{][\s\S]*[\]\}]/);
-    if (!m) throw new Error("JSON 이 아닌 응답: " + out_text.slice(0, 200));
-    data = JSON.parse(m[0]);
-  }
-  return data;
 }
 
 // ───────────────────────── 식약처 식품영양성분 DB 검색 ─────────────────────────
@@ -596,7 +507,6 @@ function setupAndTest() {
   Logger.log("시트 생성 완료 / 추가·조회·삭제 정상: " + (found === 1 ? "OK" : "실패"));
   Logger.log("SECRET 을 바꿨는지 확인: " + (SECRET.indexOf("여기에") === 0 ? "❌ 아직 기본값입니다" : "✅ 변경됨"));
   const props = PropertiesService.getScriptProperties();
-  Logger.log("사진 판독(GEMINI_KEY): " + (props.getProperty("GEMINI_KEY") ? "✅ 설정됨" : "⚠️ 없음 — 사진 판독만 안 됨"));
   Logger.log("제품 검색(MFDS_KEY): " + (props.getProperty("MFDS_KEY") ? "✅ 설정됨" : "⚠️ 없음 — API 검색만 안 됨"));
   Logger.log("내장 식품DB(fooddb 시트): " + (dbRowCount() ? "✅ " + dbRowCount() + "건" : "⚠️ 비어 있음 — importFoodDb 실행하면 채워집니다"));
 }
@@ -617,12 +527,4 @@ function testBarcode() {
   const CODE = "8801117370987";     // ← 여기를 실제 바코드로 바꾸세요
   try { Logger.log(JSON.stringify(barcodeLookup(CODE), null, 2)); }
   catch (e) { Logger.log("실패: " + e.message); }
-}
-
-// 사진 판독이 되는지 실제로 한 번 확인. 인바디 사진을 구글 드라이브에 올리고
-// 파일 ID 를 넣어 실행하면 판독 결과가 실행 로그에 찍힙니다.
-function testOcr() {
-  const FILE_ID = "여기에-드라이브-이미지-파일-ID";
-  const blob = DriveApp.getFileById(FILE_ID).getBlob();
-  Logger.log(JSON.stringify(ocr(Utilities.base64Encode(blob.getBytes()), "inbody"), null, 2));
 }

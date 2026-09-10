@@ -325,46 +325,6 @@
       <div class="nut" id="nutEl"></div>
     </div>
 
-    <div class="card">
-      <h3>음식 추가</h3>
-      <form class="addform" onsubmit="addFood(event)">
-        <select id="fMeal"></select>
-        <input id="fName" placeholder="음식명" required>
-        <div class="nums" style="grid-template-columns:auto 1fr">
-          <input id="fQty" type="number" step="0.5" min="0.5" value="1" style="max-width:74px" title="수량 — 칩을 누를 때도 이 배수가 적용됩니다">
-          <span class="hint" style="margin:0;align-self:center">← 수량. 닭다리살 2개면 2 로 두고 칩을 한 번만 누르세요</span>
-        </div>
-        <div class="nums">
-          <input id="fKcal" type="number" step="any" min="0" placeholder="kcal" required>
-          <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
-          <input id="fC" type="number" step="any" min="0" placeholder="탄수g">
-          <input id="fF" type="number" step="any" min="0" placeholder="지방g">
-          <input id="fNa" type="number" step="any" min="0" placeholder="나트륨mg">
-          <input id="fSug" type="number" step="any" min="0" placeholder="당류g">
-        </div>
-        <div class="nums" id="fMore" style="display:none">
-          <input id="fFib" type="number" step="any" min="0" placeholder="식이섬유g">
-          <input id="fSat" type="number" step="any" min="0" placeholder="포화지방g">
-          <input id="fTrans" type="number" step="any" min="0" placeholder="트랜스지방g">
-          <input id="fChol" type="number" step="any" min="0" placeholder="콜레스테롤mg">
-        </div>
-        <button type="button" class="btn" id="fMoreBtn" style="grid-column:1/-1" onclick="toggleMore()">＋ 상세 (식이섬유·포화·트랜스·콜레스테롤)</button>
-        <button type="submit">추가</button>
-      </form>
-      <div class="btns mt">
-        <button class="btn" type="button" onclick="dbSearch()">🌐 인터넷에서 찾기</button>
-        <button class="btn" type="button" onclick="foodPhoto.click()">📷 라벨 촬영</button>
-        <button class="btn" type="button" onclick="barPhoto.click()">📷 바코드</button>
-      </div>
-      <div class="btns" style="margin-top:7px">
-        <button class="btn dash" type="button" onclick="openImport()">📋 다른 앱에서 음식 목록 한꺼번에 가져오기</button>
-      </div>
-      <input type="file" id="foodPhoto" accept="image/*" capture="environment" hidden onchange="readPhoto(this,'label')">
-      <input type="file" id="barPhoto" accept="image/*" capture="environment" hidden onchange="readBarcode(this)">
-      <div class="msg" id="foodOcrMsg"></div>
-      <div class="hint">여기는 <b>직접 입력</b>용입니다. 등록해둔 음식이나 기본 성분표에서 찾아 넣으려면
-        위 끼니 카드의 <b>＋ 음식</b> 을 누르거나 아래 <b>🍽️ 음식</b> 탭을 쓰세요.</div>
-    </div>
   </div>
 
 </section>
@@ -463,20 +423,45 @@
 <!-- ══════════ 음식 DB ══════════ -->
 <section id="section-food" style="display:none">
   <div class="card">
-    <h3>음식 등록 <span class="muted">한 번 넣으면 계속 씁니다</span></h3>
-    <div class="btns">
-      <button class="btn" onclick="dbPhoto.click()">📷 라벨 촬영</button>
-      <button class="btn" onclick="dbBar.click()">📷 바코드</button>
+    <h3>음식 추가 <span class="muted">보고 있는 날짜의 끼니로 기록</span></h3>
+    <form class="addform" onsubmit="addFood(event)">
+      <select id="fMeal"></select>
+      <input id="fName" placeholder="음식명" required>
+      <div class="nums" style="grid-template-columns:auto 1fr">
+        <input id="fQty" type="number" step="0.5" min="0.5" value="1" style="max-width:74px" title="수량 — 칩을 누를 때도 이 배수가 적용됩니다">
+        <span class="hint" style="margin:0;align-self:center">← 수량. 닭다리살 2개면 2 로 두고 칩을 한 번만 누르세요</span>
+      </div>
+      <div class="nums">
+        <input id="fKcal" type="number" step="any" min="0" placeholder="kcal" required>
+        <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
+        <input id="fC" type="number" step="any" min="0" placeholder="탄수g">
+        <input id="fF" type="number" step="any" min="0" placeholder="지방g">
+        <input id="fNa" type="number" step="any" min="0" placeholder="나트륨mg">
+        <input id="fSug" type="number" step="any" min="0" placeholder="당류g">
+      </div>
+      <div class="nums" id="fMore" style="display:none">
+        <input id="fFib" type="number" step="any" min="0" placeholder="식이섬유g">
+        <input id="fSat" type="number" step="any" min="0" placeholder="포화지방g">
+        <input id="fTrans" type="number" step="any" min="0" placeholder="트랜스지방g">
+        <input id="fChol" type="number" step="any" min="0" placeholder="콜레스테롤mg">
+      </div>
+      <button type="button" class="btn" id="fMoreBtn" style="grid-column:1/-1" onclick="toggleMore()">＋ 상세 (식이섬유·포화·트랜스·콜레스테롤)</button>
+      <button type="submit">추가</button>
+    </form>
+    <div class="btns mt">
+      <button class="btn" type="button" onclick="dbSearch()">🌐 인터넷에서 찾기</button>
+      <button class="btn" type="button" onclick="barPhoto.click()">📷 바코드</button>
     </div>
-    <div class="btns" style="margin-top:7px">
-      <button class="btn" onclick="dbSearch()">🌐 인터넷에서 찾기</button>
-      <button class="btn" onclick="openImport()">📋 다른 앱에서 가져오기</button>
-    </div>
-    <input type="file" id="dbPhoto" accept="image/*" capture="environment" hidden onchange="readPhoto(this,'label')">
-    <input type="file" id="dbBar" accept="image/*" capture="environment" hidden onchange="readBarcode(this)">
-    <div class="msg" id="foodOcrMsg"></div>
+    <input type="file" id="barPhoto" accept="image/*" capture="environment" hidden onchange="readBarcode(this)">
+    <div class="msg" id="foodMsg"></div>
     <div class="presets" id="dbResults"></div>
-    <form class="addform" onsubmit="addToDb(event)" style="margin-top:11px">
+    <div class="hint">여기는 <b>직접 입력</b>용입니다. 이미 등록해둔 음식은 아래 목록의 <b>＋</b> 로,
+      식단 화면에서는 끼니 카드의 <b>＋ 음식</b> 으로 넣으세요.</div>
+  </div>
+
+  <div class="card">
+    <h3>내 음식에 등록 <span class="muted">한 번 넣으면 계속 씁니다</span></h3>
+    <form class="addform" onsubmit="addToDb(event)">
       <input name="nm" placeholder="직접 등록 — 음식명 (예: 닭가슴살 100g)" required style="grid-column:1/-1">
       <div class="nums">
         <input name="kcal" type="number" step="any" min="0" placeholder="kcal" required>
@@ -519,14 +504,10 @@
       </div>
       <div class="fields" style="margin-top:9px"><label>메모<input id="ibNote" placeholder="선택"></label></div>
       <div class="btns mt">
-        <button class="btn" type="button" onclick="ibPhoto.click()">📷 결과지 사진에서 읽기</button>
         <button class="btn pri" type="submit">기록 추가</button>
       </div>
     </form>
-    <input type="file" id="ibPhoto" accept="image/*" capture="environment" hidden onchange="readPhoto(this,'inbody')">
-    <div class="msg" id="ibOcrMsg"></div>
-    <div class="hint">인바디 결과지를 찍으면 위 칸이 자동으로 채워집니다. <b>값을 눈으로 확인한 뒤</b> [기록 추가]를 누르세요.
-      기초대사량과 체중이 들어가면 <b>열량 탭이 자동으로 다시 계산됩니다.</b></div>
+    <div class="hint">기초대사량과 체중이 들어가면 <b>열량 탭이 자동으로 다시 계산됩니다.</b></div>
   </div>
 
   <div class="card" id="ibLatest"></div>
@@ -551,28 +532,6 @@
   <button id="sec-food" onclick="setSection('food')"><i>🍽️</i>음식</button>
   <button id="sec-inbody" onclick="setSection('inbody')"><i>📊</i>인바디</button>
 </nav>
-
-<!-- 음식 목록 가져오기 -->
-<div class="overlay" id="importOverlay">
-  <div class="modal">
-    <h2>📋 음식 목록 가져오기</h2>
-    <p>팻시크릿 같은 앱에 이미 등록해둔 음식을 한 번에 옮깁니다. 화면을 캡처해서 올리거나, 텍스트를 그대로 붙여넣으세요.</p>
-    <div class="btns">
-      <button class="btn" onclick="impPhoto.click()">📷 화면 캡처 올리기</button>
-    </div>
-    <input type="file" id="impPhoto" accept="image/*" hidden onchange="runImport(this)">
-    <label style="margin-top:14px">또는 텍스트 붙여넣기</label>
-    <textarea id="impText" rows="7" placeholder="서동물산 서동 맛에반했닭 양념치킨맛  x3 = 678&#10;양반 현미밥  x3 = 630&#10;고등어구이 300g  569&#10;..."
-      style="width:100%;border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--card);color:var(--text);font-family:inherit"></textarea>
-    <div class="btns mt"><button class="btn pri" onclick="runImport()">텍스트에서 읽기</button></div>
-    <div class="msg" id="impMsg"></div>
-    <div class="presets" id="impResults"></div>
-    <div class="btns mt">
-      <button class="btn" onclick="closeImport()">닫기</button>
-      <button class="btn ok" id="impSaveBtn" onclick="saveImported()" style="display:none">전부 등록</button>
-    </div>
-  </div>
-</div>
 
 <!-- 달력 -->
 <div class="overlay" id="calOverlay">
@@ -714,7 +673,7 @@ const DEFAULT_PRESETS = [
 ];
 // 자연식품·기본식품 성분표 (국가표준식품성분표·USDA 기준 평균값)
 // [이름, kcal, 단백질g, 탄수g, 지방g, 나트륨mg, 식이섬유g, 당g]
-// 가공식품은 제품마다 다르므로 여기 넣지 않는다 — 라벨 촬영/바코드를 쓴다
+// 가공식품은 제품마다 다르므로 여기 넣지 않는다 — 바코드나 인터넷 검색을 쓴다
 const FOOD_DB_RAW = [
   ["── 단백질"],
   ["닭가슴살 100g (생)",        165, 31.0,  0,    3.6,  74,  0,   0],
@@ -1583,7 +1542,7 @@ function renderFoods() {
     + (dups > 0 ? `<button class="btn" style="float:right;padding:5px 11px;font-size:12px" onclick="tidyPresets(true)">중복 ${dups}개 정리</button>` : "")
     + `</h3>`
     + (mine.length ? mine.map(([x, i]) => foodRow(x, i, true)).join("")
-       : `<div class="empty">${q ? "검색 결과 없음" : "아직 없습니다. 위에서 라벨을 찍거나 직접 등록하세요."}</div>`);
+       : `<div class="empty">${q ? "검색 결과 없음" : "아직 없습니다. 위에서 바코드를 찍거나 직접 등록하세요."}</div>`);
 
   let n = 0;
   dbFoods.innerHTML = FOOD_GROUPS.map(g => {
@@ -1600,10 +1559,10 @@ function addToDb(e) {
   const x = { name: f.nm.value.trim(), kcal: +f.kcal.value || 0, p: +f.p.value || 0, c: +f.c.value || 0,
               f: +f.f.value || 0, na: +f.na.value || 0, sug: +f.sug.value || 0, fib: 0, sat: 0, trans: 0, chol: 0 };
   f.reset();
-  if (presets.some(z => z.name === x.name)) { foodOcrMsg.textContent = "이미 등록된 이름입니다"; foodOcrMsg.className = "msg err"; return; }
+  if (presets.some(z => z.name === x.name)) { foodMsg.textContent = "이미 등록된 이름입니다"; foodMsg.className = "msg err"; return; }
   presets.unshift(x); presets = presets.slice(0, 300);
   save("dt_presets", presets); setMeta("presets", presets);
-  foodOcrMsg.textContent = `✓ '${x.name}' 등록`; foodOcrMsg.className = "msg ok";
+  foodMsg.textContent = `✓ '${x.name}' 등록`; foodMsg.className = "msg ok";
   render();
 }
 // ── 자주 먹는 음식 — 최근 7일 기록에서 많이 먹은 순으로 5개.
@@ -2145,7 +2104,7 @@ function copyCfgLink() {
 let dbHits = [];
 async function dbSearch() {
   const q = ((fdQ && fdQ.value) || foodQ2 || "").trim();
-  const show = (t, c) => { foodOcrMsg.textContent = t; foodOcrMsg.className = "msg" + (c ? " " + c : ""); };
+  const show = (t, c) => { foodMsg.textContent = t; foodMsg.className = "msg" + (c ? " " + c : ""); };
   if (!q) { if (fdQ) fdQ.focus(); return; }
   if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요 — 검색은 백엔드를 거칩니다.", "err"); return; }
   show("검색 중…"); dbResults.innerHTML = "";
@@ -2177,7 +2136,7 @@ async function readBarcode(input) {
   const file = input.files && input.files[0];
   input.value = "";
   if (!file) return;
-  const show = (t, c) => { foodOcrMsg.textContent = t; foodOcrMsg.className = "msg" + (c ? " " + c : ""); };
+  const show = (t, c) => { foodMsg.textContent = t; foodMsg.className = "msg" + (c ? " " + c : ""); };
   if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요.", "err"); return; }
   if (!("BarcodeDetector" in window)) {
     const t = prompt("이 브라우저는 바코드 인식을 지원하지 않습니다.\n제품 뒷면 바코드 숫자를 직접 입력해주세요:");
@@ -2201,103 +2160,6 @@ async function lookupBarcode(code, show) {
     fillForm(r.data);
     show(`✓ ${r.data.name} — 100g 기준입니다. 실제 먹은 양으로 고쳐서 추가하세요.`, "ok");
   } catch (e) { show("✗ " + e.message, "err"); }
-}
-
-// ═════════ 사진 판독 ═════════
-// 원본 사진은 3~4MB 라 그대로 보내면 느리고 base64 로 33% 더 커진다. 긴 변 1600px 로 줄인다
-async function shrink(file, max = 1600, q = 0.82) {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise((res, rej) => {
-      const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("이미지를 열 수 없습니다")); i.src = url;
-    });
-    const k = Math.min(1, max / Math.max(img.width, img.height));
-    const cv = document.createElement("canvas");
-    cv.width = Math.max(1, Math.round(img.width * k));
-    cv.height = Math.max(1, Math.round(img.height * k));
-    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
-    return cv.toDataURL("image/jpeg", q).split(",")[1];
-  } finally { URL.revokeObjectURL(url); }
-}
-async function readPhoto(input, kind) {
-  const file = input.files && input.files[0];
-  input.value = "";                                  // 같은 사진 다시 고를 수 있게
-  if (!file) return;
-  const box = kind === "inbody" ? ibOcrMsg : foodOcrMsg;
-  const show = (t, c) => { box.textContent = t; box.className = "msg" + (c ? " " + c : ""); };
-  if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요 — 판독은 백엔드를 거칩니다.", "err"); return; }
-  show("사진 읽는 중… 5~15초 걸립니다");
-  try {
-    const b64 = await shrink(file);
-    const r = await api({ action: "ocr", kind, image: b64 });
-    const d = r.data || {};
-    const filled = kind === "inbody" ? fillInbodyForm(d) : fillFoodForm(d);
-    if (!filled) { show("✗ 읽을 수 있는 값이 없습니다. 표가 잘 보이게 다시 찍어주세요.", "err"); return; }
-    show(`✓ ${filled}개 항목을 채웠습니다. 값을 확인하고 저장하세요.`, "ok");
-  } catch (e) {
-    show("✗ 판독 실패: " + e.message, "err");
-  }
-}
-// 판독 결과를 폼에만 채운다 — 자동 저장하지 않는다 (OCR 은 틀릴 수 있고, 이 숫자가 목표 계산의 기준이 된다)
-function setIf(el, v) { if (v === null || v === undefined || v === "" || isNaN(+v)) return 0; el.value = +v; return 1; }
-function fillInbodyForm(d) {
-  let n = 0;
-  if (d.date && /^\d{4}-\d{2}-\d{2}$/.test(d.date)) { ibDate.value = d.date; n++; }
-  [[ibW, d.weight], [ibS, d.smm], [ibBfm, d.bfm], [ibPbf, d.pbf],
-   [ibBmi, d.bmi], [ibBmr, d.bmr], [ibScore, d.score]].forEach(([el, v]) => { n += setIf(el, v); });
-  render();
-  return n;
-}
-function fillFoodForm(d) {
-  let n = 0;
-  if (d.name) { fName.value = String(d.name).slice(0, 40) + (d.serving ? " " + d.serving : ""); n++; }
-  [[fKcal, d.kcal], [fP, d.p], [fC, d.c], [fF, d.f], [fNa, d.na], [fFib, d.fib]]
-    .forEach(([el, v]) => { n += setIf(el, v); });
-  if (n) fName.scrollIntoView({ behavior: "smooth", block: "center" });
-  return n;
-}
-
-// ═════════ 음식 목록 가져오기 ═════════
-let impHits = [];
-function openImport() { impMsg.textContent = ""; impResults.innerHTML = ""; impHits = []; impSaveBtn.style.display = "none"; importOverlay.classList.add("show"); }
-function closeImport() { importOverlay.classList.remove("show"); }
-
-async function runImport(input) {
-  const show = (t, c) => { impMsg.textContent = t; impMsg.className = "msg" + (c ? " " + c : ""); };
-  if (!cfg) { show("⚙️ 설정에서 구글 시트를 먼저 연결해주세요 — 판독은 백엔드를 거칩니다.", "err"); return; }
-  const file = input && input.files && input.files[0];
-  if (input) input.value = "";
-  const text = impText.value.trim();
-  if (!file && !text) { show("사진을 올리거나 텍스트를 붙여넣어 주세요.", "err"); return; }
-  show("읽는 중… 10~20초 걸립니다");
-  impResults.innerHTML = ""; impSaveBtn.style.display = "none";
-  try {
-    const payload = { action: "ocr", kind: "list" };
-    if (file) payload.image = await shrink(file, 1800); else payload.text = text;
-    const r = await api(payload);
-    const arr = Array.isArray(r.data) ? r.data : (r.data ? [r.data] : []);
-    // 이름 없거나 열량 없는 건 버린다. 이미 등록된 것도 건너뛴다
-    impHits = arr.filter(x => x && x.name && +x.kcal)
-      .map(x => ({ name: String(x.name).slice(0, 60), kcal: +x.kcal || 0, p: +x.p || 0, c: +x.c || 0,
-                   f: +x.f || 0, na: +x.na || 0, sug: +x.sug || 0, fib: +x.fib || 0,
-                   sat: +x.sat || 0, trans: +x.trans || 0, chol: +x.chol || 0 }))
-      .filter(x => !presets.some(pz => pz.name === x.name));
-    if (!impHits.length) { show("새로 등록할 음식을 찾지 못했습니다. (이미 등록된 것은 건너뜁니다)", "err"); return; }
-    show(`${impHits.length}개를 찾았습니다. 값을 확인하고 [전부 등록]을 누르세요.`, "ok");
-    impResults.innerHTML = impHits.map((x, i) =>
-      `<span class="chip" onclick="dropImported(${i})">${esc(x.name)} · ${Math.round(x.kcal)}kcal P${fmt(x.p)}<span class="x">×</span></span>`).join("");
-    impSaveBtn.style.display = "";
-  } catch (e) { show("✗ " + e.message, "err"); }
-}
-function dropImported(i) { impHits.splice(i, 1); impResults.innerHTML = impHits.map((x, k) =>
-  `<span class="chip" onclick="dropImported(${k})">${esc(x.name)} · ${Math.round(x.kcal)}kcal P${fmt(x.p)}<span class="x">×</span></span>`).join("");
-  impMsg.textContent = `${impHits.length}개 남음`; }
-function saveImported() {
-  presets = impHits.concat(presets).slice(0, 300);
-  save("dt_presets", presets); setMeta("presets", presets);
-  impMsg.textContent = `✓ ${impHits.length}개를 자주 먹는 음식에 등록했습니다.`; impMsg.className = "msg ok";
-  impHits = []; impResults.innerHTML = ""; impSaveBtn.style.display = "none"; impText.value = "";
-  render();
 }
 
 // ═════════ 내보내기 ═════════
