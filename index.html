@@ -635,9 +635,8 @@
       <button class="btn pri" onclick="saveAct()">저장</button>
     </div>
     <div class="btns" style="margin-top:7px">
-      <button class="btn" onclick="setDefaultDay()">이 날부터 평소 하루로</button>
+      <button class="btn" onclick="setDefaultDay()">이 날부터 이 수치로 세팅</button>
     </div>
-    <div class="hint">이 날과 <b>그 이후</b>에만 적용됩니다. 이전 날짜의 목표는 바뀌지 않습니다.</div>
     <div class="btns mt"><button class="btn" onclick="closeAct()">닫기</button></div>
   </div>
 </div>
@@ -1417,11 +1416,16 @@ function actLive() {
   // 각 칸이 만드는 열량은 그 칸 바로 아래에 붙인다
   aStepsK.textContent = a.steps ? `${num(kcSteps)} kcal` : "";
   aWhK.textContent = a.wh ? `${num(kcLift)} kcal` : "";
+  // 유지·적자·목표 풀이는 메인 화면에 있다. 여기서는 "얼마를 상쇄해서 얼마가 남나" 만.
+  // 기준(actBase)은 팝업을 열 때의 초과분 — 칸을 고칠수록 얼마가 지워지는지 보인다
+  const now = eat ? eat - target : 0;
+  const off = actBase - now;
   aCardioInfo.innerHTML =
     (h ? `<span class="fkcal" style="margin:0 0 5px">유산소 ${num(kcCardio)} kcal</span>` : "")
-    + `유지 <b>${num(tdee)}</b> − 적자 ${num(calc.deficit)} → 목표 <b style="color:var(--accent)">${num(target)}</b>`
-    + (eat ? `<br>섭취 ${num(eat)} → <b style="color:${eat > target ? "var(--red)" : "var(--green)"}">${
-        eat > target ? num(eat - target) + " 초과" : num(target - eat) + " 남음"}</b>` : "");
+    + (!eat ? `<span class="muted">먹은 기록이 없습니다 · 목표 ${num(target)}</span>`
+      : `${num(Math.abs(actBase))} ${actBase > 0 ? "초과" : "남음"} 에서 `
+        + `상쇄 <b>${off >= 0 ? "+" : "−"}${num(Math.abs(off))}</b> = `
+        + `<b style="color:${now > 0 ? "var(--red)" : "var(--green)"}">${num(Math.abs(now))} ${now > 0 ? "초과" : "남음"}</b>`);
 }
 
 // 기록된 모든 날의 (섭취 − 목표) 합. 초과한 날은 쌓이고 미달한 날은 깎인다.
@@ -1629,6 +1633,8 @@ function openAct() {
   actDefLabel.textContent = actLabel(dd)
     + (dd.from > "0000-01-01" ? ` (${dd.from.slice(5)} 부터)` : "");
   actInfo.textContent = act[curDate] ? "이 날은 따로 고친 기록입니다." : "지금은 평소 하루 기준입니다.";
+  const t0 = totals(dayLog(curDate)).kcal, g0 = dayTarget(curDate);
+  actBase = t0 && g0.kcal ? t0 - g0.kcal : 0;
   actLive();
   openOverlay("actOverlay");
 }
@@ -2478,6 +2484,7 @@ function renderCal() {
 // ═════════ 인바디 ═════════
 // 목록에 기본으로 보여줄 개수. 전부 늘어놓으면 스크롤만 길어진다
 const IB_SHOWN = 5;
+let actBase = 0;                       // 활동 팝업을 열 때의 초과분 (상쇄 기준)
 let ibAll = false, ibEdit = null;      // ibEdit: 수정 중인 기록 id
 function toggleIbAll() { ibAll = !ibAll; render(); }
 // id 를 주면 그 기록 수정, 안 주면 새로 추가
