@@ -89,6 +89,15 @@
   .burnoff.ok { background: var(--okbg, rgba(34,197,94,.12)); color: var(--text);
     border-color: rgba(34,197,94,.35); }
   .burnoff .muted { font-weight: 400; }
+  /* 접었다 펴는 머리 + 종류별 한 줄 (오른쪽에 상쇄 버튼) */
+  .burnhead { display: flex; align-items: center; gap: 8px; width: 100%;
+    background: none; border: none; padding: 0; cursor: pointer;
+    color: inherit; font: inherit; font-weight: 700; text-align: left; }
+  .burnhead b { margin-left: auto; font-weight: 800; }
+  .burnhead i { font-style: normal; font-size: 9px; opacity: .7; }
+  .burnrow { display: flex; align-items: center; gap: 9px; margin-top: 6px; }
+  .burnrow > span { flex: 1; min-width: 0; }
+  .burnrow .btn { flex: 0 0 auto; padding: 5px 13px; font-size: 12px; }
 
   /* 칩 안의 연필 — 평소엔 흐리게, 올리면 또렷하게 (터치에선 늘 보인다) */
   .chip .ed { font-style: normal; margin-left: 5px; padding: 0 1px; opacity: .35; }
@@ -178,14 +187,19 @@
   .calcline i { margin-left: auto; font-style: normal; font-size: 9px; }
 
   /* 남은 칼로리 */
-  .remain-big { display: flex; align-items: baseline; gap: 9px; padding-bottom: 13px; margin-bottom: 13px; border-bottom: 1px solid var(--line); }
-  .remain-big b { font-size: 31px; line-height: 1; letter-spacing: -1px; }
-  .remain-big em { font-size: 12px; color: var(--sub); font-style: normal; }
-  /* 큰 숫자 옆의 누계 — 오늘 하루와 구분되게 한 칸 띄운다 */
-  .remain-big em.cum { margin-left: 2px; }
+  /* 반드시 한 행 — 폰에서 "116 kcal 초 / 과" 로 접히던 것.
+     칩만 줄어들게 하고 숫자·라벨은 절대 안 접는다 */
+  .remain-big { display: flex; align-items: baseline; gap: 7px; flex-wrap: nowrap;
+    padding-bottom: 13px; margin-bottom: 13px; border-bottom: 1px solid var(--line); }
+  .remain-big b { font-size: 31px; line-height: 1; letter-spacing: -1px; flex: 0 0 auto; white-space: nowrap; }
+  .remain-big em { font-size: 12px; color: var(--sub); font-style: normal;
+    flex: 0 0 auto; white-space: nowrap; }
+  /* 큰 숫자 옆의 누계 — 오늘 하루와 구분되게 점으로 끊는다 */
+  .remain-big em.cum::before { content: "· "; opacity: .55; }
   .remain-big .r { margin-left: auto; font-size: 11.5px; color: var(--sub); text-align: right; line-height: 1.55; }
   /* 활동 칩 = 누르면 그날 활동을 고치는 버튼. 평소 하루(기본값) 일 때는 흐리게 */
-  .actchip { margin-left: auto; border: 1px solid var(--line); background: var(--card2);
+  .actchip { margin-left: auto; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    border: 1px solid var(--line); background: var(--card2);
     color: var(--text); border-radius: 999px; padding: 6px 11px; font-size: 11.5px;
     font-weight: 600; cursor: pointer; white-space: nowrap; align-self: center; }
   .actchip.def { color: var(--sub); font-weight: 500; }
@@ -931,6 +945,8 @@ const SECTIONS = ["diet", "report", "cal", "food", "inbody"];
 let section = SECTIONS.includes(load("dt_section", "")) ? load("dt_section", "") : "diet";
 // 일간은 식단 탭 자체가 됐고, view 는 리포트 안의 주간/월간만 가리킨다
 let view = ["week", "month"].includes(load("dt_view", "")) ? load("dt_view", "") : "week";
+let burnOpen = load("dt_burn_open", false);   // 초과분 상쇄 목록을 펼쳤나
+function toggleBurn() { burnOpen = !burnOpen; save("dt_burn_open", burnOpen); render(); }
 let calcOpen = load("dt_calc_open", false);   // 요약 카드의 계산 근거를 펼쳤나
 let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
@@ -1361,20 +1377,47 @@ function cumBalance() {
 // 각 종류의 순증분(kcal/체중kg/시간)으로 나눈다. 내가 쓰는 페이스가 설정돼 있으면
 // 그 값으로, 없으면 종류별 기본값으로 계산한다.
 function burnOff(kcal, wt) {
-  if (!(kcal > 0) || !(wt > 0)) return "";
+  if (!(kcal > 0) || !(wt > 0)) return [];
   return CARDIO_NAMES.map(ci => {
     const c = CARDIO[ci], o = {};
     c.f.forEach(([k, l, d]) => { o[k] = d; });
     Object.assign(o, cpOf(ci, calc.cI, calc.cP));      // 내 설정과 종류가 같으면 그걸 쓴다
     const rate = cardioRate(ci, o);
-    if (!(rate > 0)) return "";
+    if (!(rate > 0)) return null;
     const min = kcal / (rate * wt) * 60;
     if (c.hours) {                                     // 러닝은 거리로 말해주는 게 낫다
       const km = +o.pace > 0 ? min / o.pace : 0;
-      return `${ci} ${o.pace}분/km <b>${km.toFixed(1)}km</b> <span class="muted">(${Math.round(min)}분)</span>`;
+      return { ci, cp: { ...o, km: Math.round(km * 10) / 10 }, min,
+               html: `${ci} ${o.pace}분/km <b>${km.toFixed(1)}km</b> <span class="muted">(${Math.round(min)}분)</span>` };
     }
-    return `${cardioLabel(ci, o)} <b>${Math.round(min)}분</b>`;
-  }).filter(Boolean).join("<br>");
+    return { ci, cp: o, min, html: `${cardioLabel(ci, o)} <b>${Math.round(min)}분</b>` };
+  }).filter(Boolean);
+}
+// 상쇄 후보를 버튼과 함께 뿌린다. 누르면 그 운동이 오늘 활동에 기록된다
+let burnOpts = [];
+function burnRows(kcal, wt) {
+  burnOpts = burnOff(kcal, wt);
+  if (!burnOpts.length) return `<div class="muted">인바디에 체중을 넣으면 필요한 유산소를 알려줍니다</div>`;
+  return burnOpts.map((o, i) => `<div class="burnrow"><span>${o.html}</span>
+    <button class="btn" onclick="offsetBurn(${i})">상쇄</button></div>`).join("");
+}
+// 고른 유산소를 오늘 활동에 넣는다. 그러면 오늘 유지 열량이 올라가 목표도 올라가고,
+// 그만큼 초과가 실제로 상쇄된다 — 숫자만 보여주는 게 아니라 기록에 반영되는 것이다.
+async function offsetBurn(i) {
+  const o = burnOpts[i];
+  if (!o) return;
+  const a = act[curDate] || {};
+  const sameType = a.ci === o.ci;
+  // 러닝은 시간이 거리에서 나온다 — 같은 종류면 거리를 더하고, 아니면 갈아끼운다
+  let cp = { ...o.cp }, ch = o.min / 60;
+  if (sameType) {
+    if (o.ci === "러닝") cp.km = Math.round(((+((a.cp || {}).km) || 0) + (+o.cp.km || 0)) * 10) / 10;
+    else ch = (+a.ch || 0) + o.min / 60;
+  }
+  act[curDate] = { ...a, ci: o.ci, cp, ch: o.ci === "러닝" ? 0 : ch };
+  delete act[curDate].rest;
+  await pushAct();
+  toast(`${cardioLabel(o.ci, cp)} ${sameType ? "합산" : "기록"} — 오늘 목표가 올라갑니다`, 4000);
 }
 
 function burnCardio(h, wt, ci, cp) { return cardioHours(ci, cp, h) * wt * cardioRate(ci, cp); }
@@ -1632,8 +1675,8 @@ function renderDay() {
   summaryCard.innerHTML = `
     <div class="remain-big">
       <b style="color:${left < 0 ? "var(--red)" : "var(--text)"}">${num(Math.abs(left))}</b>
-      <em>kcal ${left < 0 ? "초과" : "남음"}</em>
-      ${cum.days ? `<em class="cum">(누계 ${num(Math.abs(cum.plan))} ${cum.plan > 0 ? "초과" : "남음"})</em>` : ""}
+      <em>${left < 0 ? "초과" : "남음"}</em>
+      ${cum.days ? `<em class="cum">누계 ${num(Math.abs(cum.plan))}</em>` : ""}
       ${g.adjusted
         ? `<button class="actchip${g.isDefault ? " def" : ""}" onclick="openAct()">🔥 ${esc(g.src)} <i>✎</i></button>`
         : `<span class="r">주 평균 목표</span>`}
@@ -1641,11 +1684,11 @@ function renderDay() {
     // 기록 전체의 누적. 계획 대비와 실제 수지를 따로 보여준다 —
     // 목표에 이미 적자가 들어 있어서 목표를 넘겨도 유지 열량 아래면 지방은 빠진다
     (cum.plan > 0 || cum.real > 0 ? `<div class="burnoff${cum.real > 0 ? "" : " ok"}">
-      ${cum.real > 0
-        ? `<span class="lbl">누계 늘어난 체지방을 없애려면</span>`
-          + (burnOff(cum.real, w.wt) || "인바디에 체중을 넣으면 필요한 유산소를 알려줍니다")
-        : `<span class="lbl">누계를 따라잡으려면 <span class="muted">초과한 날 ${cum.over}일</span></span>`
-          + (burnOff(cum.plan, w.wt) || "")}
+      <button class="burnhead" onclick="toggleBurn()">
+        <span>${cum.real > 0 ? "누계 늘어난 체지방 상쇄하기" : "초과분 상쇄하기"}</span>
+        <b>${num(Math.abs(cum.real > 0 ? cum.real : cum.plan))}</b>
+        <i>${burnOpen ? "▲" : "▼"}</i></button>
+      ${burnOpen ? burnRows(cum.real > 0 ? cum.real : cum.plan, w.wt) : ""}
     </div>` : "") +
     // 괄호 안은 칼로리 기준 비율 (P·C ×4, F ×9). 도넛 대신 여기서 바로 읽는다
     ((ak, gk) => `<div class="macros">` +
