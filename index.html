@@ -1107,12 +1107,7 @@ function renderDay() {
            <span style="color:var(--sub)">· 오늘 활동을 넣으면 오늘 기준으로 다시 계산됩니다</span>`}<br>
       <span style="color:var(--sub)">적자 ${num(calc.deficit)} = 주당 약 ${(calc.deficit * 7 / 7700).toFixed(2)}kg 감량 속도</span>
     </div>` +
-    (list.length
-      ? `<div class="btns mt"><button class="btn" onclick="copyDay(-1)">어제와 똑같이 추가</button></div>`
-      : `<div class="btns mt">
-           <button class="btn pri" onclick="logAllPlan()">📋 계획대로 하루 기록</button>
-           <button class="btn ok" onclick="copyDay(-1)">📄 어제와 똑같이</button>
-         </div>`);
+    "";
 
   // 끼니 카드
   mealsEl.innerHTML = MEALS.map(m => {
