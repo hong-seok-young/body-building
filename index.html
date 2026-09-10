@@ -89,6 +89,8 @@
   .burnoff.ok { background: var(--okbg, rgba(34,197,94,.12)); color: var(--text);
     border-color: rgba(34,197,94,.35); }
   .burnoff .muted { font-weight: 400; }
+  /* 입력칸 바로 아래에 그 칸이 만드는 열량 */
+  .fkcal { display: block; margin-top: 4px; font-size: 11.5px; font-weight: 700; color: var(--accent); }
   /* 접었다 펴는 머리 + 종류별 한 줄 (오른쪽에 상쇄 버튼) */
   .burnhead { display: flex; align-items: center; gap: 8px; width: 100%;
     background: none; border: none; padding: 0; cursor: pointer;
@@ -614,10 +616,14 @@
   <div class="modal" style="max-width:400px">
     <h3 id="actTitle">활동</h3>
     <div class="hint" style="margin-top:0">별일 없으면 <b id="actDefLabel"></b> 로 계산합니다. 이 날이 달랐을 때만 고치세요.<br>
-      <b>걸음수에는 러닝한 걸음을 넣지 마세요</b> — 걸음과 유산소를 따로 더하므로 이중 계산이 됩니다 (5km ≈ 5,500보 ≈ 220kcal).</div>
+      <b>걸음수에는 유산소로 걸은 걸음을 넣지 마세요</b> — 걸음과 유산소를 따로 더하므로 이중 계산이 됩니다 (5km ≈ 5,500보 ≈ 220kcal).</div>
     <div class="fields g2 mt">
-      <label>걸음수 <span class="muted">러닝 제외</span><input type="number" min="0" step="100" id="aSteps" oninput="actLive()"></label>
-      <label>웨이트 (분)<input type="number" min="0" step="5" id="aWh" oninput="actLive()"></label>
+      <label>걸음수 <span class="muted">유산소 제외</span>
+        <input type="number" min="0" step="100" id="aSteps" oninput="actLive()">
+        <small class="fkcal" id="aStepsK"></small></label>
+      <label>웨이트 (분)
+        <input type="number" min="0" step="5" id="aWh" oninput="actLive()">
+        <small class="fkcal" id="aWhK"></small></label>
       <label style="grid-column:1/-1">유산소 종류<select id="aCi" onchange="onCardioType('a')"></select></label>
       <label id="aChWrap">유산소 (분)<input type="number" min="0" step="5" id="aCh" oninput="actLive()"></label>
       <div id="aCp" style="display:contents"></div>
@@ -1397,17 +1403,22 @@ function actFormAct() {
 }
 function actLive() {
   const a = actFormAct(), b = calcBase(curDate);
-  if (!b.wt || !b.bmr) { aCardioInfo.innerHTML = `<span class="muted">인바디에 체중·기초대사량을 먼저 넣어주세요</span>`; return; }
+  if (!b.wt || !b.bmr) {
+    aStepsK.textContent = aWhK.textContent = "";
+    aCardioInfo.innerHTML = `<span class="muted">인바디에 체중·기초대사량을 먼저 넣어주세요</span>`;
+    return;
+  }
   const h = cardioHours(a.ci, a.cp, a.ch);
   const kcCardio = h * b.wt * cardioRate(a.ci, a.cp);
   const kcSteps = a.steps * b.wt * STEP_K, kcLift = burnLift(a.wh, b.wt);
   const tdee = b.sed + kcSteps + kcLift + kcCardio;
   const target = floorBmr(tdee - calc.deficit, b.bmr);
   const eat = totals(dayLog(curDate)).kcal;
+  // 각 칸이 만드는 열량은 그 칸 바로 아래에 붙인다
+  aStepsK.textContent = a.steps ? `${num(kcSteps)} kcal` : "";
+  aWhK.textContent = a.wh ? `${num(kcLift)} kcal` : "";
   aCardioInfo.innerHTML =
-    (h ? `${cardioLabel(a.ci, a.cp)} · ${durLabel(h)} → <b>${num(kcCardio)} kcal</b>
-          <span class="muted">(안정시 제외한 순증분)</span><br>` : "")
-    + `<span class="muted">걸음 ${num(kcSteps)} · 웨이트 ${num(kcLift)}${h ? ` · 유산소 ${num(kcCardio)}` : ""}</span><br>`
+    (h ? `<span class="fkcal" style="margin:0 0 5px">유산소 ${num(kcCardio)} kcal</span>` : "")
     + `유지 <b>${num(tdee)}</b> − 적자 ${num(calc.deficit)} → 목표 <b style="color:var(--accent)">${num(target)}</b>`
     + (eat ? `<br>섭취 ${num(eat)} → <b style="color:${eat > target ? "var(--red)" : "var(--green)"}">${
         eat > target ? num(eat - target) + " 초과" : num(target - eat) + " 남음"}</b>` : "");
