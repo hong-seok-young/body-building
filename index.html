@@ -298,6 +298,15 @@
   .cal button.ok    { background: rgba(34,197,94,.22); }
   .cal button.over  { background: rgba(239,68,68,.22); }
   .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: var(--sub); margin-top: 11px; }
+  /* 알림창(alert) 대신 쓰는 토스트 — 혼자 쓰는 앱이라 누르게 만들 이유가 없다.
+     탭바 위에 잠깐 떴다 사라진다 */
+  #toastEl { position: fixed; left: 50%; transform: translateX(-50%) translateY(14px);
+    bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 40;
+    max-width: min(560px, calc(100vw - 26px)); padding: 11px 16px; border-radius: 12px;
+    background: var(--text); color: var(--bg); font-size: 12.5px; font-weight: 600;
+    line-height: 1.5; white-space: pre-line; box-shadow: 0 10px 30px rgba(0,0,0,.3);
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; }
+  #toastEl.show { opacity: .96; transform: translateX(-50%) translateY(0); }
   .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
   /* 설치 안내 배너 */
   #installBar { display: none; }
@@ -572,6 +581,8 @@
   </div>
 </div>
 
+<div id="toastEl"></div>
+
 <!-- 활동 수정 -->
 <div class="overlay" id="actOverlay">
   <div class="modal" style="max-width:400px">
@@ -809,7 +820,7 @@ let cfg = load("dt_cfg", null) || (BUILTIN_CFG.url ? { ...BUILTIN_CFG } : null);
 // 기기마다 제 로컬 기록만 쌓여 "과거 데이터가 막 바뀌는" 것처럼 보인다.
 // 한 번 그렇게 커밋한 적이 있어서, 조용히 넘어가지 않고 화면에 띄운다.
 if (cfg && /localhost|127\.0\.0\.1/.test(cfg.url) && !/^(localhost|127\.0\.0\.1)/.test(location.hostname))
-  addEventListener("load", () => alert("⚠️ 백엔드 주소가 테스트용(localhost)으로 되어 있어 구글 시트 동기화가 안 됩니다.\n이 기기 안에만 기록됩니다 — 코드를 고쳐야 합니다."));
+  addEventListener("load", () => toast("⚠️ 백엔드 주소가 테스트용(localhost)입니다 — 시트 동기화 안 됨", 8000));
 let cache = load("dt_cache", {});
 let goals = { ...DEFAULT_GOALS, ...load("dt_goals", {}) };
 let calc = { ...DEFAULT_CALC, ...load("dt_calc", {}) };
@@ -947,6 +958,15 @@ async function api(params) {
   return j;
 }
 function setStatus(txt, color) { statusEl.textContent = txt; statusEl.style.color = color || "var(--sub)"; }
+// 알림창을 띄우지 않는다 — 내가 고치고 내가 보고 있으므로 조용히 알려주면 된다
+let toastT = null;
+function toast(msg, ms) {
+  const el = document.getElementById("toastEl");
+  if (!el) return;
+  el.textContent = msg; el.classList.add("show");
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.remove("show"), ms || 3200);
+}
 const metaQ = {};
 // 같은 키에 연달아 쓰면 응답 순서가 뒤바뀌어 옛 값이 나중에 도착해 덮어쓸 수 있다.
 // 그래서 키별로 한 줄로 세우고, 기다려야 하는 곳에서 await 할 수 있게 프라미스를 돌려준다.
@@ -1041,7 +1061,7 @@ function setMealCount(n) {
   // 줄일 때 그 끼니에 기록이 있으면 막는다
   if (v < mealCount) {
     for (let i = v; i < mealCount; i++) {
-      if (mealLog(curDate, mealName(i)).length) { alert(`${mealName(i)} 에 기록이 있어 줄일 수 없습니다. 먼저 비워주세요.`); return; }
+      if (mealLog(curDate, mealName(i)).length) { toast(`${mealName(i)} 에 기록이 있어 줄일 수 없어요`); return; }
     }
   }
   mealCount = v; save("dt_mealcount", mealCount); setMeta("mealcount", mealCount);
@@ -1143,13 +1163,13 @@ function addPreset(i) { pushItem({ ...scaled(presets[i], qtyVal()), date: curDat
 function delPreset(i) { presets.splice(i, 1); save("dt_presets", presets); setMeta("presets", presets); render(); }
 async function copyMealFrom(m) {
   const src = mealLog(addDays(curDate, -1), m);
-  if (!src.length) { alert(`전날 ${m} 기록이 없어요`); return; }
+  if (!src.length) { toast(`전날 ${m} 기록이 없어요`); return; }
   for (const x of src) { const { id, date, ...rest } = x; await pushItem({ ...rest, date: curDate, meal: m }); }
   render();
 }
 async function copyDay(n) {
   const from = addDays(curDate, n), src = dayLog(from);
-  if (!src.length) { alert(`${from} 기록이 없어요`); return; }
+  if (!src.length) { toast(`${from} 기록이 없어요`); return; }
   for (const x of src) { const { id, date, ...rest } = x; await pushItem({ ...rest, date: curDate }); }
   render();
 }
@@ -1296,9 +1316,7 @@ function setDefaultDay() {
   saveCalcMeta();
   delete act[curDate];                        // 이 날은 기본값을 따르게
   closeAct(); pushAct();
-  alert(`${dateLabel(curDate)} 부터 평소 하루를 ${actLabel(e)} 로 바꿨습니다.\n\n`
-      + `그 이후 날짜 중 따로 고치지 않은 날이 이 기준으로 계산됩니다.\n`
-      + `이전 날짜는 예전 기준 그대로 남습니다.`);
+  toast(`${dateLabel(curDate)} 부터 평소 하루 = ${actLabel(e)}\n이전 날짜는 그대로`, 4200);
 }
 // act 는 meta 셀 하나에 JSON 으로 들어가고 시트 셀 한도는 5만 자다.
 // 하루치가 약 50자라 그냥 쌓으면 2.6년쯤에서 저장이 막힌다. 최근 400일만 남긴다
@@ -1602,7 +1620,7 @@ function tidyPresets(loud) {
   if (removed > 0) {
     presets = out; save("dt_presets", presets); setMeta("presets", presets);
   }
-  if (loud) alert(removed > 0 ? `중복 ${removed}개를 정리했습니다.` : "중복이 없습니다.");
+  if (loud) toast(removed > 0 ? `중복 ${removed}개 정리` : "중복 없음");
   if (removed > 0) render();
   return removed;
 }
@@ -2086,9 +2104,8 @@ async function pushInbody(item, opts) {
   }
   if (!quiet) render();
   if (rg && rg.after !== rg.before && !quiet)
-    alert(`인바디 ${rg.from} 반영\n\n기초대사량 ${num(rg.bmr)} → 유지 열량 ${num(rg.avg)}\n`
-        + `− 적자 ${num(calc.deficit)} → 목표 ${num(rg.before)} → ${num(rg.after)}kcal\n\n`
-        + `${rg.from} 부터 이 기준으로 계산합니다. 그 이전 날짜는 예전 인바디 기준 그대로 남습니다.`);
+    toast(`인바디 ${rg.from} 반영 · 기초대사량 ${num(rg.bmr)}\n`
+        + `유지 ${num(rg.avg)} − 적자 ${num(calc.deficit)} → 목표 ${num(rg.before)} → ${num(rg.after)}kcal`, 5000);
   return rg;
 }
 async function delInbodyRec(id) {
@@ -2115,9 +2132,7 @@ async function dedupeInbody() {
   order.forEach(x => { const k = key(x); if (seen[k]) dups.push(x); else seen[k] = 1; });
   if (!dups.length) return;
   for (const d of dups) await delInbodyRec(d.id);
-  alert(`인바디 중복 ${dups.length}건을 정리했습니다.` + "\n\n"
-      + dups.map(d => `• ${d.date} ${fmt(d.weight)}kg`).join("\n")
-      + "\n\n같은 날짜·같은 값이 두 줄 이상 들어가 있던 것입니다. 값은 그대로입니다.");
+  toast(`인바디 중복 ${dups.length}건 정리 (같은 날짜·같은 값)`, 4000);
 }
 
 function renderInbody() {
@@ -2360,7 +2375,7 @@ async function applyHashAdd() {
   const o = hashAdd; hashAdd = null;
   if (!o) return;
   const done = await applyPayload(o);
-  if (done.length) alert("✓ 반영했습니다\n\n" + done.join("\n"));
+  if (done.length) { console.log("[link] " + done.join("\n  ")); toast(`✓ ${done.length}건 반영`); }
 }
 
 // 저장소의 inbox.json 을 읽어 자동 반영한다.
@@ -2426,9 +2441,12 @@ async function applyInbox() {
     }
   }
   setStatus(cfg ? "● 동기화됨" : "● 로컬 저장", cfg ? "var(--green)" : "var(--sub)");
-  if (failed.length) done.push("", "⚠ 실패 — 다음에 다시 시도합니다:", ...failed.map(x => "   " + x));
-  if (done.length) alert(`✓ ${done.length - (failed.length ? failed.length + 2 : 0)}건 반영했습니다\n\n`
-    + done.join("\n"));
+  // 전문은 콘솔로. 화면에는 몇 건 들어왔는지만 잠깐 띄운다
+  if (done.length) console.log("[inbox]\n" + done.join("\n"));
+  if (failed.length) console.log("[inbox 실패]\n" + failed.join("\n"));
+  if (done.length || failed.length)
+    toast(`✓ ${done.length}건 반영` + (failed.length ? ` · ${failed.length}건 실패 (다음에 재시도)` : ""),
+          failed.length ? 6000 : 3200);
 }
 
 // 지시(o.at) 보다 뒤에 내가 직접 바꾼 설정인가
