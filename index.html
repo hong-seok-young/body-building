@@ -2312,14 +2312,14 @@ function renderWeek() {
   weekLedger.innerHTML = `
     <h3>이번 주 장부 <span class="muted">기록한 ${done.length}일 기준</span></h3>
     <div class="stats">
-      <div class="stat"><span>먹은 열량 ${done.length}일</span><b>${num(sumEat)}</b>
-        <small>하루 ${num(sumEat / done.length)}</small></div>
-      <div class="stat"><span>유지 열량 ${done.length}일</span><b>${num(sumTdee)}</b>
-        <small>하루 ${num(sumTdee / done.length)}</small></div>
+      <div class="stat"><span>하루 먹은 열량</span><b>${num(sumEat / done.length)}</b>
+        <small>${done.length}일 평균</small></div>
+      <div class="stat"><span>하루 유지 열량</span><b>${num(sumTdee / done.length)}</b>
+        <small>${done.length}일 평균</small></div>
       <div class="stat"><span>계획 대비</span><b style="color:${sumDiff > 0 ? "var(--red)" : "var(--green)"}">${sumDiff > 0 ? "+" : ""}${num(sumDiff)}</b>
-        <small>먹은 − 목표 ${num(sumGoal)}</small></div>
+        <small>하루 ${sumDiff > 0 ? "+" : ""}${num(sumDiff / done.length)}</small></div>
       <div class="stat"><span>실제 수지</span><b style="color:${sumReal > 0 ? "var(--red)" : "var(--green)"}">${sumReal > 0 ? "+" : ""}${num(sumReal)}</b>
-        <small>먹은 − 유지</small></div>
+        <small>하루 ${sumReal > 0 ? "+" : ""}${num(sumReal / done.length)}</small></div>
       <div class="stat"><span>예상 체지방</span><b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b>
         <small>실제 수지 ÷ 7,700</small></div>
     </div>
