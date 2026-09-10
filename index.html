@@ -2330,16 +2330,7 @@ function renderWeek() {
       <div class="stat"><span>예상 체지방</span><b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b>
         <small>미초과시 ${plannedKg > 0 ? "+" : "−"}${Math.abs(plannedKg).toFixed(2)}kg</small></div>
     </div>
-    <div class="diff">
-      체지방은 <b>유지 열량 대비</b>로 계산합니다. 목표(하루 ${num(sumGoal / done.length)})에는 이미 적자 ${num(calc.deficit)} 이 들어 있어서,
-      목표를 조금 넘겨도 유지 열량 아래면 지방은 계속 빠집니다.<br>
-      목표를 그대로 지켰다면 기록한 ${done.length}일 동안 <b>체지방 ${(done.length * calc.deficit / 7700).toFixed(2)}kg</b> 이 줄어야 합니다
-      (적자 ${num(calc.deficit)} × ${done.length}일 ÷ 7,700).
-      실제 기록으로는 <b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b>
-      ${sumDiff > 0 ? `— 목표보다 ${num(sumDiff)}kcal 더 먹어서 그만큼 감량이 늦어졌습니다` :
-        Math.abs(sumDiff) > 500 ? `— 목표보다 ${num(-sumDiff)}kcal 덜 먹었습니다` : "— 목표에 거의 맞았습니다"}.
-      <br><span style="color:var(--sub)">다음 인바디의 체지방량과 비교해보세요. 크게 다르면 ① 기록 누락 ② 활동 소모 추정 오차(웨이트 ${+calc.liftK || LIFT_K}kcal/kg/h) ③ 수분 변동 순으로 의심하면 됩니다.</span>
-    </div>`;
+`;
 
   // ── 일별 탄단지 (칼로리 기준 스택)
   if (weekChart) { weekChart.destroy(); weekChart = null; }
