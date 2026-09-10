@@ -1125,30 +1125,57 @@ function qtyVal() { const q = +fQty.value; return q > 0 ? q : 1; }
 
 // ── 먹은 양을 숫자로 다룬다. 항목에 amt/unit 이 없으면 이름에서 뽑아낸다
 //    ("퀵오트 건조 50g" → 50 g,  "계란 1개 (50g)" → 50 g,  "아몬드 15알" → 15 알)
-const UNITS = "개|알|장|스쿱|컵|큰술|작은술|조각|마리|포|팩";
-function parseAmt(name) {
+const UNITS = "작은술|큰술|숟가락|티스푼|스푼|인분|공기|스쿱|조각|마리|송이|덩이"
+            + "|개|알|장|컵|잔|병|캔|봉|줄|쪽|판|포|팩|톨";
+// 이름에서 갯수 단위와 그램을 각각 뽑는다.
+// "계란 1개 (50g)" 처럼 둘 다 있으면 개당 50g 을 알 수 있어서, 한쪽을 고치면
+// 나머지가 따라 움직인다 (2개 → 100g).
+function parseAmtBoth(name) {
   const s = String(name);
-  let m = s.match(/\((\d+(?:\.\d+)?)\s*(g|ml)\)/i);          // 괄호 안 그램을 우선
-  if (m) return { amt: +m[1], unit: m[2].toLowerCase() };
-  m = s.match(/(\d+(?:\.\d+)?)\s*(g|ml)(?![a-zA-Z])/i);
-  if (m) return { amt: +m[1], unit: m[2].toLowerCase() };
-  m = s.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*(" + UNITS + ")"));
-  if (m) return { amt: +m[1], unit: m[2] };
-  return null;
+  let g = null, c = null;
+  const mg = s.match(/\((\d+(?:\.\d+)?)\s*(g|ml)\)/i)
+          || s.match(/(\d+(?:\.\d+)?)\s*(g|ml)(?![a-zA-Z])/i);
+  if (mg) g = { amt: +mg[1], unit: mg[2].toLowerCase() };
+  const mc = s.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*(" + UNITS + ")"));
+  if (mc) c = { amt: +mc[1], unit: mc[2] };
+  return { g, c };
+}
+// 갯수로 셀 수 있으면 갯수를 기본 단위로 쓴다 (그램은 보조)
+function parseAmt(name) {
+  const b = parseAmtBoth(name);
+  return b.c || b.g || null;
 }
 function itemAmt(x) {
   if (+x.amt > 0 && x.unit) return { amt: +x.amt, unit: String(x.unit) };
   return parseAmt(x.name) || { amt: 1, unit: "인분" };
 }
-const amtStr = n => String(Math.round(n * 100) / 100);
-// 이름 안의 양 표기를 새 값으로 바꾼다. 못 찾으면 뒤에 붙인다
-function setAmtInName(name, oldA, newA, unit) {
-  if (oldA === newA) return name;
-  const base = String(name).replace(/\s*×\s*[\d.]+\s*$/, "");
-  for (const pat of [amtStr(oldA) + unit, amtStr(oldA) + " " + unit]) {
-    if (base.indexOf(pat) >= 0) return base.replace(pat, amtStr(newA) + unit);
+// 수정 화면에 뿌릴 두 칸. 저장된 amt/unit 이 어느 쪽인지 보고 자리를 채운다
+function rowAmts(x) {
+  const b = parseAmtBoth(x.name);
+  if (+x.amt > 0 && x.unit) {
+    const st = { amt: +x.amt, unit: String(x.unit) };
+    if (/^(g|ml)$/i.test(st.unit)) b.g = st; else b.c = st;
   }
-  return `${base} ${amtStr(newA)}${unit}`;
+  if (!b.g && !b.c) b.c = { amt: 1, unit: "인분" };
+  return b;
+}
+const amtStr = n => String(Math.round(n * 100) / 100);
+// 이름 안의 양 표기를 전부 k 배로 바꾼다.
+// "계란 1개 (50g)" ×2 → "계란 2개 (100g)" — 한 군데만 고치면 둘이 어긋난다
+function scaleName(name, k) {
+  if (!(k > 0) || k === 1) return String(name);
+  let out = String(name).replace(/\s*×\s*[\d.]+\s*$/, "");
+  const b = parseAmtBoth(out);
+  let hit = false;
+  for (const part of [b.c, b.g]) {
+    if (!part) continue;
+    const from = amtStr(part.amt), to = amtStr(Math.round(part.amt * k * 100) / 100);
+    for (const pat of [from + part.unit, from + " " + part.unit]) {
+      const i = out.indexOf(pat);
+      if (i >= 0) { out = out.slice(0, i) + pat.replace(from, to) + out.slice(i + pat.length); hit = true; break; }
+    }
+  }
+  return hit ? out : `${out} ×${amtStr(k)}`;
 }
 // 양을 k 배로 (칩을 수량 2로 누르는 경우 등)
 function scaled(x, k) {
@@ -1156,7 +1183,7 @@ function scaled(x, k) {
   KEYS.forEach(kk => { o[kk] = Math.round((+x[kk] || 0) * k * 10) / 10; });
   const a = itemAmt(x), na = Math.round(a.amt * k * 100) / 100;
   o.amt = na; o.unit = a.unit;
-  o.name = setAmtInName(x.name, a.amt, na, a.unit);
+  o.name = scaleName(x.name, k);
   return o;
 }
 function addPreset(i) { pushItem({ ...scaled(presets[i], qtyVal()), date: curDate, meal: fMeal.value || guessMeal() }); }
@@ -1537,12 +1564,7 @@ function renderDay() {
       ${open ? items.map(x => `<div class="mrow" data-id="${x.id}">
         <span class="nm" onclick="event.stopPropagation();toggleRowEdit('${x.id}')" style="cursor:pointer">${esc(x.name)}<small>탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)} · 지 ${fmt(+x.f || 0)}${+x.na ? " · Na " + num(x.na) : ""}${+x.sug ? " · 당 " + fmt(x.sug) : ""}${+x.sat ? " · 포화 " + fmt(x.sat) : ""}</small></span>
         <span class="kc">${num(x.kcal)}</span>
-        <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button></div>${rowEdit === x.id ? `<div class="mrow" style="background:var(--card2);flex-wrap:wrap;gap:7px">
-        <span style="flex:1 0 100%;font-size:11.5px;color:var(--sub)">먹은 양을 고치세요 — 지금 <b>${amtStr(itemAmt(x).amt)}${itemAmt(x).unit}</b> / ${num(x.kcal)}kcal. 영양성분이 전부 같이 조정됩니다.</span>
-        <input id="rq" type="number" step="any" min="0" value="${amtStr(itemAmt(x).amt)}" style="width:92px;border:1px solid var(--line);border-radius:9px;padding:8px;background:var(--card);color:var(--text)">
-        <span style="align-self:center;font-size:13px;font-weight:700">${itemAmt(x).unit}</span>
-        <button class="btn pri" style="flex:0 0 auto;padding:8px 15px" onclick="applyRowScale('${curDate}','${x.id}')">적용</button>
-        <button class="btn" style="flex:0 0 auto;padding:8px 15px" onclick="toggleRowEdit(null)">취소</button></div>` : ""}`).join("")
+        <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button></div>${rowEdit === x.id ? rowEditHtml(x) : ""}`).join("")
         + `<div class="meal-act">
              <button class="btn" onclick="toggleMealForm('${m}')">${mealFormOpen === m ? "닫기" : "＋ 음식"}</button>
              <button class="btn" onclick="copyMealFrom('${m}')">전날 복사</button>
@@ -1842,22 +1864,56 @@ mealsEl.addEventListener("mousedown", e => {
 addEventListener("mousemove", e => { if (dragT || drag) dragMove(e); });
 addEventListener("mouseup", e => { if (drag) dragUp(e); else if (dragT) dragStop(); });
 
-// ── 기록한 항목의 양 정정 (영양성분 비례 조정)
+// ── 기록한 항목의 양 정정.
+// 갯수로 셀 수 있는 것은 갯수로, 그램도 아는 것은 두 칸을 같이 보여주고
+// 한쪽을 고치면 나머지가 따라 바뀐다 (계란 1개 = 50g → 2개 치면 100g)
+function amtBox(id, v, unit, per, other) {
+  return `<input id="${id}" type="number" step="any" min="0" value="${amtStr(v)}"
+      ${per ? `oninput="syncRowAmt('${id}')"` : ""}
+      style="width:74px;border:1px solid var(--line);border-radius:9px;padding:8px;background:var(--card);color:var(--text)">
+    <span style="align-self:center;font-size:13px;font-weight:700">${unit}</span>`;
+}
+function rowEditHtml(x) {
+  const a = rowAmts(x);
+  // 개당 그램 — 둘 다 있을 때만 서로 연동된다
+  const per = a.c && a.g ? a.g.amt / a.c.amt : 0;
+  return `<div class="mrow rowedit" data-per="${per}" style="background:var(--card2);flex-wrap:wrap;gap:7px">
+    <span style="flex:1 0 100%;font-size:11.5px;color:var(--sub)">먹은 양을 고치세요 — 지금 ${num(x.kcal)}kcal.
+      ${per ? `한쪽만 고치면 나머지가 따라 바뀝니다 (1${a.c.unit} = ${amtStr(per)}${a.g.unit}).` : "영양성분이 전부 같이 조정됩니다."}</span>
+    ${a.c ? amtBox("rqc", a.c.amt, a.c.unit, per) : ""}
+    ${a.c && a.g ? `<span style="align-self:center;color:var(--sub)">=</span>` : ""}
+    ${a.g ? amtBox("rqg", a.g.amt, a.g.unit, per) : ""}
+    <button class="btn pri" style="flex:0 0 auto;padding:8px 15px" onclick="applyRowScale('${curDate}','${x.id}')">적용</button>
+    <button class="btn" style="flex:0 0 auto;padding:8px 15px" onclick="toggleRowEdit(null)">취소</button></div>`;
+}
+function syncRowAmt(src) {
+  const box = document.querySelector(".mrow.rowedit");
+  const c = document.getElementById("rqc"), g = document.getElementById("rqg");
+  const per = box ? +box.dataset.per : 0;
+  if (!box || !c || !g || !(per > 0)) return;
+  if (src === "rqc") { const v = +c.value; g.value = v > 0 ? amtStr(v * per) : ""; }
+  else { const v = +g.value; c.value = v > 0 ? amtStr(v / per) : ""; }
+}
+
 function toggleRowEdit(id) {
   if (Date.now() - dragEndAt < 350) return;        // 방금 끝난 드래그의 클릭은 무시
   rowEdit = rowEdit === id ? null : id; render();
 }
 async function applyRowScale(ds, id) {
-  const el = document.getElementById("rq");
+  const cE = document.getElementById("rqc"), gE = document.getElementById("rqg");
   const x = dayLog(ds).find(i => i.id === id);
   rowEdit = null;
   if (!x) { render(); return; }
-  const a = itemAmt(x), newA = el ? +el.value : a.amt;
-  if (!(newA > 0) || newA === a.amt) { render(); return; }
+  const a = rowAmts(x);
+  // 배율은 갯수 칸 우선, 없으면 그램 칸 기준 (두 칸은 이미 서로 맞춰져 있다)
+  let k = 0;
+  if (a.c && cE && +cE.value > 0) k = +cE.value / a.c.amt;
+  else if (a.g && gE && +gE.value > 0) k = +gE.value / a.g.amt;
+  if (!(k > 0) || Math.abs(k - 1) < 1e-9) { render(); return; }
   const { id: _i, date: _d, ...rest } = x;
   // 백엔드에 update 액션이 없어 지우고 다시 넣는다 (구버전 Code.gs 에서도 동작)
   await delItem(ds, id);
-  await pushItem({ ...scaled({ ...rest, amt: a.amt, unit: a.unit }, newA / a.amt), date: ds });
+  await pushItem({ ...scaled(rest, k), date: ds });
   render();
 }
 function renderStreak() {
