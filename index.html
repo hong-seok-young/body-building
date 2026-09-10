@@ -1819,11 +1819,18 @@ async function applyHashAdd() {
     if (inbody.some(x => x.date === r.date)) { done.push(`인바디 ${r.date} (이미 있음)`); continue; }
     await pushInbody(r); done.push(`인바디 ${r.date}`);
   }
+  // 식단도 중복 방지 — 같은 날짜·끼니에 같은 이름·열량이 이미 있으면 건너뛴다
+  // (링크를 두 번 눌러도 두 번 기록되지 않게)
+  let skipped = 0;
   for (const it of (o.food || [])) {
     if (!it || !it.name) continue;
-    await pushItem({ ...it, date: it.date || todayStr(), meal: it.meal || guessMeal() });
-    done.push(`식단 ${it.name}`);
+    const d = it.date || todayStr(), m = it.meal || guessMeal();
+    if (dayLog(d).some(x => (x.meal || "간식") === m && x.name === it.name
+                            && Math.abs((+x.kcal || 0) - (+it.kcal || 0)) < 1)) { skipped++; continue; }
+    await pushItem({ ...it, date: d, meal: m });
+    done.push(`${d} ${m} · ${it.name}`);
   }
+  if (skipped) done.push(`(중복 ${skipped}건 건너뜀)`);
   const newP = (o.presets || []).filter(x => x && x.name && !presets.some(z => z.name === x.name));
   if (newP.length) {
     presets = newP.concat(presets).slice(0, 300);
