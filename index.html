@@ -616,10 +616,10 @@
     <div class="hint" style="margin-top:0">별일 없으면 <b id="actDefLabel"></b> 로 계산합니다. 이 날이 달랐을 때만 고치세요.<br>
       <b>걸음수에는 러닝한 걸음을 넣지 마세요</b> — 걸음과 유산소를 따로 더하므로 이중 계산이 됩니다 (5km ≈ 5,500보 ≈ 220kcal).</div>
     <div class="fields g2 mt">
-      <label>걸음수 <span class="muted">러닝 제외</span><input type="number" min="0" step="100" id="aSteps"></label>
-      <label>웨이트 (분)<input type="number" min="0" step="5" id="aWh"></label>
-      <label id="aChWrap">유산소 (분)<input type="number" min="0" step="5" id="aCh"></label>
-      <label>유산소 종류<select id="aCi" onchange="onCardioType('a')"></select></label>
+      <label>걸음수 <span class="muted">러닝 제외</span><input type="number" min="0" step="100" id="aSteps" oninput="actLive()"></label>
+      <label>웨이트 (분)<input type="number" min="0" step="5" id="aWh" oninput="actLive()"></label>
+      <label style="grid-column:1/-1">유산소 종류<select id="aCi" onchange="onCardioType('a')"></select></label>
+      <label id="aChWrap">유산소 (분)<input type="number" min="0" step="5" id="aCh" oninput="actLive()"></label>
       <div id="aCp" style="display:contents"></div>
     </div>
     <div class="hint" id="aCardioInfo" style="margin-top:7px"></div>
@@ -639,7 +639,7 @@
 <!-- 설정 -->
 <div class="overlay" id="settingsOverlay">
   <div class="modal">
-    <h2>⚙️ 설정</h2>
+    <h2>⚙️ 설정 <span class="muted" style="font-size:11px;font-weight:400">빌드 09-10 13:02</span></h2>
     <p>이미 연결돼 있습니다 — 어느 기기에서 열어도 바로 동작합니다. 백엔드를 바꿀 때만 아래를 고치세요.</p>
     <label>Apps Script 웹앱 URL</label>
     <input id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec">
@@ -1005,13 +1005,25 @@ const crosshair = {
 // 여기에 남기지 않으면 화면이 갱신될 때마다 다시 켜진다.
 let chartOff = load("dt_chart_off", {});
 const seriesOff = (id, i) => (chartOff[id] || []).indexOf(i) >= 0;
+// 그래프 인스턴스를 id 로 찾을 수 있게 등록해둔다 (체크박스가 그 그래프만 건드리려면 필요)
+const chartReg = {};
 function toggleSeries(id, i) {
   const a = (chartOff[id] || []).slice();
   const k = a.indexOf(i);
   if (k >= 0) a.splice(k, 1); else a.push(i);
   chartOff = { ...chartOff, [id]: a }; save("dt_chart_off", chartOff);
-  render();
+  // render() 를 부르면 섹션의 모든 그래프를 다시 만들어서, 누르지 않은 그래프까지
+  // 등장 애니메이션을 재생하며 같이 출렁인다. 누른 그래프만 제자리에서 갱신한다.
+  const c = chartReg[id];
+  if (c && c.setDatasetVisibility) {
+    c.setDatasetVisibility(i, k >= 0);
+    c.update();
+    drawLegend(document.getElementById(legendIdOf(id)), c, id);
+    return;
+  }
+  render();                                          // 등록 전이거나 Chart.js 가 없으면 평소대로
 }
+const legendIdOf = id => ({ ibChart1: "ibLeg1", ibChart2: "ibLeg2" }[id] || id + "Leg");
 // 범례를 체크박스로 직접 그린다 (Chart.js 기본 범례는 끈 계열에 취소선만 긋는다)
 function drawLegend(legEl, chart, id) {
   if (!legEl) return;
@@ -1047,30 +1059,35 @@ async function api(params) {
   return j;
 }
 // ── 팝업(오버레이) 열고 닫기.
-// 열 때 히스토리를 한 칸 밀어 넣어서, 폰 뒤로가기가 앱을 닫는 대신 팝업만 닫게 한다.
-// 실제로 닫는 곳은 popstate 한 곳뿐이다 — 버튼으로 닫을 때도 history.back() 을 거친다.
-let modalStack = [];
+// 폰 뒤로가기가 앱을 닫아버리지 않게, 팝업을 열 때 히스토리를 한 칸 밀어 넣는다.
+// 판단 기준은 "화면에 보이는 .overlay.show" 다 — 따로 스택을 들고 있으면
+// 어딘가에서 직접 숨겼을 때 어긋나고, 그러면 pushState 를 건너뛰어 뒤로가기가
+// 앱을 닫아버린다. DOM 을 진실로 삼으면 그런 구멍이 없다.
+const overlayClosers = {};
 function openOverlay(id, onClose) {
   const el = document.getElementById(id);
-  if (!el || modalStack.some(m => m.id === id)) return;
+  if (!el || el.classList.contains("show")) return;
   el.classList.add("show");
-  modalStack.push({ id, onClose });
+  overlayClosers[id] = onClose || null;
   history.pushState({ dtModal: id }, "");
 }
 function closeOverlay(id) {
-  if (modalStack.some(m => m.id === id)) { history.back(); return; }
-  const el = document.getElementById(id);            // 히스토리에 없으면 그냥 닫는다
-  if (el) el.classList.remove("show");
+  const el = document.getElementById(id);
+  if (!el || !el.classList.contains("show")) return;
+  history.back();                                   // popstate 가 실제로 닫는다
 }
-function popOverlay() {
-  const m = modalStack.pop();
-  if (!m) return false;
-  const el = document.getElementById(m.id);
-  if (el) el.classList.remove("show");
-  if (m.onClose) m.onClose();
+// 맨 위(가장 나중에 열린) 팝업 하나를 닫는다
+function hideTopOverlay() {
+  const open = document.querySelectorAll(".overlay.show");
+  const el = open[open.length - 1];
+  if (!el) return false;
+  el.classList.remove("show");
+  const f = overlayClosers[el.id];
+  overlayClosers[el.id] = null;
+  if (f) f();
   return true;
 }
-addEventListener("popstate", () => { popOverlay(); });   // 팝업이 없으면 아무것도 안 한다
+addEventListener("popstate", hideTopOverlay);        // 팝업이 없으면 그대로 뒤로 간다
 function setStatus(txt, color) { statusEl.textContent = txt; statusEl.style.color = color || "var(--sub)"; }
 // 알림창을 띄우지 않는다 — 내가 고치고 내가 보고 있으므로 조용히 알려주면 된다
 let toastT = null;
@@ -1369,12 +1386,31 @@ function onCardioType(which, keep) {
   const c = CARDIO[ci];
   // 러닝은 페이스×거리에서 시간이 나오므로 시간 칸을 감춘다
   wrap.style.display = c && c.hours ? "none" : "";
-  if (!isC) {
-    const h = cardioHours(ci, cp, m2h(aCh.value));
-    const wt = calcBase(curDate).wt || 0;
-    aCardioInfo.innerHTML = !h ? "" :
-      `${cardioLabel(ci, cp)} · ${durLabel(h)} → <b>${num(h * wt * cardioRate(ci, cp))} kcal</b> <span class="muted">(안정시 제외한 순증분)</span>`;
-  }
+  if (!isC) actLive();
+}
+// 활동 칸을 고치는 동안 결과를 바로 보여준다 — 목표치를 맞춰보려면 이게 있어야 한다.
+// 저장 전 폼 값으로 계산하므로 숫자를 칠 때마다 갱신된다.
+function actFormAct() {
+  const ci = aCi.value;
+  return { steps: +aSteps.value || 0, wh: m2h(aWh.value), ch: m2h(aCh.value),
+           ci, cp: readCardio("a_", ci) || {} };
+}
+function actLive() {
+  const a = actFormAct(), b = calcBase(curDate);
+  if (!b.wt || !b.bmr) { aCardioInfo.innerHTML = `<span class="muted">인바디에 체중·기초대사량을 먼저 넣어주세요</span>`; return; }
+  const h = cardioHours(a.ci, a.cp, a.ch);
+  const kcCardio = h * b.wt * cardioRate(a.ci, a.cp);
+  const kcSteps = a.steps * b.wt * STEP_K, kcLift = burnLift(a.wh, b.wt);
+  const tdee = b.sed + kcSteps + kcLift + kcCardio;
+  const target = floorBmr(tdee - calc.deficit, b.bmr);
+  const eat = totals(dayLog(curDate)).kcal;
+  aCardioInfo.innerHTML =
+    (h ? `${cardioLabel(a.ci, a.cp)} · ${durLabel(h)} → <b>${num(kcCardio)} kcal</b>
+          <span class="muted">(안정시 제외한 순증분)</span><br>` : "")
+    + `<span class="muted">걸음 ${num(kcSteps)} · 웨이트 ${num(kcLift)}${h ? ` · 유산소 ${num(kcCardio)}` : ""}</span><br>`
+    + `유지 <b>${num(tdee)}</b> − 적자 ${num(calc.deficit)} → 목표 <b style="color:var(--accent)">${num(target)}</b>`
+    + (eat ? `<br>섭취 ${num(eat)} → <b style="color:${eat > target ? "var(--red)" : "var(--green)"}">${
+        eat > target ? num(eat - target) + " 초과" : num(target - eat) + " 남음"}</b>` : "");
 }
 
 // 기록된 모든 날의 (섭취 − 목표) 합. 초과한 날은 쌓이고 미달한 날은 깎인다.
@@ -1582,6 +1618,7 @@ function openAct() {
   actDefLabel.textContent = actLabel(dd)
     + (dd.from > "0000-01-01" ? ` (${dd.from.slice(5)} 부터)` : "");
   actInfo.textContent = act[curDate] ? "이 날은 따로 고친 기록입니다." : "지금은 평소 하루 기준입니다.";
+  actLive();
   openOverlay("actOverlay");
 }
 function closeAct() { closeOverlay("actOverlay"); }
@@ -2587,7 +2624,8 @@ function renderInbody() {
   const build = (id, sets) => {
     const c = newChart(document.getElementById(id), { type: "line",
       data: { labels, datasets: sets.map((d, i) => ({ ...d, hidden: seriesOff(id, i) })) }, options: optOf(id) });
-    drawLegend(document.getElementById(id === "ibChart1" ? "ibLeg1" : "ibLeg2"), c, id);
+    chartReg[id] = c;
+    drawLegend(document.getElementById(legendIdOf(id)), c, id);
     return c;
   };
   if (recs.length) {

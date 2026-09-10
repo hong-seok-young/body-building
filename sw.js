@@ -1,7 +1,7 @@
 // 바디빌딩 트래커 서비스워커
 // 앱 셸을 캐시해서 오프라인에서도 열리게 한다. 기록 데이터는 localStorage 와
 // 앱 자체의 오프라인 큐(pending)가 담당하므로 여기서는 정적 파일만 다룬다.
-const CACHE = "bb-shell-v1";
+const CACHE = "bb-shell-v2";   // 이름을 올리면 activate 가 옛 캐시를 지운다
 const SHELL = [
   "./",
   "./index.html",
