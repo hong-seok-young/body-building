@@ -104,19 +104,33 @@
   /* 매크로 바 — 이름 / 섭취·목표 / 막대 / 남음 을 고정 열로 잡는다.
      flex 로 두면 이름 길이(칼로리 vs 탄수화물)에 따라 막대가 좌우로 밀려 들쭉날쭉해진다.
      숫자는 tabular-nums 로 자릿수 폭을 고정해 위아래 자리가 맞게 한다 */
-  .macro { display: grid; grid-template-columns: 4.7em 6.6em minmax(0, 1fr) 4.9em;
-    align-items: center; column-gap: 9px; padding: 5px 0; font-size: 12.5px; }
+  /* 행마다 grid 를 따로 두면 max-content 열이 행별로 계산돼 열이 어긋난다.
+     하나의 grid 로 묶고 각 행은 display:contents 로 통과시켜 열을 공유하게 한다 */
+  /* 칸 사이 여백은 column-gap 이 아니라 셀 안쪽 padding 으로 준다.
+     gap 을 쓰면 머리글의 밑줄이 칸마다 끊겨 점선처럼 보인다 */
+  .macros { display: grid; grid-template-columns: 4.7em max-content minmax(26px, 1fr) 4.6em;
+    align-items: center; font-size: 12.5px; }
+  .macro { display: contents; }
+  .macro > * { padding: 5px 8px 5px 0; }
+  .macro > *:last-child { padding-right: 0; }
   .macro .nm { font-weight: 700; white-space: nowrap; }
   .macro .val, .macro .st { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  /* 괄호 안 비율은 작고 흐리게 — 숫자를 읽는 데 방해가 되지 않게 */
+  .macro .val small { font-size: 9.5px; color: var(--sub); }
   /* 단백질은 "이 밑으로 내려가지 않는다" 는 뜻의 바닥선 표시 */
-  .macro .val small { font-size: 9px; color: var(--protein); vertical-align: 1px; }
+  .macro .val b.fl { font-size: 9px; color: var(--protein); vertical-align: 1px; font-weight: 700; }
   .macro .st { font-size: 11.5px; }
   /* 머리글의 글자만 작게 한다 — .macro 자체의 font-size 를 줄이면 em 기반 열 폭까지
      같이 줄어들어 아래 줄과 열이 어긋난다 */
-  .macro.mhead { padding: 2px 0 5px; color: var(--sub);
-    border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+  /* align-self:stretch 가 없으면 빈 칸(이름·막대 자리)이 짧아서 밑줄이 다른 높이에
+     그려지고 선이 끊긴 것처럼 보인다 */
+  .macro.mhead > * { padding: 2px 8px 6px 0; color: var(--sub);
+    border-bottom: 1px solid var(--line); align-self: stretch; box-sizing: border-box; }
+  .macro.mhead > *:last-child { padding-right: 0; }
   .macro.mhead .val, .macro.mhead .st { font-size: 10.5px; }
-  .bar { width: auto; min-width: 34px; height: 7px; background: var(--card2); border-radius: 4px; overflow: hidden; }
+  .bar { width: auto; min-width: 26px; height: 7px; background: var(--card2);
+    border-radius: 4px; overflow: hidden; padding: 0 !important; margin: 5px 8px 5px 0;
+    align-self: center; }
   .bar > div { height: 100%; border-radius: 4px; transition: width .3s; }
 
   /* 계산 근거 한 줄 (눌러서 펼침) */
@@ -311,12 +325,6 @@
     <div class="card" id="setsCard"></div>
 
     <div id="mealsEl"></div>
-
-    <div class="card">
-      <h3>탄단지 비율 <span class="muted">칼로리 기준</span></h3>
-      <canvas id="ratioChart" style="max-height:165px"></canvas>
-      <div id="ratioBox"></div>
-    </div>
 
     <div class="card">
       <h3>영양소</h3>
@@ -604,8 +612,9 @@
       <button class="btn pri" onclick="saveAct()">저장</button>
     </div>
     <div class="btns" style="margin-top:7px">
-      <button class="btn" onclick="setDefaultDay()">이 값을 평소 하루로 저장</button>
+      <button class="btn" onclick="setDefaultDay()">이 날부터 평소 하루로</button>
     </div>
+    <div class="hint">이 날과 <b>그 이후</b>에만 적용됩니다. 이전 날짜의 목표는 바뀌지 않습니다.</div>
     <div class="btns mt"><button class="btn" onclick="closeAct()">닫기</button></div>
   </div>
 </div>
@@ -860,7 +869,7 @@ let view = ["day", "week", "month"].includes(load("dt_view", "")) ? load("dt_vie
 let calcOpen = load("dt_calc_open", false);   // 요약 카드의 계산 근거를 펼쳤나
 let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
-let weekChart = null, monthChart = null, ratioChart = null, ibChart1 = null, ibChart2 = null;
+let weekChart = null, monthChart = null, ibChart1 = null, ibChart2 = null;
 let mealOpen = {};
 let mealFormOpen = null;                      // 인라인 음식추가 폼이 열린 끼니
 let rowEdit = null;                           // 수량 정정 중인 항목 id
@@ -1183,11 +1192,24 @@ function macrosFor(kcal, ds) {
 }
 // 평소 하루 — 손으로 고친 기록이 없는 날은 이 값으로 계산한다.
 // 매일 같은 걸 입력하게 만들 이유가 없다. 다른 날만 고치면 된다.
-function defaultDay() {
-  return { steps: +calc.dSteps || 0, wh: +calc.dWh || 0, ch: +calc.dCh || 0,
-           ci: calc.dCi || calc.cI, def: 1 };
+//
+// 기본값에는 "언제부터" 가 붙는다. 하나짜리 전역 기본값으로 두면 값을 바꾸는
+// 순간 과거 날짜의 목표와 과부족까지 전부 달라진다 — 인바디와 같은 방식으로
+// 시점별 목록을 남기고, 각 날짜는 그 날 이전의 마지막 기준을 쓴다.
+function dayDefs() {
+  const a = (Array.isArray(calc.dayDefs) ? calc.dayDefs : []).filter(x => x && x.from);
+  if (!a.length) return [{ from: "0000-01-01", steps: +calc.dSteps || 0, wh: +calc.dWh || 0,
+                           ch: +calc.dCh || 0, ci: calc.dCi || calc.cI }];
+  return a.slice().sort((x, y) => x.from < y.from ? -1 : x.from > y.from ? 1 : 0);
 }
-function actOf(ds) { return act[ds] || defaultDay(); }
+function defaultDay(ds) {
+  const a = dayDefs();
+  let d = a[0];
+  for (const x of a) { if (!ds || x.from <= ds) d = x; else break; }
+  return { steps: +d.steps || 0, wh: +d.wh || 0, ch: +d.ch || 0,
+           ci: d.ci || calc.cI, def: 1, from: d.from };
+}
+function actOf(ds) { return act[ds] || defaultDay(ds); }
 function actLabel(a) {
   const parts = [];
   if (+a.steps) parts.push(num(a.steps) + "보");
@@ -1212,14 +1234,20 @@ function saveAct() {
   if (!a.steps && !a.wh && !a.ch) act[curDate] = { ...a, rest: 1 }; else act[curDate] = a;
   closeAct(); pushAct();
 }
-// 지금 칸에 있는 값을 "평소 하루" 로 승격 — 이 날 기록은 지워서 기본값을 따르게
+// 지금 칸에 있는 값을 "이 날부터" 의 평소 하루로 등록한다.
+// 과거 날짜는 예전 기준을 그대로 쓴다 (dayDefs 가 시점별로 남으므로)
 function setDefaultDay() {
-  calc = { ...calc, dSteps: +aSteps.value || 0, dWh: +aWh.value || 0,
-           dCh: +aCh.value || 0, dCi: aCi.value };
+  const e = { from: curDate, steps: +aSteps.value || 0, wh: +aWh.value || 0,
+              ch: +aCh.value || 0, ci: aCi.value };
+  const list = dayDefs().filter(x => x.from !== curDate).concat([e])
+    .sort((x, y) => x.from < y.from ? -1 : 1).slice(-40);
+  calc = { ...calc, dayDefs: list };
   saveCalcMeta();
-  delete act[curDate];
+  delete act[curDate];                        // 이 날은 기본값을 따르게
   closeAct(); pushAct();
-  alert(`평소 하루를 ${actLabel(defaultDay())} 로 바꿨습니다.\n따로 고치지 않은 날은 모두 이 기준으로 계산됩니다.`);
+  alert(`${dateLabel(curDate)} 부터 평소 하루를 ${actLabel(e)} 로 바꿨습니다.\n\n`
+      + `그 이후 날짜 중 따로 고치지 않은 날이 이 기준으로 계산됩니다.\n`
+      + `이전 날짜는 예전 기준 그대로 남습니다.`);
 }
 // act 는 meta 셀 하나에 JSON 으로 들어가고 시트 셀 한도는 5만 자다.
 // 하루치가 약 50자라 그냥 쌓으면 2.6년쯤에서 저장이 막힌다. 최근 400일만 남긴다
@@ -1238,8 +1266,10 @@ function openAct() {
   if (!aCi.options.length) aCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
   aSteps.value = a.steps || ""; aWh.value = a.wh || ""; aCh.value = a.ch || "";
   aCi.value = a.ci || calc.cI;
+  const dd = defaultDay(curDate);
   actTitle.textContent = `${dateLabel(curDate)} 활동`;
-  actDefLabel.textContent = actLabel(defaultDay());
+  actDefLabel.textContent = actLabel(dd)
+    + (dd.from > "0000-01-01" ? ` (${dd.from.slice(5)} 부터)` : "");
   actInfo.textContent = act[curDate] ? "이 날은 따로 고친 기록입니다." : "지금은 평소 하루 기준입니다.";
   actOverlay.classList.add("show");
 }
@@ -1377,23 +1407,27 @@ function renderDay() {
         ? `<button class="actchip${g.isDefault ? " def" : ""}" onclick="openAct()">🔥 ${esc(g.src)} <i>✎</i></button>`
         : `<span class="r">주 평균 목표</span>`}
     </div>` +
-    `<div class="macro mhead"><span class="nm"></span><span class="val">섭취 / 목표</span>
+    // 괄호 안은 칼로리 기준 비율 (P·C ×4, F ×9). 도넛 대신 여기서 바로 읽는다
+    ((ak, gk) => `<div class="macros">` +
+    `<div class="macro mhead"><span class="nm"></span><span class="val">섭취 (비율) / 목표 (비율)</span>
        <span></span><span class="st">남음</span></div>` +
     [{ l: "칼로리", v: t.kcal, g: g.kcal, d: 0, c: "var(--kcal)" },
-     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", more: true, floor: true },
-     { l: "탄수화물", v: t.c, g: g.c, d: 1, c: "var(--carb)" },
-     { l: "지방", v: t.f, g: g.f, d: 1, c: "var(--fat)" }].map(r => {
+     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", more: true, floor: true, k: 4 },
+     { l: "탄수화물", v: t.c, g: g.c, d: 1, c: "var(--carb)", k: 4 },
+     { l: "지방", v: t.f, g: g.f, d: 1, c: "var(--fat)", k: 9 }].map(r => {
       const pct = r.g ? Math.min(100, r.v / r.g * 100) : 0, over = r.v - r.g;
       const n = x => r.d ? fmt(x) : num(x);
       const st = over > 0
         ? `<span class="${r.more ? "good" : "over"}">+${n(over)}</span>`
         : `<span class="remain">${n(r.g - r.v)}</span>`;
+      const sh = (x, tot) => r.k && tot > 0 ? `<small>(${Math.round(x * r.k / tot * 100)}%)</small>` : "";
       return `<div class="macro">
         <span class="nm">${r.l}</span>
-        <span class="val">${n(r.v)} / ${n(r.g)}${r.floor ? "<small>↑</small>" : ""}</span>
+        <span class="val">${n(r.v)}${sh(r.v, ak)} / ${n(r.g)}${sh(r.g, gk)}${r.floor ? "<b class=\"fl\">↑</b>" : ""}</span>
         <span class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.c}"></div></span>
         <span class="st">${st}</span></div>`;
-    }).join("") +
+    }).join("") + `</div>`
+    )(t.p * 4 + t.c * 4 + t.f * 9, g.p * 4 + g.c * 4 + g.f * 9) +
     // 계산 근거는 기본으로 접어둔다 — 매일 볼 필요는 없고, 궁금할 때만 펼치면 된다
     `<div class="calcline" onclick="toggleCalcDetail()">
       <span>유지 <b>${num(tdeeToday)}</b></span>
@@ -1442,24 +1476,6 @@ function renderDay() {
            </div>${mealFormOpen === m ? mealFormHtml(m) : ""}` : ""}
     </div>`;
   }).join("");
-
-  // 도넛
-  const ak = t.p * 4 + t.c * 4 + t.f * 9;
-  if (ratioChart) { ratioChart.destroy(); ratioChart = null; }
-  const rc = document.getElementById("ratioChart");
-  rc.style.display = "none";
-  if (ak > 0) ratioChart = newChart(rc, {
-    type: "doughnut",
-    data: { labels: ["탄수화물", "단백질", "지방"], datasets: [{ data: [t.c * 4, t.p * 4, t.f * 9],
-      backgroundColor: ["#f59e0b", "#ef4444", "#8b5cf6"], borderWidth: 0 }] },
-    options: { cutout: "60%", plugins: { legend: { position: "right", labels: { boxWidth: 12, font: { size: 12 } } },
-      tooltip: { callbacks: { label: c => `${c.label} ${Math.round(c.parsed / ak * 100)}%` } } } },
-  });
-  const gk = g.p * 4 + g.c * 4 + g.f * 9;
-  ratioBox.innerHTML = ak > 0
-    ? `<div class="hint">탄 ${Math.round(t.c * 4 / ak * 100)} : 단 ${Math.round(t.p * 4 / ak * 100)} : 지 ${Math.round(t.f * 9 / ak * 100)}
-       <span style="color:var(--sub)">(목표 ${Math.round(g.c * 4 / gk * 100)} : ${Math.round(g.p * 4 / gk * 100)} : ${Math.round(g.f * 9 / gk * 100)})</span></div>`
-    : `<div class="empty">기록 없음</div>`;
 
   // 영양소
   const cls = s => s === "bad" ? ' class="over"' : s === "good" ? ' class="good"' : "";
