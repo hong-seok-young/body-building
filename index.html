@@ -80,6 +80,12 @@
   .tabbar button.on { color: var(--accent); }
   .tabbar button.on i { filter: none; }
 
+  /* 초과분을 태우는 데 필요한 운동 */
+  .burnoff { margin-top: 9px; padding: 9px 11px; border-radius: 10px; font-size: 12px; line-height: 1.65;
+    background: var(--warnbg); color: var(--warntext); border: 1px solid var(--warnline); }
+  .burnoff .lbl { display: block; font-weight: 700; margin-bottom: 3px; }
+  .burnoff b { font-weight: 800; }
+
   /* 칩 안의 연필 — 평소엔 흐리게, 올리면 또렷하게 (터치에선 늘 보인다) */
   .chip .ed { font-style: normal; margin-left: 5px; padding: 0 1px; opacity: .35; }
   .chip:hover .ed { opacity: 1; }
@@ -1319,6 +1325,26 @@ function onCardioType(which, keep) {
   }
 }
 
+// 초과한 열량을 없애려면 유산소를 얼마나 해야 하나.
+// 각 종류의 순증분(kcal/체중kg/시간)으로 나눈다. 내가 쓰는 페이스가 설정돼 있으면
+// 그 값으로, 없으면 종류별 기본값으로 계산한다.
+function burnOff(kcal, wt) {
+  if (!(kcal > 0) || !(wt > 0)) return "";
+  return CARDIO_NAMES.map(ci => {
+    const c = CARDIO[ci], o = {};
+    c.f.forEach(([k, l, d]) => { o[k] = d; });
+    Object.assign(o, cpOf(ci, calc.cI, calc.cP));      // 내 설정과 종류가 같으면 그걸 쓴다
+    const rate = cardioRate(ci, o);
+    if (!(rate > 0)) return "";
+    const min = kcal / (rate * wt) * 60;
+    if (c.hours) {                                     // 러닝은 거리로 말해주는 게 낫다
+      const km = +o.pace > 0 ? min / o.pace : 0;
+      return `${ci} ${o.pace}분/km <b>${km.toFixed(1)}km</b> <span class="muted">(${Math.round(min)}분)</span>`;
+    }
+    return `${cardioLabel(ci, o)} <b>${Math.round(min)}분</b>`;
+  }).filter(Boolean).join("<br>");
+}
+
 function burnCardio(h, wt, ci, cp) { return cardioHours(ci, cp, h) * wt * cardioRate(ci, cp); }
 
 function calcWeek(ds) {
@@ -1578,6 +1604,9 @@ function renderDay() {
         ? `<button class="actchip${g.isDefault ? " def" : ""}" onclick="openAct()">🔥 ${esc(g.src)} <i>✎</i></button>`
         : `<span class="r">주 평균 목표</span>`}
     </div>` +
+    // 초과했을 때만 — 이걸 없애려면 뭘 얼마나 해야 하는지
+    (left < 0 && burnOff(-left, w.wt) ? `<div class="burnoff">
+      <span class="lbl">이 초과분을 없애려면</span>${burnOff(-left, w.wt)}</div>` : "") +
     // 괄호 안은 칼로리 기준 비율 (P·C ×4, F ×9). 도넛 대신 여기서 바로 읽는다
     ((ak, gk) => `<div class="macros">` +
     `<div class="macro mhead"><span class="nm"></span><span class="val">섭취 (비율) / 목표 (비율)</span>
