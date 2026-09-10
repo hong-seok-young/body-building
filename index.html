@@ -960,7 +960,15 @@ function drawLegend(legEl, chart, id) {
 // Chart.js 가 못 올라와도(오프라인·CDN 차단) 화면이 죽지 않게
 function newChart(el, c) {
   if (typeof Chart !== "function") { el.style.display = "none"; return null; }
-  el.style.display = ""; return new Chart(el, c);
+  el.style.display = "";
+  // 앱의 모든 그래프에 같은 규칙을 건다 — 점·막대를 정확히 짚지 않아도 그 세로줄
+  // 전체가 잡히고(index + intersect:false), 짚은 자리에 세로선이 그어진다.
+  // 개별 설정을 준 그래프는 그쪽이 이긴다.
+  return new Chart(el, {
+    ...c,
+    plugins: [crosshair, ...(c.plugins || [])],
+    options: { interaction: { mode: "index", intersect: false }, ...c.options },
+  });
 }
 
 // ═════════ API / 동기화 ═════════
@@ -1987,7 +1995,10 @@ function renderWeek() {
         { label: "목표", type: "line", stack: "g", data: rows.map(r => r.g),
           borderColor: "#9ca3af", borderDash: [6, 4], pointRadius: 0, borderWidth: 1.5 },
       ] },
-    options: { plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+    options: { plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { title: it => it.length ? rows[it[0].dataIndex].d : "" } },
+      },
       scales: { y: { stacked: true, beginAtZero: true, grid: { color: "rgba(148,163,184,.18)" } },
         x: { stacked: true, grid: { display: false } } } },
   });
@@ -2044,7 +2055,10 @@ function renderMonth() {
       { label: "kcal", data: dt.map(x => x.kcal ? Math.round(x.kcal) : null), borderColor: "#2563eb",
         backgroundColor: "#2563eb", spanGaps: true, tension: .3, pointRadius: 3 },
       { label: "목표", data: days.map(d => dayTarget(d).kcal), borderColor: "#9ca3af", borderDash: [6, 4], pointRadius: 0 }] },
-    options: { plugins: { legend: { display: false } },
+    options: { plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { title: it => it.length ? days[it[0].dataIndex] : "" } },
+      },
       scales: { y: { beginAtZero: true, grid: { color: "rgba(148,163,184,.18)" } }, x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } } } },
   });
 
@@ -2282,7 +2296,7 @@ function renderInbody() {
     scales: { y: { grid: { color: "rgba(148,163,184,.18)" } }, x: { grid: { display: false } } },
   });
   const build = (id, sets) => {
-    const c = newChart(document.getElementById(id), { type: "line", plugins: [crosshair],
+    const c = newChart(document.getElementById(id), { type: "line",
       data: { labels, datasets: sets.map((d, i) => ({ ...d, hidden: seriesOff(id, i) })) }, options: optOf(id) });
     drawLegend(document.getElementById(id === "ibChart1" ? "ibLeg1" : "ibLeg2"), c, id);
     return c;
