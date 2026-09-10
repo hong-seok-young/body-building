@@ -80,6 +80,11 @@
   .tabbar button.on { color: var(--accent); }
   .tabbar button.on i { filter: none; }
 
+  /* 즐겨찾기 별 — 켜면 노랗게 찬다 */
+  .star { background: none; border: none; cursor: pointer; padding: 4px 6px; font-size: 17px;
+          line-height: 1; color: var(--line); flex: 0 0 auto; }
+  .star.on { color: #f59e0b; }
+
   /* ── 그래프 범례 = 체크박스 ── */
   .chklegend { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 9px; }
   .chklegend button {
@@ -1577,6 +1582,7 @@ function foodRow(x, i, mine) {
   const meal = (fdMeal && fdMeal.value) || guessMeal();
   return `<div class="mrow">
     <span class="nm">${esc(x.name)}<small>${num(x.kcal)}kcal · C${fmt(x.c)} P${fmt(x.p)} F${fmt(x.f)}${+x.na ? " · Na " + num(x.na) : ""}${+x.fib ? " · 섬유 " + fmt(x.fib) : ""}</small></span>
+    <button class="star${mine && x.fav ? " on" : ""}" title="즐겨찾기" onclick="${mine ? `toggleFav(${i})` : `favDb(${i})`}">${mine && x.fav ? "★" : "☆"}</button>
     <button class="btn" style="flex:0 0 auto;padding:7px 13px" onclick="${mine ? `addPresetTo('${meal}',${i})` : `addDbTo('${meal}',${i})`}">＋</button>
     ${mine ? `<button class="del" onclick="delPreset(${i})">✕</button>` : ""}
   </div>`;
@@ -1657,46 +1663,48 @@ function addToDb(e) {
   foodMsg.textContent = ""; toast(`✓ '${x.name}' 내 음식에 등록`);
   render();
 }
-// ── 자주 먹는 음식 — 최근 7일 기록에서 많이 먹은 순으로 5개.
-// 손으로 등록해두는 게 아니라 실제로 먹은 걸 세기 때문에 관리할 게 없다.
-function topFoods(n) {
-  const bucket = {};
-  for (let d = addDays(curDate, -6); d <= curDate; d = addDays(d, 1)) {
-    for (const x of dayLog(d)) {
-      const k = pkey(x.name);
-      if (!k) continue;
-      const b = bucket[k] || (bucket[k] = { n: 0, last: null, lastDate: "" });
-      b.n++;
-      if (d >= b.lastDate) { b.last = x; b.lastDate = d; }   // 가장 최근에 먹은 값(양·성분)을 쓴다
-    }
-  }
-  return Object.values(bucket).filter(b => b.last)
-    .sort((a, b) => b.n - a.n || (a.lastDate < b.lastDate ? 1 : -1)).slice(0, n);
-}
-let topPick = [];
+// ── 즐겨찾기 — 내 음식 중 ★ 를 켠 것만 올라온다.
+// 최근 7일 기록에서 자동으로 세던 것을 바꿨다. 한 번 먹은 외식이 상위에 올라와
+// 정작 매일 먹는 것이 밀려났다. 무엇을 띄울지는 내가 정하는 게 맞다.
+let favPick = [];
 function renderSets(g) {
-  topPick = topFoods(5);
-  if (!topPick.length) {
-    setsCard.innerHTML = `<h3>자주 먹는 음식 <span class="muted">기록이 쌓이면 채워집니다</span></h3>
-      <div class="hint" style="margin-top:0">최근 7일 동안 많이 먹은 음식 5개가 여기 칩으로 올라옵니다. 누르면 아래 끼니에 바로 들어갑니다.</div>`;
+  favPick = presets.map((x, i) => [x, i]).filter(([x]) => x.fav);
+  const m = guessMeal();
+  if (!favPick.length) {
+    setsCard.innerHTML = `<h3>즐겨찾기 <span class="muted">아직 없습니다</span></h3>
+      <div class="hint" style="margin-top:0">🍽️ <b>음식</b> 탭에서 <b>☆</b> 를 누르면 여기 칩으로 올라옵니다. 칩을 누르면 그 끼니에 바로 들어갑니다.</div>`;
     return;
   }
-  const m = guessMeal();
-  setsCard.innerHTML = `<h3>자주 먹는 음식 <span class="muted">최근 7일 · 누르면 ${m}에 추가</span></h3>
-    <div class="presets">` + topPick.map((b, i) => {
-      const x = b.last;
+  setsCard.innerHTML = `<h3>즐겨찾기 <span class="muted">누르면 ${m}에 추가</span></h3>
+    <div class="presets">` + favPick.map(([x], i) => {
       // 이름이 길면 칩이 한 줄을 다 먹는다 — 잘라서 두 개씩 들어가게
       const nm = x.name.length > 16 ? x.name.slice(0, 15) + "…" : x.name;
-      return `<span class="chip" onclick="logTop(${i})" title="${esc(x.name)}">${esc(nm)}
-        <span style="color:var(--sub)">${b.n}회</span></span>`;
+      return `<span class="chip" onclick="logFav(${i})" title="${esc(x.name)}">${esc(nm)}
+        <span style="color:var(--sub)">${num(x.kcal)}</span></span>`;
     }).join("") + `</div>`;
 }
-async function logTop(i) {
-  const b = topPick[i];
-  if (!b || !b.last) return;
-  const { id, date, meal, ...food } = b.last;
+async function logFav(i) {
+  const e = favPick[i];
+  if (!e) return;
+  const { fav, ...food } = e[0];
   await pushItem({ ...food, date: curDate, meal: guessMeal() });
   render();
+}
+function saveFavs() { save("dt_presets", presets); setMeta("presets", presets); render(); }
+function toggleFav(i) {
+  if (!presets[i]) return;
+  presets = presets.map((p, k) => k === i ? { ...p, fav: p.fav ? 0 : 1 } : p);
+  saveFavs();
+}
+// 기본 성분표 항목은 내 음식으로 먼저 복사한 뒤 켠다 (즐겨찾기는 내 음식에만 붙는다)
+function favDb(i) {
+  const x = FOOD_DB[i];
+  if (!x) return;
+  const at = presets.findIndex(pz => sameFood(pz, x));
+  if (at >= 0) return toggleFav(at);
+  presets = [{ ...x, fav: 1 }, ...presets].slice(0, 300);
+  toast(`★ '${x.name}' 즐겨찾기`);
+  saveFavs();
 }
 function toggleMeal(m) { mealOpen[m] = (mealOpen[m] === false); render(); }
 
