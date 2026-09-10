@@ -424,9 +424,10 @@
       <label>하루 걸음수<input type="number" step="100" min="0" id="cSteps"></label>
       <label>웨이트 시간/회<input type="number" step="0.25" min="0" id="cWh"></label>
       <label>웨이트 주 횟수<input type="number" step="1" min="0" max="7" id="cWd"></label>
-      <label>유산소 시간/회<input type="number" step="0.25" min="0" id="cCh"></label>
+      <label id="cChWrap">유산소 시간/회<input type="number" step="0.25" min="0" id="cCh"></label>
       <label>유산소 주 횟수<input type="number" step="1" min="0" max="7" id="cCd"></label>
-      <label>유산소 강도<select id="cCi"></select></label>
+      <label>유산소 종류<select id="cCi" onchange="onCardioType('c')"></select></label>
+      <div id="cCp" style="display:contents"></div>
       <label>적자 (kcal)<input type="number" step="25" min="0" id="cDef"></label>
     </div>
     <div class="btns mt"><button class="btn pri" onclick="saveCalc()">계산</button></div>
@@ -585,9 +586,11 @@
     <div class="fields g2 mt">
       <label>걸음수<input type="number" min="0" step="100" id="aSteps"></label>
       <label>웨이트 (분)<input type="number" min="0" step="5" id="aWh"></label>
-      <label>유산소 (분)<input type="number" min="0" step="5" id="aCh"></label>
-      <label>유산소 강도<select id="aCi"></select></label>
+      <label id="aChWrap">유산소 (분)<input type="number" min="0" step="5" id="aCh"></label>
+      <label>유산소 종류<select id="aCi" onchange="onCardioType('a')"></select></label>
+      <div id="aCp" style="display:contents"></div>
     </div>
+    <div class="hint" id="aCardioInfo" style="margin-top:7px"></div>
     <div class="btns mt">
       <button class="btn" onclick="actPreset('rest')">완전 휴식</button>
       <button class="btn" onclick="actPreset('yesterday')">어제와 동일</button>
@@ -661,7 +664,7 @@ function mealOf(x) {
   return LEGACY_MEAL[m] || (/^\d+끼$/.test(m) ? m : mealName(0));
 }
 const mealIdx = m => Math.max(0, (parseInt(m, 10) || 1) - 1);
-const INTENSITY = ["저", "중", "고"];
+
 
 // 활동 소모 계수 — 사용자가 확인한 실측 앵커에 맞춰 역산한 값
 const STEP_K = 0.0004;                              // kcal / 보 / 체중kg  (3,000보·99kg ≈ 120kcal)
@@ -676,7 +679,53 @@ const STEP_K = 0.0004;                              // kcal / 보 / 체중kg  (3
 //   등   161분 18,163kg 48세트 → 559~665   (어플 1,039)
 //   합계 6.35h → 2.34~2.73 → 중간값 2.5
 const LIFT_K = 2.5;
-const CARDIO_K = { "저": 4.0, "중": 6.0, "고": 8.0 };  // kcal / 체중kg / 시간 (0.5h·99kg 중강도 ≈ 297kcal)
+// ── 유산소: 종류별로 실제 페이스를 받아 계산한다.
+// 저/중/고 로 뭉뚱그리면 기록을 봐도 뭘 했는지 모르고, 같은 "고" 안에서도
+// 소모가 두 배 넘게 차이난다.
+// 아래 값은 전부 순증분(net) — 안정시 1 MET 를 뺀 값이다. 그 시간에도 기초대사는
+// 돌고 있고 앱이 이미 세고 있으므로 "운동으로 더 쓴 만큼" 만 더해야 한다.
+const STEP_H = 0.203;                     // 스텝밀 한 계단 높이 (8인치)
+// 역학적 일(체중×중력×높이×스텝율) ÷ 효율 0.19.
+// 60spm 에서 9.0 MET 가 나와 문헌값(스텝밀 general)과 맞는다
+const stairMet = spm => 9.81 * STEP_H * (+spm || 0) / 60 / 0.19 * 3600 / 4184;
+// ACSM 대사 공식. 8km/h(133.3 m/분) 이상은 러닝식, 미만은 걷기식
+function acsmMet(kmh, gradePct) {
+  const S = (+kmh || 0) * 1000 / 60, G = (+gradePct || 0) / 100;
+  const vo2 = S >= 133.3 ? 0.2 * S + 0.9 * S * G + 3.5
+                         : 0.1 * S + 1.8 * S * G + 3.5;
+  return vo2 / 3.5;
+}
+const CARDIO = {
+  "계단":     { f: [["spm", "분당 계단수", 60, 1]], met: o => stairMet(o.spm) },
+  "러닝머신": { f: [["kmh", "속도 km/h", 8, 0.1], ["inc", "경사 %", 0, 0.5]], met: o => acsmMet(o.kmh, o.inc) },
+  // 거리와 페이스를 주면 시간이 따라 나온다 — 시간 칸을 따로 받지 않는다
+  "러닝":     { f: [["pace", "페이스 분/km", 6, 0.1], ["km", "거리 km", 5, 0.1]],
+                met: o => acsmMet(+o.pace > 0 ? 60 / o.pace : 0, 0),
+                hours: o => (+o.pace > 0 && +o.km > 0 ? o.pace * o.km / 60 : 0) },
+};
+const CARDIO_NAMES = Object.keys(CARDIO);
+// 예전 기록은 저/중/고 로 남아 있다. 과거 날짜의 목표가 뒤바뀌면 안 되므로 그대로 살린다
+const OLD_K = { "저": 4.0, "중": 6.0, "고": 8.0 };
+function cardioRate(ci, cp) {                       // kcal / 체중kg / 시간 (순증분)
+  if (OLD_K[ci]) return OLD_K[ci];
+  const c = CARDIO[ci];
+  return c ? Math.max(0, c.met(cp || {}) - 1) : 0;
+}
+function cardioHours(ci, cp, h) {                   // 러닝만 페이스×거리로 시간을 낸다
+  const c = CARDIO[ci];
+  return c && c.hours ? c.hours(cp || {}) : (+h || 0);
+}
+// 종류가 바뀌면 예전 파라미터는 안 맞는다 — 같은 종류일 때만 이어쓴다
+const cpOf = (ci, storedCi, storedCp) => (ci === storedCi ? storedCp : null) || {};
+function cardioLabel(ci, cp) {
+  const c = CARDIO[ci];
+  if (!c) return ci || "";
+  return ci + " " + c.f.map(([k, l, d]) => {
+    const v = cp && cp[k] !== undefined && cp[k] !== "" ? cp[k] : d;
+    return k === "spm" ? v + "spm" : k === "kmh" ? v + "km/h" : k === "inc" ? "경사" + v + "%"
+         : k === "pace" ? v + "분/km" : v + "km";
+  }).join(" · ");
+}
 
 // na/sug/sat/trans/chol 은 상한, fib 는 하한 (1일 영양성분 기준치 기반)
 const DEFAULT_GOALS = { kcal: 2600, p: 195, c: 293, f: 72,
@@ -684,7 +733,7 @@ const DEFAULT_GOALS = { kcal: 2600, p: 195, c: 293, f: 72,
 const DEFAULT_CALC = {
   af: 1.18, steps: 3000,
   wH: 2, wD: 5,
-  cH: 0.5, cD: 2, cI: "중",
+  cH: 0.5, cD: 2, cI: "계단", cP: { spm: 60 },
   deficit: 350,
   byKg: true, pL: 2.4,              // 단백질 = 제지방량 × 2.4 g. 체지방은 단백질을 안 쓴다
   pG: 2.0,                          // 인바디에 체지방량이 없을 때만 쓰는 체중 기준 대체값
@@ -1221,11 +1270,55 @@ function calcBase(ds) {
            src: ibB ? "인바디" : "수동", ibDate: ibB ? ibDateAt("bmr", ds) : "" };
 }
 function burnLift(h, wt) { return h * wt * (+calc.liftK || LIFT_K); }
-function burnCardio(h, wt, i) { return h * wt * (CARDIO_K[i] || CARDIO_K["중"]); }
+// 종류에 따라 입력칸이 달라진다. 선택을 바꾸면 이 자리만 다시 그린다.
+function cardioFieldsHtml(pre, ci, cp) {
+  const c = CARDIO[ci];
+  if (!c) return "";                                  // 예전 저/중/고 기록
+  return c.f.map(([k, label, dflt, step]) => {
+    const v = cp && cp[k] !== undefined && cp[k] !== "" ? cp[k] : dflt;
+    return `<label>${label}<input type="number" min="0" step="${step}" id="${pre}${k}" value="${v}" oninput="onCardioType('${pre[0]}',1)"></label>`;
+  }).join("");
+}
+function readCardio(pre, ci) {
+  const c = CARDIO[ci];
+  if (!c) return null;
+  const o = {};
+  c.f.forEach(([k, l, d]) => { const el = document.getElementById(pre + k); o[k] = el ? (+el.value || 0) : d; });
+  return o;
+}
+// 셀렉트를 채운다. 예전 값(저/중/고)이 저장돼 있으면 그것도 항목으로 남겨
+// 저절로 다른 종류로 바뀌지 않게 한다
+function fillCardioSelect(el, cur) {
+  const names = CARDIO_NAMES.concat(OLD_K[cur] ? [cur] : []);
+  el.innerHTML = names.map(x => `<option${x === cur ? " selected" : ""}>${x}</option>`).join("");
+  el.value = names.includes(cur) ? cur : CARDIO_NAMES[0];
+}
+// which: 'c' = 열량 탭 설정, 'a' = 활동 모달. keep=1 이면 칸은 그대로 두고 요약만 갱신
+function onCardioType(which, keep) {
+  const isC = which === "c";
+  const sel = isC ? cCi : aCi, box = isC ? cCp : aCp, wrap = isC ? cChWrap : aChWrap;
+  const ci = sel.value;
+  if (!keep) {
+    const st = isC ? calc : (act[curDate] || {});
+    box.innerHTML = cardioFieldsHtml(which + "_", ci, cpOf(ci, isC ? calc.cI : st.ci, isC ? calc.cP : st.cp));
+  }
+  const cp = readCardio(which + "_", ci) || {};
+  const c = CARDIO[ci];
+  // 러닝은 페이스×거리에서 시간이 나오므로 시간 칸을 감춘다
+  wrap.style.display = c && c.hours ? "none" : "";
+  if (!isC) {
+    const h = cardioHours(ci, cp, m2h(aCh.value));
+    const wt = calcBase(curDate).wt || 0;
+    aCardioInfo.innerHTML = !h ? "" :
+      `${cardioLabel(ci, cp)} · ${durLabel(h)} → <b>${num(h * wt * cardioRate(ci, cp))} kcal</b> <span class="muted">(안정시 제외한 순증분)</span>`;
+  }
+}
+
+function burnCardio(h, wt, ci, cp) { return cardioHours(ci, cp, h) * wt * cardioRate(ci, cp); }
 
 function calcWeek(ds) {
   const b = calcBase(ds);
-  const lift = burnLift(calc.wH, b.wt), cardio = burnCardio(calc.cH, b.wt, calc.cI);
+  const lift = burnLift(calc.wH, b.wt), cardio = burnCardio(calc.cH, b.wt, calc.cI, calc.cP);
   const ov = Math.max(0, calc.wD + calc.cD - 7);
   const dW = calc.wD - ov, dC = calc.cD - ov, dB = 7 - dW - dC - ov;
   const weekly = dW * (b.rest + lift) + dC * (b.rest + cardio) + ov * (b.rest + lift + cardio) + dB * b.rest;
@@ -1270,7 +1363,7 @@ function macrosFor(kcal, ds) {
 function dayDefs() {
   const a = (Array.isArray(calc.dayDefs) ? calc.dayDefs : []).filter(x => x && x.from);
   if (!a.length) return [{ from: "0000-01-01", steps: +calc.dSteps || 0, wh: +calc.dWh || 0,
-                           ch: +calc.dCh || 0, ci: calc.dCi || calc.cI }];
+                           ch: +calc.dCh || 0, ci: calc.dCi || calc.cI, cp: calc.cP }];
   return a.slice().sort((x, y) => x.from < y.from ? -1 : x.from > y.from ? 1 : 0);
 }
 function defaultDay(ds) {
@@ -1278,7 +1371,7 @@ function defaultDay(ds) {
   let d = a[0];
   for (const x of a) { if (!ds || x.from <= ds) d = x; else break; }
   return { steps: +d.steps || 0, wh: +d.wh || 0, ch: +d.ch || 0,
-           ci: d.ci || calc.cI, def: 1, from: d.from };
+           ci: d.ci || calc.cI, cp: d.cp || (d.ci ? null : calc.cP), def: 1, from: d.from };
 }
 function actOf(ds) { return act[ds] || defaultDay(ds); }
 // 화면은 분, 저장은 시간 (기존 기록과 계산식이 시간 단위다).
@@ -1294,7 +1387,7 @@ function actLabel(a) {
   const parts = [];
   if (+a.steps) parts.push(num(a.steps) + "보");
   if (+a.wh) parts.push(`웨이트 ${durLabel(a.wh)}`);
-  if (+a.ch) parts.push(`유산소 ${durLabel(a.ch)}(${a.ci || calc.cI})`);
+  if (+a.ch) parts.push(`${cardioLabel(a.ci || calc.cI, a.cp)} ${durLabel(a.ch)}`);
   return parts.length ? parts.join(" · ") : "완전 휴식";
 }
 // 그날 활동으로 TDEE 를 잡는다. 기록이 없으면 평소 하루를 쓴다
@@ -1303,22 +1396,24 @@ function dayTarget(ds) {
   if (!w.wt) return { ...goals, kcal: goals.kcal, src: "주 평균 목표", adjusted: false, ibDate: w.ibDate };
   const b = calcBase(ds);
   const tdee = b.sed + (+a.steps || 0) * b.wt * STEP_K
-             + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci);
+             + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci, a.cp);
   const m = macrosFor(floorBmr(tdee - calc.deficit, b.bmr), ds);
   return { ...goals, ...m, tdee, bmr: b.bmr, ibDate: b.ibDate,
            src: actLabel(a), adjusted: true, isDefault: !!a.def };
 }
 
 function saveAct() {
-  const a = { steps: +aSteps.value || 0, wh: m2h(aWh.value), ch: m2h(aCh.value), ci: aCi.value };
+  const ci = aCi.value, cp = readCardio("a_", ci);
+  const a = { steps: +aSteps.value || 0, wh: m2h(aWh.value), ch: cardioHours(ci, cp, m2h(aCh.value)), ci, cp };
   if (!a.steps && !a.wh && !a.ch) act[curDate] = { ...a, rest: 1 }; else act[curDate] = a;
   closeAct(); pushAct();
 }
 // 지금 칸에 있는 값을 "이 날부터" 의 평소 하루로 등록한다.
 // 과거 날짜는 예전 기준을 그대로 쓴다 (dayDefs 가 시점별로 남으므로)
 function setDefaultDay() {
+  const ci = aCi.value, cp = readCardio("a_", ci);
   const e = { from: curDate, steps: +aSteps.value || 0, wh: m2h(aWh.value),
-              ch: m2h(aCh.value), ci: aCi.value };
+              ch: cardioHours(ci, cp, m2h(aCh.value)), ci, cp };
   const list = dayDefs().filter(x => x.from !== curDate).concat([e])
     .sort((x, y) => x.from < y.from ? -1 : 1).slice(-40);
   calc = { ...calc, dayDefs: list };
@@ -1341,9 +1436,10 @@ function clearAct() {
 }
 function openAct() {
   const a = actOf(curDate);
-  if (!aCi.options.length) aCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
+  fillCardioSelect(aCi, a.ci || calc.cI);
   aSteps.value = a.steps || ""; aWh.value = h2m(a.wh); aCh.value = h2m(a.ch);
-  aCi.value = a.ci || calc.cI;
+  aCp.innerHTML = cardioFieldsHtml("a_", aCi.value, cpOf(aCi.value, a.ci, a.cp));
+  onCardioType("a", 1);
   const dd = defaultDay(curDate);
   actTitle.textContent = `${dateLabel(curDate)} 활동`;
   actDefLabel.textContent = actLabel(dd)
@@ -1355,9 +1451,12 @@ function closeAct() { actOverlay.classList.remove("show"); }
 // 자주 쓰는 활동 한 번에 — 폰에서 매일 입력하는 마찰을 줄인다
 function actPreset(kind) {
   const a = kind === "yesterday" ? { ...actOf(addDays(curDate, -1)) }
-                                 : { steps: 0, wh: 0, ch: 0, ci: calc.cI, rest: 1 };
+                                 : { steps: 0, wh: 0, ch: 0, ci: calc.cI, cp: calc.cP, rest: 1 };
   delete a.def;
-  aSteps.value = a.steps || ""; aWh.value = h2m(a.wh); aCh.value = h2m(a.ch); aCi.value = a.ci || calc.cI;
+  aSteps.value = a.steps || ""; aWh.value = h2m(a.wh); aCh.value = h2m(a.ch);
+  fillCardioSelect(aCi, a.ci || calc.cI);
+  aCp.innerHTML = cardioFieldsHtml("a_", aCi.value, cpOf(aCi.value, a.ci, a.cp));
+  onCardioType("a", 1);
   actInfo.textContent = kind === "yesterday" ? "어제 값을 넣었습니다. 저장을 누르세요."
                                              : "완전 휴식으로 채웠습니다. 저장을 누르세요.";
 }
@@ -1366,7 +1465,8 @@ function saveCalc() {
   calc = { ...calc,
     af: +cAf.value || DEFAULT_CALC.af, steps: +cSteps.value || 0,
     wH: +cWh.value || 0, wD: Math.min(7, +cWd.value || 0),
-    cH: +cCh.value || 0, cD: Math.min(7, +cCd.value || 0), cI: cCi.value,
+    cH: cardioHours(cCi.value, readCardio("c_", cCi.value), +cCh.value || 0),
+    cD: Math.min(7, +cCd.value || 0), cI: cCi.value, cP: readCardio("c_", cCi.value),
     deficit: +cDef.value || 0,
     byKg: true, pL: +cPl.value || DEFAULT_CALC.pL,
     fMin: +cFmin.value || DEFAULT_CALC.fMin, fMax: +cFmax.value || DEFAULT_CALC.fMax,
@@ -2121,8 +2221,9 @@ function renderCal() {
   cPl.value = calc.pL ?? DEFAULT_CALC.pL;
   cFmin.value = calc.fMin ?? DEFAULT_CALC.fMin; cFmax.value = calc.fMax ?? DEFAULT_CALC.fMax;
   cLiftK.value = calc.liftK ?? DEFAULT_CALC.liftK;
-  if (!cCi.options.length) cCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
-  cCi.value = calc.cI;
+  fillCardioSelect(cCi, calc.cI);
+  cCp.innerHTML = cardioFieldsHtml("c_", cCi.value, cpOf(cCi.value, calc.cI, calc.cP));
+  onCardioType("c", 1);
 
   calBase.innerHTML = `<h3>기준 <span class="muted">${w.src === "인바디" ? "인바디 최근 측정" : "수동 입력"}</span></h3>
     <div class="stats">
@@ -2140,7 +2241,7 @@ function renderCal() {
     [`${num(calc.steps)}보 (${fmt(w.wt)}kg)`, `+${num(w.stepK)} → ${num(w.rest)}`],
   ];
   if (calc.wH && calc.wD) rows.push([`웨이트 ${calc.wH}h × 주${calc.wD}`, `+${num(w.lift)} → ${num(w.rest + w.lift)}`]);
-  if (calc.cH && calc.cD) rows.push([`유산소 ${calc.cH}h(${calc.cI}) × 주${calc.cD}`, `+${num(w.cardio)} → ${num(w.rest + w.cardio)}`]);
+  if (calc.cH && calc.cD) rows.push([`${cardioLabel(calc.cI, calc.cP)} ${durLabel(calc.cH)} × 주${calc.cD}`, `+${num(w.cardio)} → ${num(w.rest + w.cardio)}`]);
   rows.push([`주 평균 (웨이트 ${w.dW} / 유산소 ${w.dC}${w.ov ? " / 병행 " + w.ov : ""} / 휴식 ${w.dB})`, num(w.avg)]);
   calcTable.innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("")
     + `<tr class="hi"><td>적자 −${num(calc.deficit)} → 목표</td><td>${num(w.target)} kcal</td></tr>`;
