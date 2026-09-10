@@ -720,6 +720,8 @@ function monthRange(ym) { const [y, m] = ym.split("-").map(Number); return [ym +
 function moveMonthStr(ym, n) { const [y, m] = ym.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
 const fmt = n => Math.round(n * 10) / 10;
 const r25 = n => Math.round(n / 25) * 25;
+// 목표 열량 바닥선 = 기초대사량. 그 아래로 오래 먹으면 대사가 더 눌린다
+const floorBmr = (kcal, bmr) => Math.max(bmr ? r25(bmr) : 0, r25(kcal));
 const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const sign = n => (n >= 0 ? "+" : "") + fmt(n);
 const num = n => Math.round(n).toLocaleString("ko-KR");
@@ -919,7 +921,7 @@ function calcWeek() {
   const dW = calc.wD - ov, dC = calc.cD - ov, dB = 7 - dW - dC - ov;
   const weekly = dW * (b.rest + lift) + dC * (b.rest + cardio) + ov * (b.rest + lift + cardio) + dB * b.rest;
   const avg = weekly / 7;
-  return { ...b, lift, cardio, dW, dC, ov, dB, avg, target: r25(avg - calc.deficit) };
+  return { ...b, lift, cardio, dW, dC, ov, dB, avg, target: floorBmr(avg - calc.deficit, b.bmr) };
 }
 function macrosFor(kcal) {
   return { kcal, c: Math.round(kcal * calc.pC / 400), p: Math.round(kcal * calc.pP / 400), f: Math.round(kcal * calc.pF / 900) };
@@ -931,7 +933,7 @@ function dayTarget(ds) {
   const b = calcBase();
   const tdee = b.sed + (+a.steps || 0) * b.wt * STEP_K
              + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci);
-  const m = macrosFor(r25(tdee - calc.deficit));
+  const m = macrosFor(floorBmr(tdee - calc.deficit, b.bmr));
   const parts = [];
   if (+a.steps) parts.push(num(a.steps) + "보");
   if (+a.wh) parts.push(`웨이트 ${+a.wh}h`);
@@ -1054,7 +1056,9 @@ function renderDay() {
       ? `이날 TDEE <b>${num(g.tdee)}</b> − 적자 ${calc.deficit} → 목표 <b>${num(g.kcal)}kcal</b> · ${esc(g.src)}`
       : `활동 미입력 — 주 평균 목표 <b>${num(goals.kcal)}kcal</b>를 씁니다. 저장하면 이날 것만 다시 계산됩니다.`;
   // 완전휴식일엔 조정 목표가 기초대사량 밑으로 떨어질 수 있다
-  if (g.adjusted && w.bmr && g.kcal < w.bmr)
+  if (g.adjusted && w.bmr && g.kcal <= r25(w.bmr) && (g.tdee - calc.deficit) < w.bmr)
+    actInfo.innerHTML += `<div class="hint">ℹ️ 적자 ${calc.deficit} 를 그대로 빼면 ${num(g.tdee - calc.deficit)}kcal 로 기초대사량(${num(w.bmr)}) 아래가 됩니다. 그래서 <b>기초대사량을 바닥으로 잡아</b> ${num(g.kcal)}kcal 로 올렸습니다 — 이날 실제 적자는 ${num(g.tdee - g.kcal)}kcal 입니다.</div>`;
+  if (false && g.adjusted && w.bmr && g.kcal < w.bmr)
     actInfo.innerHTML += `<div class="warn">⚠️ 이날 목표 ${num(g.kcal)}kcal 이 기초대사량 ${num(w.bmr)}kcal 보다 낮습니다. 휴식일이라도 기초대사량 아래로는 내리지 마세요 — 적자를 줄이거나 걸음 수를 늘리는 쪽이 낫습니다.</div>`;
 
   // 요약
@@ -1338,13 +1342,13 @@ function renderCal() {
     <div class="btns mt"><button class="btn ok" onclick="applyCalcGoals()">이 값을 목표로 적용</button></div>`;
 
   const cyc = [];
-  if (calc.wH && calc.wD) cyc.push([`웨이트일 ×${w.dW}일`, num(r25(w.rest + w.lift - calc.deficit))]);
-  if (calc.cH && calc.cD) cyc.push([`유산소일 ×${w.dC}일`, num(r25(w.rest + w.cardio - calc.deficit))]);
-  if (w.ov) cyc.push([`병행일 ×${w.ov}일`, num(r25(w.rest + w.lift + w.cardio - calc.deficit))]);
-  if (w.dB) cyc.push([`완전휴식일 ×${w.dB}일`, num(r25(w.rest - calc.deficit))]);
-  const wsum = (calc.wH && calc.wD ? w.dW * r25(w.rest + w.lift - calc.deficit) : 0)
-    + (calc.cH && calc.cD ? w.dC * r25(w.rest + w.cardio - calc.deficit) : 0)
-    + w.ov * r25(w.rest + w.lift + w.cardio - calc.deficit) + w.dB * r25(w.rest - calc.deficit);
+  if (calc.wH && calc.wD) cyc.push([`웨이트일 ×${w.dW}일`, num(floorBmr(w.rest + w.lift - calc.deficit, w.bmr))]);
+  if (calc.cH && calc.cD) cyc.push([`유산소일 ×${w.dC}일`, num(floorBmr(w.rest + w.cardio - calc.deficit, w.bmr))]);
+  if (w.ov) cyc.push([`병행일 ×${w.ov}일`, num(floorBmr(w.rest + w.lift + w.cardio - calc.deficit, w.bmr))]);
+  if (w.dB) cyc.push([`완전휴식일 ×${w.dB}일`, num(floorBmr(w.rest - calc.deficit, w.bmr))]);
+  const wsum = (calc.wH && calc.wD ? w.dW * floorBmr(w.rest + w.lift - calc.deficit, w.bmr) : 0)
+    + (calc.cH && calc.cD ? w.dC * floorBmr(w.rest + w.cardio - calc.deficit, w.bmr) : 0)
+    + w.ov * floorBmr(w.rest + w.lift + w.cardio - calc.deficit, w.bmr) + w.dB * floorBmr(w.rest - calc.deficit, w.bmr);
   cycleTable.innerHTML = cyc.map(([a, b]) => `<tr><td>${a}</td><td>${b} kcal</td></tr>`).join("")
     + `<tr class="hi"><td>주 평균</td><td>${num(wsum / 7)} kcal</td></tr>`;
 }
