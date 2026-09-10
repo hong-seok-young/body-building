@@ -252,6 +252,8 @@
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
   .stat { background: var(--card2); border-radius: 11px; padding: 10px 8px; text-align: center; }
   .stat span { font-size: 10.5px; color: var(--sub); display: block; }
+  /* 값 아래 한 줄 — 이 숫자가 뭘 뜻하는지 (하루 평균, 계산식) */
+  .stat small { display: block; margin-top: 2px; font-size: 9.5px; color: var(--sub); line-height: 1.3; }
   .stat b { display: block; font-size: 16px; margin-top: 3px; letter-spacing: -.3px; }
   @media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
 
@@ -2310,11 +2312,16 @@ function renderWeek() {
   weekLedger.innerHTML = `
     <h3>이번 주 장부 <span class="muted">기록한 ${done.length}일 기준</span></h3>
     <div class="stats">
-      <div class="stat"><span>섭취 합계</span><b>${num(sumEat)}</b></div>
-      <div class="stat"><span>유지 합계</span><b>${num(sumTdee)}</b></div>
-      <div class="stat"><span>계획 대비</span><b style="color:${sumDiff > 0 ? "var(--red)" : "var(--green)"}">${sumDiff > 0 ? "+" : ""}${num(sumDiff)}</b></div>
-      <div class="stat"><span>실제 수지</span><b style="color:${sumReal > 0 ? "var(--red)" : "var(--green)"}">${sumReal > 0 ? "+" : ""}${num(sumReal)}</b></div>
-      <div class="stat"><span>예상 체지방</span><b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b></div>
+      <div class="stat"><span>먹은 열량 ${done.length}일</span><b>${num(sumEat)}</b>
+        <small>하루 ${num(sumEat / done.length)}</small></div>
+      <div class="stat"><span>유지 열량 ${done.length}일</span><b>${num(sumTdee)}</b>
+        <small>하루 ${num(sumTdee / done.length)}</small></div>
+      <div class="stat"><span>계획 대비</span><b style="color:${sumDiff > 0 ? "var(--red)" : "var(--green)"}">${sumDiff > 0 ? "+" : ""}${num(sumDiff)}</b>
+        <small>먹은 − 목표 ${num(sumGoal)}</small></div>
+      <div class="stat"><span>실제 수지</span><b style="color:${sumReal > 0 ? "var(--red)" : "var(--green)"}">${sumReal > 0 ? "+" : ""}${num(sumReal)}</b>
+        <small>먹은 − 유지</small></div>
+      <div class="stat"><span>예상 체지방</span><b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b>
+        <small>실제 수지 ÷ 7,700</small></div>
     </div>
     <div class="diff">
       체지방은 <b>유지 열량 대비</b>로 계산합니다. 목표(${num(sumGoal)})에는 이미 적자 ${num(calc.deficit)} 이 들어 있어서,
