@@ -1332,9 +1332,14 @@ function onCardioType(which, keep) {
 // 기록된 모든 날의 (섭취 − 목표) 합. 초과한 날은 쌓이고 미달한 날은 깎인다.
 // 하루 초과분만 보면 오늘로 끝나는데, 실제로 언젠가 빼야 하는 건 이 누적분이다.
 // (동기화가 최근 92일을 받아오므로 그 범위의 기록이 대상이다)
+// 두 가지를 따로 낸다. 섞으면 안 된다:
+//  plan = 섭취 − 목표   → 계획을 얼마나 지켰나. 이건 체지방이 아니다.
+//  real = 섭취 − 유지   → 실제 에너지 수지. 이것만 체지방으로 환산된다.
+// 목표에는 이미 적자 500 이 들어 있어서, 목표를 조금 넘겨도 유지 열량 아래면
+// 여전히 지방이 빠지는 중이다. 목표 초과분을 체지방으로 환산하면 틀린다.
 function cumBalance() {
   const today = todayStr();
-  let sum = 0, days = 0, over = 0, worst = null;
+  let plan = 0, real = 0, days = 0, over = 0, worst = null;
   for (const ds of Object.keys(cache)) {
     if (ds > today) continue;
     const log = cache[ds];
@@ -1343,11 +1348,12 @@ function cumBalance() {
     if (!t.kcal) continue;
     const g = dayTarget(ds);
     if (!g.kcal) continue;
-    const d = t.kcal - g.kcal;
-    sum += d; days++;
-    if (d > 0) { over++; if (!worst || d > worst.d) worst = { ds, d }; }
+    const tdee = g.adjusted ? g.tdee : calcWeek(ds).avg;
+    const dp = t.kcal - g.kcal;
+    plan += dp; real += t.kcal - tdee; days++;
+    if (dp > 0) { over++; if (!worst || dp > worst.d) worst = { ds, d: dp }; }
   }
-  return { sum, days, over, worst };
+  return { plan, real, days, over, worst, fatKg: real / 7700 };
 }
 // 초과한 열량을 없애려면 유산소를 얼마나 해야 하나.
 // 각 종류의 순증분(kcal/체중kg/시간)으로 나눈다. 내가 쓰는 페이스가 설정돼 있으면
@@ -1629,15 +1635,23 @@ function renderDay() {
         ? `<button class="actchip${g.isDefault ? " def" : ""}" onclick="openAct()">🔥 ${esc(g.src)} <i>✎</i></button>`
         : `<span class="r">주 평균 목표</span>`}
     </div>` +
-    // 하루 초과분이 아니라 기록 전체의 누적분을 보여준다 — 빼야 하는 건 그쪽이다
-    (cum.days ? `<div class="burnoff${cum.sum > 0 ? "" : " ok"}">
-      <span class="lbl">누적 ${cum.sum > 0 ? "초과" : "적립"}
-        <b>${cum.sum > 0 ? "+" : "−"}${num(Math.abs(cum.sum))}kcal</b>
-        <span class="muted">= 체지방 ${(Math.abs(cum.sum) / 7700).toFixed(2)}kg · 기록 ${cum.days}일 중 초과 ${cum.over}일</span></span>
-      ${cum.sum > 0
-        ? (burnOff(cum.sum, w.wt) || "인바디에 체중을 넣으면 필요한 유산소를 알려줍니다")
-          + (cum.worst ? `<div class="muted" style="margin-top:3px">가장 큰 초과: ${cum.worst.ds.slice(5)} +${num(cum.worst.d)}</div>` : "")
-        : `목표보다 덜 먹은 쪽이 많습니다 — 지금 따로 태울 게 없습니다`}
+    // 기록 전체의 누적. 계획 대비와 실제 수지를 따로 보여준다 —
+    // 목표에 이미 적자가 들어 있어서 목표를 넘겨도 유지 열량 아래면 지방은 빠진다
+    (cum.days ? `<div class="burnoff${cum.real > 0 ? "" : " ok"}">
+      <span class="lbl">누적 <span class="muted">기록 ${cum.days}일</span></span>
+      <div>계획(목표) 대비 <b>${cum.plan > 0 ? "+" : "−"}${num(Math.abs(cum.plan))}</b>
+        <span class="muted">${cum.plan > 0 ? `그만큼 감량이 늦어졌습니다 · 초과한 날 ${cum.over}일` : "계획보다 앞서 있습니다"}</span></div>
+      <div>실제 수지 <b>${cum.real > 0 ? "+" : "−"}${num(Math.abs(cum.real))}</b>
+        → 체지방 <b>${cum.real > 0 ? "+" : "−"}${Math.abs(cum.fatKg).toFixed(2)}kg</b>
+        <span class="muted">${cum.real > 0 ? "실제로 늘고 있습니다" : "빠지는 중"}</span></div>
+      ${cum.real > 0
+        ? `<div class="lbl" style="margin-top:5px">늘어난 체지방을 없애려면</div>`
+          + (burnOff(cum.real, w.wt) || "인바디에 체중을 넣으면 필요한 유산소를 알려줍니다")
+        : cum.plan > 0
+          ? `<div class="lbl" style="margin-top:5px">계획을 따라잡으려면</div>`
+            + (burnOff(cum.plan, w.wt) || "")
+            + (cum.worst ? `<div class="muted" style="margin-top:3px">가장 큰 초과: ${cum.worst.ds.slice(5)} +${num(cum.worst.d)}</div>` : "")
+          : ""}
     </div>` : "") +
     // 괄호 안은 칼로리 기준 비율 (P·C ×4, F ×9). 도넛 대신 여기서 바로 읽는다
     ((ak, gk) => `<div class="macros">` +
@@ -2145,14 +2159,20 @@ function renderWeek() {
 
   const rows = days.map((d, i) => {
     const t = totals(dayLog(d));
-    const g = dayTarget(d).kcal || goals.kcal;
-    return { d, dow: names[i], t, g, diff: t.kcal - g, logged: t.kcal > 0, future: d > today };
+    const dt = dayTarget(d);
+    const g = dt.kcal || goals.kcal;
+    const tdee = dt.adjusted ? dt.tdee : calcWeek(d).avg;
+    return { d, dow: names[i], t, g, tdee, diff: t.kcal - g, logged: t.kcal > 0, future: d > today };
   });
   const done = rows.filter(r => r.logged);
-  const sumDiff = done.reduce((a, r) => a + r.diff, 0);
+  const sumDiff = done.reduce((a, r) => a + r.diff, 0);      // 계획(목표) 대비
   const sumEat = done.reduce((a, r) => a + r.t.kcal, 0);
   const sumGoal = done.reduce((a, r) => a + r.g, 0);
-  const fatKg = sumDiff / 7700;                       // 지방 1kg = 7,700kcal
+  const sumTdee = done.reduce((a, r) => a + r.tdee, 0);
+  // 체지방은 목표가 아니라 유지 열량 대비로 계산해야 한다.
+  // 목표에 이미 적자가 들어 있어서 목표 초과분을 환산하면 "적자인데 살쪘다" 가 된다
+  const sumReal = sumEat - sumTdee;
+  const fatKg = sumReal / 7700;                              // 지방 1kg = 7,700kcal
 
   // ── 이번 주 장부: 적자 합계 → 예상 체지방 변화 (인바디와 크로스체크용)
   const wk = calcWeek();
@@ -2160,15 +2180,19 @@ function renderWeek() {
     <h3>이번 주 장부 <span class="muted">기록한 ${done.length}일 기준</span></h3>
     <div class="stats">
       <div class="stat"><span>섭취 합계</span><b>${num(sumEat)}</b></div>
-      <div class="stat"><span>목표 합계</span><b>${num(sumGoal)}</b></div>
-      <div class="stat"><span>과부족</span><b style="color:${sumDiff > 0 ? "var(--red)" : "var(--green)"}">${sumDiff > 0 ? "+" : ""}${num(sumDiff)}</b></div>
+      <div class="stat"><span>유지 합계</span><b>${num(sumTdee)}</b></div>
+      <div class="stat"><span>계획 대비</span><b style="color:${sumDiff > 0 ? "var(--red)" : "var(--green)"}">${sumDiff > 0 ? "+" : ""}${num(sumDiff)}</b></div>
+      <div class="stat"><span>실제 수지</span><b style="color:${sumReal > 0 ? "var(--red)" : "var(--green)"}">${sumReal > 0 ? "+" : ""}${num(sumReal)}</b></div>
       <div class="stat"><span>예상 체지방</span><b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b></div>
     </div>
     <div class="diff">
+      체지방은 <b>유지 열량 대비</b>로 계산합니다. 목표(${num(sumGoal)})에는 이미 적자 ${num(calc.deficit)} 이 들어 있어서,
+      목표를 조금 넘겨도 유지 열량 아래면 지방은 계속 빠집니다.<br>
       목표를 그대로 지켰다면 기록한 ${done.length}일 동안 <b>체지방 ${(done.length * calc.deficit / 7700).toFixed(2)}kg</b> 이 줄어야 합니다
-      (적자 ${num(calc.deficit)} × ${done.length}일 ÷ 7,700).<br>
-      실제 기록으로는 <b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b> 입니다
-      ${Math.abs(sumDiff) > 500 ? `— 목표 대비 ${num(Math.abs(sumDiff))}kcal ${sumDiff > 0 ? "더 먹었습니다" : "덜 먹었습니다"}` : "— 목표에 거의 맞았습니다"}.
+      (적자 ${num(calc.deficit)} × ${done.length}일 ÷ 7,700).
+      실제 기록으로는 <b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b>
+      ${sumDiff > 0 ? `— 목표보다 ${num(sumDiff)}kcal 더 먹어서 그만큼 감량이 늦어졌습니다` :
+        Math.abs(sumDiff) > 500 ? `— 목표보다 ${num(-sumDiff)}kcal 덜 먹었습니다` : "— 목표에 거의 맞았습니다"}.
       <br><span style="color:var(--sub)">다음 인바디의 체지방량과 비교해보세요. 크게 다르면 ① 기록 누락 ② 활동 소모 추정 오차(웨이트 ${+calc.liftK || LIFT_K}kcal/kg/h) ③ 수분 변동 순으로 의심하면 됩니다.</span>
     </div>`;
 
