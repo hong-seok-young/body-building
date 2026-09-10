@@ -181,6 +181,8 @@
   .remain-big { display: flex; align-items: baseline; gap: 9px; padding-bottom: 13px; margin-bottom: 13px; border-bottom: 1px solid var(--line); }
   .remain-big b { font-size: 31px; line-height: 1; letter-spacing: -1px; }
   .remain-big em { font-size: 12px; color: var(--sub); font-style: normal; }
+  /* 큰 숫자 옆의 누계 — 오늘 하루와 구분되게 한 칸 띄운다 */
+  .remain-big em.cum { margin-left: 2px; }
   .remain-big .r { margin-left: auto; font-size: 11.5px; color: var(--sub); text-align: right; line-height: 1.55; }
   /* 활동 칩 = 누르면 그날 활동을 고치는 버튼. 평소 하루(기본값) 일 때는 흐리게 */
   .actchip { margin-left: auto; border: 1px solid var(--line); background: var(--card2);
@@ -1339,7 +1341,7 @@ function onCardioType(which, keep) {
 // 여전히 지방이 빠지는 중이다. 목표 초과분을 체지방으로 환산하면 틀린다.
 function cumBalance() {
   const today = todayStr();
-  let plan = 0, real = 0, days = 0, over = 0, worst = null;
+  let plan = 0, real = 0, days = 0, over = 0;
   for (const ds of Object.keys(cache)) {
     if (ds > today) continue;
     const log = cache[ds];
@@ -1351,9 +1353,9 @@ function cumBalance() {
     const tdee = g.adjusted ? g.tdee : calcWeek(ds).avg;
     const dp = t.kcal - g.kcal;
     plan += dp; real += t.kcal - tdee; days++;
-    if (dp > 0) { over++; if (!worst || dp > worst.d) worst = { ds, d: dp }; }
+    if (dp > 0) over++;
   }
-  return { plan, real, days, over, worst, fatKg: real / 7700 };
+  return { plan, real, days, over, fatKg: real / 7700 };
 }
 // 초과한 열량을 없애려면 유산소를 얼마나 해야 하나.
 // 각 종류의 순증분(kcal/체중kg/시간)으로 나눈다. 내가 쓰는 페이스가 설정돼 있으면
@@ -1631,27 +1633,19 @@ function renderDay() {
     <div class="remain-big">
       <b style="color:${left < 0 ? "var(--red)" : "var(--text)"}">${num(Math.abs(left))}</b>
       <em>kcal ${left < 0 ? "초과" : "남음"}</em>
+      ${cum.days ? `<em class="cum">(누계 ${num(Math.abs(cum.plan))} ${cum.plan > 0 ? "초과" : "남음"})</em>` : ""}
       ${g.adjusted
         ? `<button class="actchip${g.isDefault ? " def" : ""}" onclick="openAct()">🔥 ${esc(g.src)} <i>✎</i></button>`
         : `<span class="r">주 평균 목표</span>`}
     </div>` +
     // 기록 전체의 누적. 계획 대비와 실제 수지를 따로 보여준다 —
     // 목표에 이미 적자가 들어 있어서 목표를 넘겨도 유지 열량 아래면 지방은 빠진다
-    (cum.days ? `<div class="burnoff${cum.real > 0 ? "" : " ok"}">
-      <span class="lbl">누적 <span class="muted">기록 ${cum.days}일</span></span>
-      <div>계획(목표) 대비 <b>${cum.plan > 0 ? "+" : "−"}${num(Math.abs(cum.plan))}</b>
-        <span class="muted">${cum.plan > 0 ? `그만큼 감량이 늦어졌습니다 · 초과한 날 ${cum.over}일` : "계획보다 앞서 있습니다"}</span></div>
-      <div>실제 수지 <b>${cum.real > 0 ? "+" : "−"}${num(Math.abs(cum.real))}</b>
-        → 체지방 <b>${cum.real > 0 ? "+" : "−"}${Math.abs(cum.fatKg).toFixed(2)}kg</b>
-        <span class="muted">${cum.real > 0 ? "실제로 늘고 있습니다" : "빠지는 중"}</span></div>
+    (cum.plan > 0 || cum.real > 0 ? `<div class="burnoff${cum.real > 0 ? "" : " ok"}">
       ${cum.real > 0
-        ? `<div class="lbl" style="margin-top:5px">늘어난 체지방을 없애려면</div>`
+        ? `<span class="lbl">누계 늘어난 체지방을 없애려면</span>`
           + (burnOff(cum.real, w.wt) || "인바디에 체중을 넣으면 필요한 유산소를 알려줍니다")
-        : cum.plan > 0
-          ? `<div class="lbl" style="margin-top:5px">계획을 따라잡으려면</div>`
-            + (burnOff(cum.plan, w.wt) || "")
-            + (cum.worst ? `<div class="muted" style="margin-top:3px">가장 큰 초과: ${cum.worst.ds.slice(5)} +${num(cum.worst.d)}</div>` : "")
-          : ""}
+        : `<span class="lbl">누계를 따라잡으려면 <span class="muted">초과한 날 ${cum.over}일</span></span>`
+          + (burnOff(cum.plan, w.wt) || "")}
     </div>` : "") +
     // 괄호 안은 칼로리 기준 비율 (P·C ×4, F ×9). 도넛 대신 여기서 바로 읽는다
     ((ak, gk) => `<div class="macros">` +
