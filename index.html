@@ -1888,42 +1888,95 @@ function foodRow(x, i, mine) {
   </div>`;
 }
 // ── 음식 DB 중복 정리
-// 같은 제품이 "BSN 아이솔레이트 1스쿱" 과 "BSN 아이솔레이트 1스쿱 38g" 처럼
-// 두 줄로 남는다. 이름이 같거나, 한쪽이 다른 쪽 이름으로 시작하면서 열량이
-// 5% 안쪽이면 같은 음식으로 본다. 양이 다른 것("귀리 50g" vs "귀리 80g")은
-// 열량이 달라서 합쳐지지 않는다.
-const pkey = n => String(n).toLowerCase().replace(/[\s·,()×x]/g, "");
+// 정리는 "합치기" 다. 지우기가 아니다.
+// 같은 제품이 "BSN 아이솔레이트 1스쿱" 과 "BSN 아이솔레이트 1스쿱 38g" 처럼 두 줄로
+// 남은 경우만 한 줄로 합친다. 이름이 완전히 같거나, 한쪽이 다른 쪽에 용량만 덧붙은
+// 꼴이면서 열량까지 5% 안쪽일 때만 같은 음식으로 본다.
+// 옛 규칙은 "이름이 앞에서부터 겹치면 같다" 였다 — 그래서 "편의점 닭가슴살" 이
+// "편의점 닭가슴살 스테이크" 에 먹혀 사라졌다. 접두사만 겹치는 건 다른 제품이다.
+const pkey = n => String(n).toLowerCase().replace(/[\s·,()]/g, "");
+// 긴 이름에서 짧은 쪽을 떼고 남은 꼬리가 용량뿐인가 — "38g", "×2", "(2개)" 같은 것만
+const AMT_TAIL = new RegExp(`^(?:[x×*]?\\d+(?:[.,]\\d+)?(?:kg|g|mg|ml|l|kcal|${UNITS})?)+$`, "i");
 function sameFood(a, b) {
   const ka = pkey(a.name), kb = pkey(b.name);
   if (ka === kb) return true;
-  if (!(ka.startsWith(kb) || kb.startsWith(ka))) return false;
+  const lo = ka.length > kb.length ? ka : kb, sh = ka.length > kb.length ? kb : ka;
+  if (!sh || !lo.startsWith(sh) || !AMT_TAIL.test(lo.slice(sh.length))) return false;
   const x = +a.kcal || 0, y = +b.kcal || 0;
   return x > 0 && y > 0 && Math.abs(x - y) / Math.max(x, y) <= 0.05;
 }
-// 영양 항목이 더 많이 채워진 쪽을 남기고, 이름은 양이 적힌 쪽(더 긴 쪽)을 쓴다
-const fillCount = x => KEYS.filter(k => +x[k] > 0).length;
+// 합칠 때 값은 채워진 쪽을 살린다 (한 줄에만 있는 나트륨·섬유가 사라지지 않게).
+// 이름은 용량이 적힌 쪽(더 긴 쪽), ★ 는 한쪽이라도 켜져 있으면 켠다.
+function mergeFood(a, b) {
+  const out = { ...a };
+  for (const k of KEYS) if (!(+out[k] > 0) && +b[k] > 0) out[k] = b[k];
+  out.name = b.name.length > a.name.length ? b.name : a.name;
+  if (a.fav || b.fav) out.fav = 1;
+  return out;
+}
 function dedupeFoods(list) {
   const out = [];
   for (const x of list) {
     const i = out.findIndex(y => sameFood(x, y));
-    if (i < 0) { out.push(x); continue; }
-    const keep = fillCount(x) > fillCount(out[i]) ? x : out[i];
-    out[i] = { ...keep, name: x.name.length > out[i].name.length ? x.name : out[i].name };
+    if (i < 0) out.push(x); else out[i] = mergeFood(out[i], x);
   }
   return out;
 }
-// 기본 성분표에 이미 있는 것도 "내 음식"에서 뺀다 (같은 게 두 군데 보이지 않게)
+// 기본 성분표에 같은 게 있어도 내 음식에서 빼지 않는다 — 내 음식은 내가 넣은
+// 데이터고 성분표는 코드다. 겹치면 성분표 쪽 줄을 숨긴다 (renderFoods).
+function dupeCount() { return presets.length - dedupeFoods(presets).length; }
 function tidyPresets(loud) {
   const before = presets.length;
-  let out = dedupeFoods(presets);
-  out = out.filter(x => !FOOD_DB.some(d => sameFood(x, d)));
-  const removed = before - out.length;
-  if (removed > 0) {
+  const out = dedupeFoods(presets);
+  const merged = before - out.length;
+  if (merged > 0) {
+    save("dt_presets_bak", presets);       // 되돌리기용 — 정리는 취소할 수 있어야 한다
     presets = out; save("dt_presets", presets); setMeta("presets", presets);
+    render();
   }
-  if (loud) toast(removed > 0 ? `중복 ${removed}개 정리` : "중복 없음");
-  if (removed > 0) render();
-  return removed;
+  if (loud) toast(merged > 0 ? `중복 ${merged}개를 한 줄로 합침` : "합칠 중복 없음");
+  return merged;
+}
+function undoTidy() {
+  const bak = load("dt_presets_bak", null);
+  if (!bak || !bak.length) return;
+  presets = bak; save("dt_presets", presets); setMeta("presets", presets);
+  save("dt_presets_bak", null);
+  render();
+}
+// ── 기록에서 되살리기
+// 옛 "중복 정리" 는 접두사만 겹쳐도 합치고, 기본 성분표에 있는 건 아예 지웠다.
+// 지워진 줄도 먹은 기록에는 이름과 성분이 그대로 남아 있으니 거기서 되살린다.
+// 두 번 이상 먹은 것만 올린다 — 한 번 먹은 외식 한 접시까지 내 음식이 되면
+// 목록이 못 쓰게 된다. 한 번 되살린 이름은 기억해둔다. 내가 일부러 지운 게
+// 매번 되살아나면 그것도 고장이다.
+function recoverPresets() {
+  const seen = {};
+  for (const ds of Object.keys(cache)) for (const x of cache[ds] || []) {
+    const nm = String(x.name || "").trim();
+    if (!nm || !(+x.kcal > 0)) continue;
+    const k = pkey(nm);
+    const s0 = seen[k] || (seen[k] = { n: 0, x });
+    s0.n++;
+    if (nm.length > String(s0.x.name).trim().length) s0.x = x;   // 용량이 적힌 쪽을 남긴다
+  }
+  const done = load("dt_recovered", []);
+  const add = [];
+  for (const k of Object.keys(seen)) {
+    const { n, x } = seen[k];
+    if (n < 2 || done.indexOf(k) >= 0) continue;
+    if (presets.some(pz => sameFood(pz, x)) || FOOD_DB.some(d => sameFood(d, x))) continue;
+    const food = { name: String(x.name).trim() };
+    KEYS.forEach(kk => food[kk] = +x[kk] || 0);
+    add.push(food);
+  }
+  const use = add.slice(0, Math.max(0, 300 - presets.length));   // 밀려서 옛 음식이 떨어져 나가지 않게
+  if (!use.length) return 0;
+  presets = use.concat(presets);
+  save("dt_presets", presets); setMeta("presets", presets);
+  save("dt_recovered", done.concat(use.map(f => pkey(f.name))).slice(-500));
+  render();
+  return use.length;
 }
 function renderFoods() {
   const prev = fdMeal.value;
@@ -1933,16 +1986,21 @@ function renderFoods() {
   const hit = x => !q || x.name.toLowerCase().includes(q);
 
   const mine = presets.map((x, i) => [x, i]).filter(([x]) => hit(x));
-  const dups = presets.length - dedupeFoods(presets).filter(x => !FOOD_DB.some(d => sameFood(x, d))).length;
+  const dups = dupeCount();
+  const bak = load("dt_presets_bak", null);
+  const hbtn = (fn, label) => `<button class="btn" style="float:right;padding:5px 11px;font-size:12px" onclick="${fn}">${label}</button>`;
   myFoods.innerHTML = `<h3>내 음식 <span class="muted">${mine.length}${q ? " / " + presets.length : ""}개</span>`
-    + (dups > 0 ? `<button class="btn" style="float:right;padding:5px 11px;font-size:12px" onclick="tidyPresets(true)">중복 ${dups}개 정리</button>` : "")
+    + (dups > 0 ? hbtn("tidyPresets(true)", `중복 ${dups}개 합치기`)
+       : bak && bak.length ? hbtn("undoTidy()", "정리 되돌리기") : "")
     + `</h3>`
     + (mine.length ? mine.map(([x, i]) => foodRow(x, i, true)).join("")
        : `<div class="empty">${q ? "검색 결과 없음" : "아직 없습니다. 위에서 바코드를 찍거나 직접 등록하세요."}</div>`);
 
   let n = 0;
   dbFoods.innerHTML = FOOD_GROUPS.map(g => {
-    const rows = g.items.map(x => [x, FOOD_DB.indexOf(x)]).filter(([x]) => hit(x));
+    // 내 음식에 같은 게 있으면 성분표 줄은 숨긴다 — 한 화면에 같은 음식이 두 번 뜨지 않게
+    const rows = g.items.map(x => [x, FOOD_DB.indexOf(x)])
+      .filter(([x]) => hit(x) && !presets.some(pz => sameFood(pz, x)));
     n += rows.length;
     if (!rows.length) return "";
     return `<div class="card"><h3>${esc(g.cat)} <span class="muted">${rows.length}개</span></h3>`
@@ -2972,6 +3030,7 @@ render();
   await applyHashAdd();
   await applyInbox();
   await dedupeInbody();          // 동기화가 끝난 뒤라야 중복이 다 보인다
+  recoverPresets();              // 기록에 있는데 내 음식에서 사라진 것을 되살린다
 })();
 if (!cfg) { setStatus("설정 필요 →", "var(--red)"); openSettings(); }
 </script>
