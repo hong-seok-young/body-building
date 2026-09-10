@@ -704,8 +704,16 @@ const CARDIO = {
                 hours: o => (+o.pace > 0 && +o.km > 0 ? o.pace * o.km / 60 : 0) },
 };
 const CARDIO_NAMES = Object.keys(CARDIO);
-// 예전 기록은 저/중/고 로 남아 있다. 과거 날짜의 목표가 뒤바뀌면 안 되므로 그대로 살린다
+// 예전 기록은 저/중/고 로 남아 있다. 과거 날짜의 목표가 뒤바뀌면 안 되므로
+// 계산은 옛 계수를 그대로 쓴다. 다만 화면(드롭다운)에는 내보내지 않는다.
 const OLD_K = { "저": 4.0, "중": 6.0, "고": 8.0 };
+// 저/중/고 를 소모가 같은 계단 페이스로 환산한다. 옛 계수는 순증분이므로 +1 해서
+// gross MET 로 되돌린 뒤 계단 계수(spm 당 0.1503 MET)로 나눈다.
+//   저 4.0 → 33spm · 중 6.0 → 47spm · 고 8.0 → 60spm
+function unLegacy(ci, cp) {
+  if (!OLD_K[ci]) return [ci, cp];
+  return ["계단", { spm: Math.round((OLD_K[ci] + 1) / stairMet(1)) }];
+}
 function cardioRate(ci, cp) {                       // kcal / 체중kg / 시간 (순증분)
   if (OLD_K[ci]) return OLD_K[ci];
   const c = CARDIO[ci];
@@ -1289,9 +1297,8 @@ function readCardio(pre, ci) {
 // 셀렉트를 채운다. 예전 값(저/중/고)이 저장돼 있으면 그것도 항목으로 남겨
 // 저절로 다른 종류로 바뀌지 않게 한다
 function fillCardioSelect(el, cur) {
-  const names = CARDIO_NAMES.concat(OLD_K[cur] ? [cur] : []);
-  el.innerHTML = names.map(x => `<option${x === cur ? " selected" : ""}>${x}</option>`).join("");
-  el.value = names.includes(cur) ? cur : CARDIO_NAMES[0];
+  el.innerHTML = CARDIO_NAMES.map(x => `<option${x === cur ? " selected" : ""}>${x}</option>`).join("");
+  el.value = CARDIO_NAMES.includes(cur) ? cur : CARDIO_NAMES[0];
 }
 // which: 'c' = 열량 탭 설정, 'a' = 활동 모달. keep=1 이면 칸은 그대로 두고 요약만 갱신
 function onCardioType(which, keep) {
@@ -1300,7 +1307,8 @@ function onCardioType(which, keep) {
   const ci = sel.value;
   if (!keep) {
     const st = isC ? calc : (act[curDate] || {});
-    box.innerHTML = cardioFieldsHtml(which + "_", ci, cpOf(ci, isC ? calc.cI : st.ci, isC ? calc.cP : st.cp));
+    const [sci, scp] = unLegacy(isC ? calc.cI : st.ci, isC ? calc.cP : st.cp);
+    box.innerHTML = cardioFieldsHtml(which + "_", ci, cpOf(ci, sci, scp));
   }
   const cp = readCardio(which + "_", ci) || {};
   const c = CARDIO[ci];
@@ -1436,9 +1444,10 @@ function clearAct() {
 }
 function openAct() {
   const a = actOf(curDate);
-  fillCardioSelect(aCi, a.ci || calc.cI);
+  const [aci, acp] = unLegacy(a.ci || calc.cI, a.cp);
+  fillCardioSelect(aCi, aci);
   aSteps.value = a.steps || ""; aWh.value = h2m(a.wh); aCh.value = h2m(a.ch);
-  aCp.innerHTML = cardioFieldsHtml("a_", aCi.value, cpOf(aCi.value, a.ci, a.cp));
+  aCp.innerHTML = cardioFieldsHtml("a_", aCi.value, cpOf(aCi.value, aci, acp));
   onCardioType("a", 1);
   const dd = defaultDay(curDate);
   actTitle.textContent = `${dateLabel(curDate)} 활동`;
@@ -1454,8 +1463,9 @@ function actPreset(kind) {
                                  : { steps: 0, wh: 0, ch: 0, ci: calc.cI, cp: calc.cP, rest: 1 };
   delete a.def;
   aSteps.value = a.steps || ""; aWh.value = h2m(a.wh); aCh.value = h2m(a.ch);
-  fillCardioSelect(aCi, a.ci || calc.cI);
-  aCp.innerHTML = cardioFieldsHtml("a_", aCi.value, cpOf(aCi.value, a.ci, a.cp));
+  const [pci, pcp] = unLegacy(a.ci || calc.cI, a.cp);
+  fillCardioSelect(aCi, pci);
+  aCp.innerHTML = cardioFieldsHtml("a_", aCi.value, cpOf(aCi.value, pci, pcp));
   onCardioType("a", 1);
   actInfo.textContent = kind === "yesterday" ? "어제 값을 넣었습니다. 저장을 누르세요."
                                              : "완전 휴식으로 채웠습니다. 저장을 누르세요.";
@@ -2221,8 +2231,9 @@ function renderCal() {
   cPl.value = calc.pL ?? DEFAULT_CALC.pL;
   cFmin.value = calc.fMin ?? DEFAULT_CALC.fMin; cFmax.value = calc.fMax ?? DEFAULT_CALC.fMax;
   cLiftK.value = calc.liftK ?? DEFAULT_CALC.liftK;
-  fillCardioSelect(cCi, calc.cI);
-  cCp.innerHTML = cardioFieldsHtml("c_", cCi.value, cpOf(cCi.value, calc.cI, calc.cP));
+  const [cci, ccp] = unLegacy(calc.cI, calc.cP);
+  fillCardioSelect(cCi, cci);
+  cCp.innerHTML = cardioFieldsHtml("c_", cCi.value, cpOf(cCi.value, cci, ccp));
   onCardioType("c", 1);
 
   calBase.innerHTML = `<h3>기준 <span class="muted">${w.src === "인바디" ? "인바디 최근 측정" : "수동 입력"}</span></h3>
