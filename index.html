@@ -88,6 +88,8 @@
   .empty { text-align: center; color: var(--sub); padding: 18px 0; }
   .over { color: var(--red); font-weight: 700; }
   .good { color: var(--green); font-weight: 700; }
+  /* 목표를 허용 범위보다 크게 넘긴 것 — 모자란 것도 아니지만 잘한 것도 아니다 */
+  .much { color: var(--warntext); font-weight: 700; }
   .remain { color: var(--sub); }
   .warn { background: var(--warnbg); border: 1px solid var(--warnline); color: var(--warntext); border-radius: 10px; padding: 9px 11px; font-size: 12px; line-height: 1.55; margin-top: 9px; }
 
@@ -438,13 +440,13 @@
   </div>
 
   <div class="card">
-    <h3>매크로 <span class="muted">단백질 고정 · 탄수·지방으로 열량 조절</span></h3>
+    <h3>매크로 <span class="muted">단백질 고정(제지방 기준) · 탄수·지방으로 열량 조절</span></h3>
     <div class="fields g3">
-      <label>단백질 g/kg <span class="muted">고정</span><input type="number" step="0.1" min="0" max="4" id="cPg"></label>
+      <label>단백질 g/제지방kg <span class="muted">2.2~2.6</span><input type="number" step="0.1" min="0" max="4" id="cPl"></label>
       <label>지방 하한 g/kg<input type="number" step="0.05" min="0" max="2" id="cFmin"></label>
       <label>지방 상한 g/kg<input type="number" step="0.05" min="0" max="2" id="cFmax"></label>
     </div>
-    <div class="hint"><b>단백질은 바닥선입니다.</b> 그날 운동을 얼마나 했든 체중 × 이 값을 먼저 떼어놓고, 열량 조절은 탄수와 지방에서만 합니다. 지방은 하한~상한 안에서 움직이고, 남는 열량은 전부 탄수가 받습니다 — 쉬는 날엔 지방이 하한에 걸리고, 많이 움직인 날엔 탄수가 늘어납니다.</div>
+    <div class="hint"><b>단백질은 제지방량 기준 목표치입니다.</b> 체지방은 단백질을 쓰지 않으므로 체중이 아니라 <b>제지방량(체중 − 체지방량)</b> 에 겁니다. 그날 운동을 얼마나 했든 이 값을 먼저 떼어놓고, 열량 조절은 탄수와 지방에서만 합니다.<br><b>모자라는 것도, 넘치는 것도 손해입니다.</b> 이 값을 넘겨도 근성장이 더 되지는 않는데, 총 열량은 정해져 있어서 초과분만큼 탄수가 깎이고 훈련 볼륨이 떨어집니다. 그래서 일간 화면에서 +10% 까지는 초록(오차), 그보다 넘으면 노랑(초과)으로 표시합니다.<br>지방은 하한~상한 안에서 움직이고, 남는 열량은 전부 탄수가 받습니다 — 쉬는 날엔 지방이 하한에 걸리고, 많이 움직인 날엔 탄수가 늘어납니다.</div>
     <div class="btns mt">
       <button class="btn pri" onclick="saveCalc()">적용</button>
     </div>
@@ -692,7 +694,8 @@ const DEFAULT_CALC = {
   wH: 2, wD: 5,
   cH: 0.5, cD: 2, cI: "중",
   deficit: 350,
-  byKg: true, pG: 2.0,              // 단백질 = 체중 × 2.0 g. 활동량과 무관하게 고정되는 바닥선
+  byKg: true, pL: 2.4,              // 단백질 = 제지방량 × 2.4 g. 체지방은 단백질을 안 쓴다
+  pG: 2.0,                          // 인바디에 체지방량이 없을 때만 쓰는 체중 기준 대체값
   fG: 0.7,                          // 지방 기준선 (g/kg) — 실제로는 아래 fMin~fMax 안에서 움직인다
   fMin: 0.6, fMax: 0.9,             // 지방 하한(호르몬)·상한. 이 안에서 열량 변동을 나눠 받는다
   fShare: 0.35,                     // 단백질 뺀 나머지 열량 중 지방이 받는 비율, 남는 건 탄수
@@ -1173,23 +1176,32 @@ function calcWeek(ds) {
   const avg = weekly / 7;
   return { ...b, lift, cardio, dW, dC, ov, dB, avg, target: floorBmr(avg - calc.deficit, b.bmr) };
 }
-// 단백질·지방은 체중에 걸고(g/kg), 남는 열량을 탄수가 받는다.
+// 단백질은 제지방량에, 지방은 체중에 걸고(g/kg), 남는 열량을 탄수가 받는다.
 // 퍼센트로 걸면 목표 열량이 활동량에 따라 흔들릴 때 단백질도 같이 깎인다 —
 // 쉬는 날(목표 2,375) 에 단백질이 184g 으로 줄어드는 식이라 근손실 쪽으로 불리하다.
-// 단백질은 지켜야 하는 바닥, 탄수는 훈련량에 맞춰 늘리는 연료로 보는 게 맞다.
+// 단백질은 활동량과 무관하게 고정, 탄수는 훈련량에 맞춰 늘리는 연료로 보는 게 맞다.
+//
+// 체중이 아니라 제지방량(체중 − 체지방량)에 거는 이유: 체지방은 단백질을 쓰지 않는다.
+// 체중에 걸면 체지방이 많을수록 목표가 부풀고, 감량으로 체중이 빠지면 지켜야 할
+// 근육은 그대로인데 목표만 같이 내려간다. 제지방에 걸면 그 두 가지가 다 안 생긴다.
+//
+// 그리고 이건 바닥선이 아니라 목표치다. 이 값을 넘겨 먹는다고 근성장이 더 되지
+// 않고(합성률은 여기서 이미 포화된다), 총 열량은 정해져 있으니 초과분만큼 탄수가
+// 깎여 훈련 볼륨이 떨어진다. 그래서 초과도 부족만큼이나 손해다.
 function macrosFor(kcal, ds) {
   const wt = ibAt("weight", ds) || +calc.wt || 0;
   if (calc.byKg !== false && wt > 0) {
-    // 단백질은 바닥선이다 — 그날 활동이 뭐였든 체중 × 2.0 g 을 먼저 떼어놓고,
-    // 열량 조절은 탄수와 지방에서만 한다. 더 먹는 건 괜찮고 줄이는 건 안 된다.
-    const p = Math.round((+calc.pG || 2.0) * wt);
+    // 그날 활동이 뭐였든 제지방량 × pL 을 먼저 떼어놓고, 열량 조절은 탄수와 지방에서만 한다.
+    // 인바디에 체지방량이 없으면 제지방을 모르니 예전처럼 체중 기준으로 물러선다.
+    const ffm = Math.max(0, wt - ibAt("bfm", ds));
+    const p = ffm > 0 ? Math.round((+calc.pL || 2.4) * ffm) : Math.round((+calc.pG || 2.0) * wt);
     const rest = Math.max(0, kcal - p * 4);
     // 지방도 열량 변동을 나눠 받되, 호르몬 하한(fMin)과 상한(fMax) 밖으로는 안 나간다.
     // 쉬는 날엔 하한에 걸리고 많이 움직인 날엔 상한에 걸린 뒤 나머지는 탄수가 받는다
     const fLo = (+calc.fMin || 0.6) * wt, fHi = (+calc.fMax || 0.9) * wt;
     const f = Math.round(Math.min(fHi, Math.max(fLo, rest * (+calc.fShare || 0.35) / 9)));
     const c = Math.max(0, Math.round((rest - f * 9) / 4));
-    return { kcal, p, c, f, pFloor: p };
+    return { kcal, p, c, f, ffm };
   }
   return { kcal, c: Math.round(kcal * calc.pC / 400), p: Math.round(kcal * calc.pP / 400), f: Math.round(kcal * calc.pF / 900) };
 }
@@ -1293,7 +1305,7 @@ function saveCalc() {
     wH: +cWh.value || 0, wD: Math.min(7, +cWd.value || 0),
     cH: +cCh.value || 0, cD: Math.min(7, +cCd.value || 0), cI: cCi.value,
     deficit: +cDef.value || 0,
-    byKg: true, pG: +cPg.value || DEFAULT_CALC.pG,
+    byKg: true, pL: +cPl.value || DEFAULT_CALC.pL,
     fMin: +cFmin.value || DEFAULT_CALC.fMin, fMax: +cFmax.value || DEFAULT_CALC.fMax };
   saveCalcMeta(); render();
 }
@@ -1414,19 +1426,23 @@ function renderDay() {
     `<div class="macro mhead"><span class="nm"></span><span class="val">섭취 (비율) / 목표 (비율)</span>
        <span></span><span class="st">남음</span></div>` +
     [{ l: "칼로리", v: t.kcal, g: g.kcal, d: 0, c: "var(--kcal)" },
-     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", more: true, k: 4 },
+     // band: 목표 대비 이만큼까지의 초과는 오차로 본다. 그 위는 탄수를 밀어내는 초과다
+     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", band: 0.1, k: 4 },
      { l: "탄수화물", v: t.c, g: g.c, d: 1, c: "var(--carb)", k: 4 },
      { l: "지방", v: t.f, g: g.f, d: 1, c: "var(--fat)", k: 9 }].map(r => {
       const pct = r.g ? Math.min(100, r.v / r.g * 100) : 0, over = r.v - r.g;
       const n = x => r.d ? fmt(x) : num(x);
+      // 허용 범위가 있는 줄(단백질)은 범위 안까지만 초록, 그 위는 노랑(초과).
+      // 범위가 없는 줄은 넘기는 즉시 빨강이다.
+      const tooMuch = over > 0 && (!r.band || over > r.g * r.band);
       const st = over > 0
-        ? `<span class="${r.more ? "good" : "over"}">+${n(over)}</span>`
+        ? `<span class="${tooMuch ? (r.band ? "much" : "over") : "good"}">+${n(over)}</span>`
         : `<span class="remain">${n(r.g - r.v)}</span>`;
       const sh = (x, tot) => r.k && tot > 0 ? `<small>(${Math.round(x * r.k / tot * 100)}%)</small>` : "";
       return `<div class="macro">
         <span class="nm">${r.l}</span>
         <span class="val">${n(r.v)}${sh(r.v, ak)} / ${n(r.g)}${sh(r.g, gk)}</span>
-        <span class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.c}"></div></span>
+        <span class="bar"><div style="width:${pct}%;background:${tooMuch ? (r.band ? "var(--warntext)" : "var(--red)") : r.c}"></div></span>
         <span class="st">${st}</span></div>`;
     }).join("") + `</div>`
     )(t.p * 4 + t.c * 4 + t.f * 9, g.p * 4 + g.c * 4 + g.f * 9) +
@@ -1927,7 +1943,7 @@ function renderCal() {
   const w = calcWeek();
   cAf.value = calc.af; cSteps.value = calc.steps; cWh.value = calc.wH; cWd.value = calc.wD;
   cCh.value = calc.cH; cCd.value = calc.cD; cDef.value = calc.deficit;
-  cPg.value = calc.pG ?? DEFAULT_CALC.pG;
+  cPl.value = calc.pL ?? DEFAULT_CALC.pL;
   cFmin.value = calc.fMin ?? DEFAULT_CALC.fMin; cFmax.value = calc.fMax ?? DEFAULT_CALC.fMax;
   if (!cCi.options.length) cCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
   cCi.value = calc.cI;
@@ -1963,7 +1979,7 @@ function renderCal() {
       <div class="stat"><span>지방</span><b>${m.f}g</b></div>
       <div class="stat"><span>목표</span><b>${num(m.kcal)}</b></div>
     </div>
-    <div class="hint">지방 ${fpk.toFixed(2)} g/체중kg · 단백질 ${ppk.toFixed(2)} g/체중kg${ffm ? ` (제지방 ${(m.p / ffm).toFixed(2)})` : ""} · 탄수 ${w.wt ? (m.c / w.wt).toFixed(2) : "-"} g/체중kg</div>
+    <div class="hint">단백질 ${ffm ? `<b>${(m.p / ffm).toFixed(2)} g/제지방kg</b> (체중 기준 ${ppk.toFixed(2)})` : `${ppk.toFixed(2)} g/체중kg <b>— 인바디에 체지방량이 없어 체중 기준으로 계산했습니다</b>`} · 지방 ${fpk.toFixed(2)} g/체중kg · 탄수 ${w.wt ? (m.c / w.wt).toFixed(2) : "-"} g/체중kg</div>
     ${fpk && fpk < 0.6 ? `<div class="warn">⚠️ 지방 ${m.f}g = ${fpk.toFixed(2)} g/체중kg. 하한 0.6(${Math.round(w.wt * 0.6)}g) 아래입니다 — 호르몬·지용성 비타민에 직접 영향이 있어 더 내리지 마세요.</div>` : ""}
     ${w.bmr && m.kcal < w.bmr ? `<div class="warn">⚠️ 목표 ${num(m.kcal)}kcal 이 기초대사량 ${num(w.bmr)}kcal 보다 낮습니다. 적자를 줄이거나 활동량을 늘리세요.</div>` : ""}
     ${w.wt && m.c / w.wt < 1 ? `<div class="warn">⚠️ 탄수 ${m.c}g = 체중 kg당 ${(m.c / w.wt).toFixed(2)}g. 1g 아래면 웨이트 세트 볼륨이 떨어집니다.</div>` : ""}
