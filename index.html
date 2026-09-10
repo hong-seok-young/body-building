@@ -101,11 +101,20 @@
   .nav .label { font-size: 15px; font-weight: 700; min-width: 150px; text-align: center; }
   .nav input[type=date] { border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; background: var(--card); }
 
-  /* 매크로 바 */
-  .macro { display: flex; align-items: center; gap: 9px; padding: 6px 0; }
-  .macro .lab { flex: 1 1 auto; min-width: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .macro .st { flex: 0 0 auto; font-size: 11.5px; white-space: nowrap; }
-  .bar { flex: 0 0 62px; width: 62px; height: 7px; background: var(--card2); border-radius: 4px; overflow: hidden; }
+  /* 매크로 바 — 이름 / 섭취·목표 / 막대 / 남음 을 고정 열로 잡는다.
+     flex 로 두면 이름 길이(칼로리 vs 탄수화물)에 따라 막대가 좌우로 밀려 들쭉날쭉해진다.
+     숫자는 tabular-nums 로 자릿수 폭을 고정해 위아래 자리가 맞게 한다 */
+  .macro { display: grid; grid-template-columns: 4.7em 6.6em minmax(0, 1fr) 4.9em;
+    align-items: center; column-gap: 9px; padding: 5px 0; font-size: 12.5px; }
+  .macro .nm { font-weight: 700; white-space: nowrap; }
+  .macro .val, .macro .st { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .macro .st { font-size: 11.5px; }
+  /* 머리글의 글자만 작게 한다 — .macro 자체의 font-size 를 줄이면 em 기반 열 폭까지
+     같이 줄어들어 아래 줄과 열이 어긋난다 */
+  .macro.mhead { padding: 2px 0 5px; color: var(--sub);
+    border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+  .macro.mhead .val, .macro.mhead .st { font-size: 10.5px; }
+  .bar { width: auto; min-width: 34px; height: 7px; background: var(--card2); border-radius: 4px; overflow: hidden; }
   .bar > div { height: 100%; border-radius: 4px; transition: width .3s; }
 
   /* 계산 근거 한 줄 (눌러서 펼침) */
@@ -432,15 +441,14 @@
   </div>
 
   <div class="card">
-    <h3>매크로 비율 <span class="muted">% → g 자동 환산</span></h3>
-    <div class="fields g3">
-      <label>탄수 %<input type="number" step="1" min="0" max="100" id="cPc"></label>
-      <label>단백질 %<input type="number" step="1" min="0" max="100" id="cPp"></label>
-      <label>지방 %<input type="number" step="1" min="0" max="100" id="cPf"></label>
+    <h3>매크로 <span class="muted">단백질·지방 고정, 탄수가 활동량을 흡수</span></h3>
+    <div class="fields g2">
+      <label>단백질 g/kg<input type="number" step="0.1" min="0" max="4" id="cPg"></label>
+      <label>지방 g/kg<input type="number" step="0.05" min="0" max="2" id="cFg"></label>
     </div>
+    <div class="hint">단백질은 매일 같은 양을 지키고, 남는 열량을 탄수가 받습니다. 운동을 많이 한 날은 탄수만 늘어납니다 — 단백질을 퍼센트로 걸면 쉬는 날 단백질까지 같이 깎여 근손실 쪽으로 불리합니다.</div>
     <div class="btns mt">
-      <button class="btn" onclick="macroFromGperKg()">단백질 1.9 · 지방 0.7 g/kg 기준</button>
-      <button class="btn pri" onclick="saveCalc()">환산</button>
+      <button class="btn pri" onclick="saveCalc()">적용</button>
     </div>
     <div id="macroOut" style="margin-top:12px"></div>
   </div>
@@ -657,7 +665,8 @@ const DEFAULT_CALC = {
   wH: 2, wD: 5,
   cH: 0.5, cD: 2, cI: "중",
   deficit: 350,
-  pC: 45, pP: 30, pF: 25,
+  byKg: true, pG: 2.0, fG: 0.7,     // 단백질·지방은 체중 기준 g/kg (아래 macrosFor 참고)
+  pC: 45, pP: 30, pF: 25,           // byKg 를 끄면 쓰는 퍼센트 방식
   bmr: 0, wt: 0,        // 인바디 기록이 없을 때만 쓰는 수동값
 };
 const DEFAULT_PRESETS = [
@@ -1132,7 +1141,18 @@ function calcWeek(ds) {
   const avg = weekly / 7;
   return { ...b, lift, cardio, dW, dC, ov, dB, avg, target: floorBmr(avg - calc.deficit, b.bmr) };
 }
-function macrosFor(kcal) {
+// 단백질·지방은 체중에 걸고(g/kg), 남는 열량을 탄수가 받는다.
+// 퍼센트로 걸면 목표 열량이 활동량에 따라 흔들릴 때 단백질도 같이 깎인다 —
+// 쉬는 날(목표 2,375) 에 단백질이 184g 으로 줄어드는 식이라 근손실 쪽으로 불리하다.
+// 단백질은 지켜야 하는 바닥, 탄수는 훈련량에 맞춰 늘리는 연료로 보는 게 맞다.
+function macrosFor(kcal, ds) {
+  const wt = ibAt("weight", ds) || +calc.wt || 0;
+  if (calc.byKg !== false && wt > 0) {
+    const p = Math.round((+calc.pG || 2.0) * wt);
+    const f = Math.round((+calc.fG || 0.7) * wt);
+    const c = Math.max(0, Math.round((kcal - p * 4 - f * 9) / 4));
+    return { kcal, p, c, f };
+  }
   return { kcal, c: Math.round(kcal * calc.pC / 400), p: Math.round(kcal * calc.pP / 400), f: Math.round(kcal * calc.pF / 900) };
 }
 // 그날 활동이 기록돼 있으면 그날 TDEE 로, 없으면 주 평균 목표로
@@ -1142,7 +1162,7 @@ function dayTarget(ds) {
   const b = calcBase(ds);
   const tdee = b.sed + (+a.steps || 0) * b.wt * STEP_K
              + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci);
-  const m = macrosFor(floorBmr(tdee - calc.deficit, b.bmr));
+  const m = macrosFor(floorBmr(tdee - calc.deficit, b.bmr), ds);
   const parts = [];
   if (+a.steps) parts.push(num(a.steps) + "보");
   if (+a.wh) parts.push(`웨이트 ${+a.wh}h`);
@@ -1191,16 +1211,7 @@ function saveCalc() {
     wH: +cWh.value || 0, wD: Math.min(7, +cWd.value || 0),
     cH: +cCh.value || 0, cD: Math.min(7, +cCd.value || 0), cI: cCi.value,
     deficit: +cDef.value || 0,
-    pC: +cPc.value || 0, pP: +cPp.value || 0, pF: +cPf.value || 0 };
-  saveCalcMeta(); render();
-}
-// 단백질·지방을 체중 기준 g/kg 으로 먼저 확보하고 나머지를 탄수로
-function macroFromGperKg() {
-  const w = calcWeek();
-  if (!w.wt || !w.target) { alert("인바디에 체중·기초대사량을 먼저 넣어주세요"); return; }
-  const pG = 1.9 * w.wt, fG = 0.7 * w.wt;
-  const pPct = Math.round(pG * 4 / w.target * 100), fPct = Math.round(fG * 9 / w.target * 100);
-  calc = { ...calc, pP: pPct, pF: fPct, pC: 100 - pPct - fPct };
+    byKg: true, pG: +cPg.value || DEFAULT_CALC.pG, fG: +cFg.value || DEFAULT_CALC.fG };
   saveCalcMeta(); render();
 }
 function applyCalcGoals() {
@@ -1329,15 +1340,20 @@ function renderDay() {
       <em>kcal ${left < 0 ? "초과" : "남음"}</em>
       <span class="r">${g.adjusted ? "🔥 " + esc(g.src) : "주 평균 목표"}</span>
     </div>` +
-    [{ l: "칼로리", v: t.kcal, g: g.kcal, u: "kcal", c: "var(--kcal)" },
-     { l: "단백질", v: t.p, g: g.p, u: "g", c: "var(--protein)", more: true },
-     { l: "탄수화물", v: t.c, g: g.c, u: "g", c: "var(--carb)" },
-     { l: "지방", v: t.f, g: g.f, u: "g", c: "var(--fat)" }].map(r => {
+    `<div class="macro mhead"><span class="nm"></span><span class="val">섭취 / 목표</span>
+       <span></span><span class="st">남음</span></div>` +
+    [{ l: "칼로리", v: t.kcal, g: g.kcal, d: 0, c: "var(--kcal)" },
+     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", more: true },
+     { l: "탄수화물", v: t.c, g: g.c, d: 1, c: "var(--carb)" },
+     { l: "지방", v: t.f, g: g.f, d: 1, c: "var(--fat)" }].map(r => {
       const pct = r.g ? Math.min(100, r.v / r.g * 100) : 0, over = r.v - r.g;
-      const st = over > 0 ? (r.more ? `<span class="good">+${fmt(over)}${r.u}</span>` : `<span class="over">+${fmt(over)}${r.u}</span>`)
-                          : `<span class="remain">${fmt(r.g - r.v)}${r.u}</span>`;
+      const n = x => r.d ? fmt(x) : num(x);
+      const st = over > 0
+        ? `<span class="${r.more ? "good" : "over"}">+${n(over)}</span>`
+        : `<span class="remain">${n(r.g - r.v)}</span>`;
       return `<div class="macro">
-        <span class="lab"><b>${r.l}</b> ${fmt(r.v)} / ${r.g}${r.u}</span>
+        <span class="nm">${r.l}</span>
+        <span class="val">${n(r.v)} / ${n(r.g)}</span>
         <span class="bar"><div style="width:${pct}%;background:${(over > 0 && !r.more) ? "var(--red)" : r.c}"></div></span>
         <span class="st">${st}</span></div>`;
     }).join("") +
@@ -1414,11 +1430,8 @@ function renderDay() {
     `${dec ? fmt(t[k]) : num(t[k])} / ${dec ? goals[k] : num(goals[k])} ${unit}`];
   const naR = cap("na", "mg"), sugR = cap("sug", "g", 1), satR = cap("sat", "g", 1),
         trR = cap("trans", "g", 1), chR = cap("chol", "mg");
+  // 탄단지·칼로리는 위 막대에 이미 있다 — 여기는 라벨에만 있는 항목만
   nutEl.innerHTML = [
-    ["칼로리", `${num(t.kcal)} / ${num(g.kcal)} kcal`, null],
-    ["단백질", `${fmt(t.p)} / ${g.p} g`, t.p >= g.p ? "good" : null],
-    ["탄수화물", `${fmt(t.c)} / ${g.c} g`, null],
-    ["지방", `${fmt(t.f)} / ${g.f} g`, null],
     ["나트륨 (상한)", naR[1], naR[0]],
     ["당류 (상한)", sugR[1], sugR[0]],
     ["포화지방 (상한)", satR[1], satR[0]],
@@ -1859,7 +1872,7 @@ function renderCal() {
   const w = calcWeek();
   cAf.value = calc.af; cSteps.value = calc.steps; cWh.value = calc.wH; cWd.value = calc.wD;
   cCh.value = calc.cH; cCd.value = calc.cD; cDef.value = calc.deficit;
-  cPc.value = calc.pC; cPp.value = calc.pP; cPf.value = calc.pF;
+  cPg.value = calc.pG ?? DEFAULT_CALC.pG; cFg.value = calc.fG ?? DEFAULT_CALC.fG;
   if (!cCi.options.length) cCi.innerHTML = INTENSITY.map(x => `<option>${x}</option>`).join("");
   cCi.value = calc.cI;
 
@@ -1884,11 +1897,10 @@ function renderCal() {
   calcTable.innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("")
     + `<tr class="hi"><td>적자 −${num(calc.deficit)} → 목표</td><td>${num(w.target)} kcal</td></tr>`;
 
-  const m = macrosFor(w.target), sum = calc.pC + calc.pP + calc.pF;
+  const m = macrosFor(w.target);
   const fpk = w.wt ? m.f / w.wt : 0, ppk = w.wt ? m.p / w.wt : 0;
   const ffm = lastIb("weight") && lastIb("bfm") ? lastIb("weight") - lastIb("bfm") : 0;
   macroOut.innerHTML = `
-    ${sum !== 100 ? `<div class="warn">비율 합이 ${sum}% 입니다. 100%로 맞춰주세요.</div>` : ""}
     <div class="stats">
       <div class="stat"><span>탄수</span><b>${m.c}g</b></div>
       <div class="stat"><span>단백질</span><b>${m.p}g</b></div>
