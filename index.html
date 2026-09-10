@@ -307,6 +307,8 @@
     line-height: 1.5; white-space: pre-line; box-shadow: 0 10px 30px rgba(0,0,0,.3);
     opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; }
   #toastEl.show { opacity: .96; transform: translateX(-50%) translateY(0); }
+  tbody tr.tap { cursor: pointer; }
+  tbody tr.tap:active { background: var(--card2); }
   .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
   /* 설치 안내 배너 */
   #installBar { display: none; }
@@ -514,27 +516,6 @@
 
 <!-- ══════════ 인바디 ══════════ -->
 <section id="section-inbody" style="display:none">
-  <div class="card">
-    <h3>인바디 기록 추가</h3>
-    <form onsubmit="addInbody(event)">
-      <div class="fields g4">
-        <label>날짜<input type="date" id="ibDate"></label>
-        <label>체중 (kg)<input type="number" step="any" min="0" id="ibW" placeholder="필수" required></label>
-        <label>골격근량 (kg)<input type="number" step="any" min="0" id="ibS" placeholder="SMM"></label>
-        <label>체지방량 (kg)<input type="number" step="any" min="0" id="ibBfm"></label>
-        <label>체지방률 (%)<input type="number" step="any" min="0" id="ibPbf"></label>
-        <label>BMI<input type="number" step="any" min="0" id="ibBmi"></label>
-        <label>기초대사량 (kcal)<input type="number" step="any" min="0" id="ibBmr" placeholder="열량 계산에 사용"></label>
-        <label>인바디 점수<input type="number" step="any" min="0" id="ibScore"></label>
-      </div>
-      <div class="fields" style="margin-top:9px"><label>메모<input id="ibNote" placeholder="선택"></label></div>
-      <div class="btns mt">
-        <button class="btn pri" type="submit">기록 추가</button>
-      </div>
-    </form>
-    <div class="hint">기초대사량과 체중이 들어가면 <b>열량 탭이 자동으로 다시 계산됩니다.</b></div>
-  </div>
-
   <div class="card" id="ibLatest"></div>
   <div class="card">
     <h3>체성분 추세 <span class="muted">체중·골격근량·체지방량 kg</span></h3>
@@ -545,11 +526,45 @@
   <div class="card"><h3>체지방률 · BMI 추세</h3><canvas id="ibChart2"></canvas>
     <div class="chklegend" id="ibLeg2"></div></div>
   <div class="card">
-    <table><thead><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방</th><th>체지방률</th><th>BMR</th><th></th></tr></thead>
+    <h3>기록 <span class="muted" id="ibCount"></span></h3>
+    <table><thead><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방</th><th>체지방률</th><th>BMR</th></tr></thead>
       <tbody id="ibBody"></tbody></table>
     <div class="empty" id="ibTableEmpty">기록이 없어요</div>
+    <div class="btns mt">
+      <button class="btn" id="ibMoreBtn" onclick="toggleIbAll()"></button>
+      <button class="btn pri" onclick="openIb()">＋ 기록 추가</button>
+    </div>
+    <div class="hint">줄을 누르면 수정·삭제할 수 있습니다.</div>
   </div>
 </section>
+
+<!-- 인바디 입력·수정 -->
+<div class="overlay" id="ibOverlay">
+  <div class="modal">
+    <h3 id="ibFormTitle">인바디 기록 추가</h3>
+    <form onsubmit="addInbody(event)">
+      <div class="fields g2">
+        <label>날짜<input type="date" id="ibDate"></label>
+        <label>체중 (kg)<input type="number" step="any" min="0" id="ibW" placeholder="필수" required></label>
+        <label>골격근량 (kg)<input type="number" step="any" min="0" id="ibS" placeholder="SMM"></label>
+        <label>체지방량 (kg)<input type="number" step="any" min="0" id="ibBfm"></label>
+        <label>체지방률 (%)<input type="number" step="any" min="0" id="ibPbf"></label>
+        <label>BMI<input type="number" step="any" min="0" id="ibBmi"></label>
+        <label>기초대사량 (kcal)<input type="number" step="any" min="0" id="ibBmr" placeholder="열량 계산에 사용"></label>
+        <label>인바디 점수<input type="number" step="any" min="0" id="ibScore"></label>
+      </div>
+      <div class="fields" style="margin-top:9px"><label>메모<input id="ibNote" placeholder="선택"></label></div>
+      <div class="hint">기초대사량과 체중이 들어가면 <b>열량 탭이 자동으로 다시 계산됩니다.</b></div>
+      <div class="btns mt">
+        <button class="btn" type="button" onclick="closeIb()">닫기</button>
+        <button class="btn pri" type="submit" id="ibSubmit">기록 추가</button>
+      </div>
+      <div class="btns" style="margin-top:7px" id="ibDelRow" hidden>
+        <button class="btn" type="button" onclick="askDelInbody()">이 기록 삭제</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <!-- ══════════ 하단 탭 ══════════ -->
 <nav class="tabbar">
@@ -2110,13 +2125,46 @@ function renderCal() {
 }
 
 // ═════════ 인바디 ═════════
+// 목록에 기본으로 보여줄 개수. 전부 늘어놓으면 스크롤만 길어진다
+const IB_SHOWN = 5;
+let ibAll = false, ibEdit = null;      // ibEdit: 수정 중인 기록 id
+function toggleIbAll() { ibAll = !ibAll; render(); }
+// id 를 주면 그 기록 수정, 안 주면 새로 추가
+function openIb(id) {
+  const r = id ? inbody.find(x => x.id === id) : null;
+  ibEdit = r ? r.id : null;
+  ibDate.value = r ? r.date : todayStr();
+  const v = k => (r && +r[k] > 0 ? r[k] : "");
+  ibW.value = v("weight"); ibS.value = v("smm"); ibBfm.value = v("bfm");
+  ibPbf.value = v("pbf"); ibBmi.value = v("bmi"); ibBmr.value = v("bmr");
+  ibScore.value = v("score"); ibNote.value = r && r.note || "";
+  ibFormTitle.textContent = r ? `${r.date} 기록 수정` : "인바디 기록 추가";
+  ibSubmit.textContent = r ? "저장" : "기록 추가";
+  ibDelRow.hidden = !r;
+  ibOverlay.classList.add("show");
+}
+function closeIb() { ibOverlay.classList.remove("show"); ibEdit = null; }
+// 측정값은 사실이라 되돌릴 수 없다 — 확인을 한 번 받는다
+async function askDelInbody() {
+  const r = inbody.find(x => x.id === ibEdit);
+  if (!r) { closeIb(); return; }
+  if (!confirm(`${r.date} 인바디 기록을 지울까요?\n\n측정값은 되돌릴 수 없습니다.`)) return;
+  closeIb();
+  await delInbodyRec(r.id);
+  toast(`${r.date} 기록 삭제`);
+}
 async function addInbody(e) {
   e.preventDefault();
   const item = { date: ibDate.value || todayStr(), weight: +ibW.value || 0, smm: +ibS.value || 0,
     bfm: +ibBfm.value || 0, pbf: +ibPbf.value || 0, bmi: +ibBmi.value || 0, bmr: +ibBmr.value || 0,
     score: +ibScore.value || 0, note: ibNote.value.trim() };
-  ibW.value = ibS.value = ibBfm.value = ibPbf.value = ibBmi.value = ibBmr.value = ibScore.value = ibNote.value = "";
+  const editing = ibEdit;
+  closeIb();
+  // 수정은 지우고 다시 넣는다 (백엔드에 update 액션이 없다).
+  // 같은 날짜 확인창이 뜨지 않도록 먼저 지운다
+  if (editing) await delInbodyRec(editing);
   await pushInbody(item);
+  toast(editing ? `${item.date} 기록 수정` : `${item.date} 기록 추가`);
 }
 // 인바디를 새로 올리면 그 기초대사량·체중으로 목표 열량을 다시 잡는다.
 // "검사한 날짜부터" 바뀌어야 하므로 과거 날짜는 손대지 않는다 —
@@ -2192,7 +2240,6 @@ async function dedupeInbody() {
 }
 
 function renderInbody() {
-  if (!ibDate.value) ibDate.value = todayStr();
   const recs = inbody.slice().sort(cmpDate);
   if (recs.length) {
     const cur = recs[recs.length - 1], prev = recs[recs.length - 2];
@@ -2254,10 +2301,17 @@ function renderInbody() {
 
   const rev = recs.slice().reverse();
   ibTableEmpty.style.display = rev.length ? "none" : "block";
-  ibBody.innerHTML = rev.map(r => `<tr><td>${r.date.slice(2)}</td><td>${r.weight ? fmt(r.weight) : "-"}</td>
+  // 측정값은 사실이라 실수로 지워지면 안 된다. ✕ 대신 줄을 눌러 수정·삭제로 들어간다.
+  // 그리고 전부 늘어놓을 이유가 없어 최근 5개만 보이고 나머지는 펼쳐서 본다
+  const shown = ibAll ? rev : rev.slice(0, IB_SHOWN);
+  ibCount.textContent = ibAll || rev.length <= IB_SHOWN
+    ? `${rev.length}건` : `최근 ${shown.length}건 / 전체 ${rev.length}건`;
+  ibMoreBtn.hidden = rev.length <= IB_SHOWN;
+  ibMoreBtn.textContent = ibAll ? "접기" : `전체 ${rev.length}건 보기`;
+  ibBody.innerHTML = shown.map(r => `<tr class="tap" onclick="openIb('${r.id}')">
+    <td>${r.date.slice(2)}</td><td>${r.weight ? fmt(r.weight) : "-"}</td>
     <td>${r.smm ? fmt(r.smm) : "-"}</td><td>${r.bfm ? fmt(r.bfm) : "-"}</td><td>${r.pbf ? fmt(r.pbf) : "-"}</td>
-    <td>${r.bmr ? num(r.bmr) : "-"}</td>
-    <td><button class="del" onclick="delInbodyRec('${r.id}')">✕</button></td></tr>`).join("");
+    <td>${r.bmr ? num(r.bmr) : "-"}</td></tr>`).join("");
 }
 
 // ═════════ 설정 ═════════
