@@ -250,6 +250,7 @@
 
   /* 통계 타일 */
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stats.s3 { grid-template-columns: repeat(3, 1fr); }
   .stat { background: var(--card2); border-radius: 11px; padding: 10px 8px; text-align: center; }
   .stat span { font-size: 10.5px; color: var(--sub); display: block; }
   /* 값 아래 한 줄 — 이 숫자가 뭘 뜻하는지 (하루 평균, 계산식) */
@@ -2311,11 +2312,15 @@ function renderWeek() {
   const wk = calcWeek();
   weekLedger.innerHTML = `
     <h3>이번 주 장부 <span class="muted">기록한 ${done.length}일 기준</span></h3>
-    <div class="stats">
-      <div class="stat"><span>하루 먹은 열량</span><b>${num(sumEat / done.length)}</b>
+    <div class="stats s3">
+      <div class="stat"><span>유지 평균</span><b>${num(sumTdee / done.length)}</b>
         <small>${done.length}일 평균</small></div>
-      <div class="stat"><span>하루 유지 열량</span><b>${num(sumTdee / done.length)}</b>
+      <div class="stat"><span>목표 평균</span><b style="color:var(--accent)">${num(sumGoal / done.length)}</b>
+        <small>유지 − 적자 ${num(calc.deficit)}</small></div>
+      <div class="stat"><span>섭취 평균</span><b>${num(sumEat / done.length)}</b>
         <small>${done.length}일 평균</small></div>
+    </div>
+    <div class="stats s3" style="margin-top:8px">
       <div class="stat"><span>계획 대비</span><b style="color:${sumDiff > 0 ? "var(--red)" : "var(--green)"}">${sumDiff > 0 ? "+" : ""}${num(sumDiff)}</b>
         <small>하루 ${sumDiff > 0 ? "+" : ""}${num(sumDiff / done.length)}</small></div>
       <div class="stat"><span>실제 수지</span><b style="color:${sumReal > 0 ? "var(--red)" : "var(--green)"}">${sumReal > 0 ? "+" : ""}${num(sumReal)}</b>
@@ -2324,7 +2329,7 @@ function renderWeek() {
         <small>실제 수지 ÷ 7,700</small></div>
     </div>
     <div class="diff">
-      체지방은 <b>유지 열량 대비</b>로 계산합니다. 목표(${num(sumGoal)})에는 이미 적자 ${num(calc.deficit)} 이 들어 있어서,
+      체지방은 <b>유지 열량 대비</b>로 계산합니다. 목표(하루 ${num(sumGoal / done.length)})에는 이미 적자 ${num(calc.deficit)} 이 들어 있어서,
       목표를 조금 넘겨도 유지 열량 아래면 지방은 계속 빠집니다.<br>
       목표를 그대로 지켰다면 기록한 ${done.length}일 동안 <b>체지방 ${(done.length * calc.deficit / 7700).toFixed(2)}kg</b> 이 줄어야 합니다
       (적자 ${num(calc.deficit)} × ${done.length}일 ÷ 7,700).
