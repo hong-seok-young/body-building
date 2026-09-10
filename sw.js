@@ -34,8 +34,9 @@ self.addEventListener("fetch", e => {
   // POST(구글 시트 API) 와 크로스오리진(Chart.js CDN) 은 건드리지 않는다
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
 
-  // 문서(앱 셸)는 네트워크 우선 — 온라인이면 항상 최신 버전이 뜨게
-  if (req.mode === "navigate" || new URL(req.url).pathname.endsWith("/index.html")) {
+  const path = new URL(req.url).pathname;
+  // 문서와 inbox.json 은 항상 최신이어야 한다 (inbox 는 내가 커밋하는 반영 대기 목록)
+  if (req.mode === "navigate" || path.endsWith("/index.html") || path.endsWith("/inbox.json")) {
     e.respondWith(
       fetch(req).then(res => {
         if (res && res.ok) caches.open(CACHE).then(c => c.put(req, res.clone()));
