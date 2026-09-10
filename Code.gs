@@ -149,11 +149,33 @@ function addItem(type, item) {
     const hdr = headers(sh);
     const rec = Object.assign({}, item, { id: Utilities.getUuid() });
     rec.date = asDateStr(rec.date);
+    // 인바디는 하루 한 줄이다. 같은 날짜가 이미 있으면 덧붙이지 않고 갈아끼운다 —
+    // 여러 기기가 같은 inbox 지시를 각자 적용하면 같은 검사가 두 줄로 들어간다.
+    if (type === "inbody") {
+      const row = rowOfDate(sh, hdr, rec.date);
+      if (row > 0) {
+        const idCol = hdr.indexOf("id") + 1;
+        const keep = idCol > 0 ? sh.getRange(row, idCol).getValue() : "";
+        if (keep) rec.id = String(keep);          // id 는 유지해야 앱의 삭제가 계속 맞는다
+        sh.getRange(row, 1, 1, hdr.length).setValues([objToRow(hdr, rec)]);
+        return rec;
+      }
+    }
     sh.appendRow(objToRow(hdr, rec));
     return rec;
   } finally {
     lock.releaseLock();
   }
+}
+
+// 날짜 열에서 그 날짜가 있는 행 번호를 찾는다 (없으면 0)
+function rowOfDate(sh, hdr, ds) {
+  const col = hdr.indexOf("date") + 1;
+  const last = sh.getLastRow();
+  if (col < 1 || last < 2) return 0;
+  const vals = sh.getRange(2, col, last - 1, 1).getValues();
+  for (let i = 0; i < vals.length; i++) if (asDateStr(vals[i][0]) === ds) return i + 2;
+  return 0;
 }
 
 function delItem(type, id) {

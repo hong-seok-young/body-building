@@ -433,8 +433,8 @@
       </div>
       <div class="nums">
         <input id="fKcal" type="number" step="any" min="0" placeholder="kcal" required>
-        <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
         <input id="fC" type="number" step="any" min="0" placeholder="탄수g">
+        <input id="fP" type="number" step="any" min="0" placeholder="단백질g">
         <input id="fF" type="number" step="any" min="0" placeholder="지방g">
         <input id="fNa" type="number" step="any" min="0" placeholder="나트륨mg">
         <input id="fSug" type="number" step="any" min="0" placeholder="당류g">
@@ -465,8 +465,8 @@
       <input name="nm" placeholder="직접 등록 — 음식명 (예: 닭가슴살 100g)" required style="grid-column:1/-1">
       <div class="nums">
         <input name="kcal" type="number" step="any" min="0" placeholder="kcal" required>
-        <input name="p" type="number" step="any" min="0" placeholder="단백질g">
         <input name="c" type="number" step="any" min="0" placeholder="탄수g">
+        <input name="p" type="number" step="any" min="0" placeholder="단백질g">
         <input name="f" type="number" step="any" min="0" placeholder="지방g">
         <input name="na" type="number" step="any" min="0" placeholder="나트륨mg">
         <input name="sug" type="number" step="any" min="0" placeholder="당류g">
@@ -594,8 +594,8 @@
     <label style="margin-top:16px">목표 — 열량 탭에서 [목표로 적용]하면 자동으로 채워집니다</label>
     <div class="fields g4">
       <label>kcal<input type="number" id="gKcal"></label>
-      <label>단백질g<input type="number" id="gP"></label>
       <label>탄수g<input type="number" id="gC"></label>
+      <label>단백질g<input type="number" id="gP"></label>
       <label>지방g<input type="number" id="gF"></label>
       <label>나트륨mg 상한<input type="number" id="gNa"></label>
       <label>식이섬유g 하한<input type="number" id="gFib"></label>
@@ -1387,8 +1387,8 @@ function renderDay() {
        <span></span><span class="st">남음</span></div>` +
     [{ l: "칼로리", v: t.kcal, g: g.kcal, d: 0, c: "var(--kcal)" },
      // band: 목표 대비 이만큼까지의 초과는 오차로 본다. 그 위는 탄수를 밀어내는 초과다
-     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", band: 0.1, k: 4 },
      { l: "탄수화물", v: t.c, g: g.c, d: 1, c: "var(--carb)", k: 4 },
+     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", band: 0.1, k: 4 },
      { l: "지방", v: t.f, g: g.f, d: 1, c: "var(--fat)", k: 9 }].map(r => {
       const pct = r.g ? Math.min(100, r.v / r.g * 100) : 0, over = r.v - r.g;
       const n = x => r.d ? fmt(x) : num(x);
@@ -1438,9 +1438,9 @@ function renderDay() {
         <span class="pct">${items.length && g.kcal ? Math.round(mt.kcal / g.kcal * 100) + "%" : ""}</span>
         <span class="arw">${open ? "▲" : "▼"}</span>
       </div>
-      ${items.length ? `<div class="meal-sub">지방 <b>${fmt(mt.f)}</b> · 탄수 <b>${fmt(mt.c)}</b> · 단백질 <b>${fmt(mt.p)}</b> · 나트륨 <b>${num(mt.na)}</b>mg</div>` : ""}
+      ${items.length ? `<div class="meal-sub">탄수 <b>${fmt(mt.c)}</b> · 단백질 <b>${fmt(mt.p)}</b> · 지방 <b>${fmt(mt.f)}</b> · 나트륨 <b>${num(mt.na)}</b>mg</div>` : ""}
       ${open ? items.map(x => `<div class="mrow" data-id="${x.id}">
-        <span class="nm" onclick="event.stopPropagation();toggleRowEdit('${x.id}')" style="cursor:pointer">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · Na " + num(x.na) : ""}${+x.sug ? " · 당 " + fmt(x.sug) : ""}${+x.sat ? " · 포화 " + fmt(x.sat) : ""}</small></span>
+        <span class="nm" onclick="event.stopPropagation();toggleRowEdit('${x.id}')" style="cursor:pointer">${esc(x.name)}<small>탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)} · 지 ${fmt(+x.f || 0)}${+x.na ? " · Na " + num(x.na) : ""}${+x.sug ? " · 당 " + fmt(x.sug) : ""}${+x.sat ? " · 포화 " + fmt(x.sat) : ""}</small></span>
         <span class="kc">${num(x.kcal)}</span>
         <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button></div>${rowEdit === x.id ? `<div class="mrow" style="background:var(--card2);flex-wrap:wrap;gap:7px">
         <span style="flex:1 0 100%;font-size:11.5px;color:var(--sub)">먹은 양을 고치세요 — 지금 <b>${amtStr(itemAmt(x).amt)}${itemAmt(x).unit}</b> / ${num(x.kcal)}kcal. 영양성분이 전부 같이 조정됩니다.</span>
@@ -1486,7 +1486,7 @@ let foodQ2 = "";
 function foodRow(x, i, mine) {
   const meal = (fdMeal && fdMeal.value) || guessMeal();
   return `<div class="mrow">
-    <span class="nm">${esc(x.name)}<small>${num(x.kcal)}kcal · P${fmt(x.p)} C${fmt(x.c)} F${fmt(x.f)}${+x.na ? " · Na " + num(x.na) : ""}${+x.fib ? " · 섬유 " + fmt(x.fib) : ""}</small></span>
+    <span class="nm">${esc(x.name)}<small>${num(x.kcal)}kcal · C${fmt(x.c)} P${fmt(x.p)} F${fmt(x.f)}${+x.na ? " · Na " + num(x.na) : ""}${+x.fib ? " · 섬유 " + fmt(x.fib) : ""}</small></span>
     <button class="btn" style="flex:0 0 auto;padding:7px 13px" onclick="${mine ? `addPresetTo('${meal}',${i})` : `addDbTo('${meal}',${i})`}">＋</button>
     ${mine ? `<button class="del" onclick="delPreset(${i})">✕</button>` : ""}
   </div>`;
@@ -1621,8 +1621,8 @@ function mealFormHtml(m) {
       <input name="nm" placeholder="직접 입력 — 음식명" required>
       <div class="nums">
         <input name="kcal" type="number" step="any" min="0" placeholder="kcal" required>
-        <input name="p" type="number" step="any" min="0" placeholder="단백질g">
         <input name="c" type="number" step="any" min="0" placeholder="탄수g">
+        <input name="p" type="number" step="any" min="0" placeholder="단백질g">
         <input name="f" type="number" step="any" min="0" placeholder="지방g">
         <input name="na" type="number" step="any" min="0" placeholder="나트륨mg">
         <input name="sug" type="number" step="any" min="0" placeholder="당류g">
@@ -1844,8 +1844,8 @@ function renderWeek() {
   const n = done.length || 1, avg = k => Math.round(done.reduce((a, r) => a + r.t[k], 0) / n);
   weekStats.innerHTML = done.length ? `
     <div class="stat"><span>평균 칼로리</span><b>${num(avg("kcal"))}</b></div>
-    <div class="stat"><span>평균 단백질</span><b>${avg("p")}g</b></div>
     <div class="stat"><span>평균 탄수</span><b>${avg("c")}g</b></div>
+    <div class="stat"><span>평균 단백질</span><b>${avg("p")}g</b></div>
     <div class="stat"><span>평균 지방</span><b>${avg("f")}g</b></div>
     <div class="stat"><span>평균 나트륨</span><b style="color:${avg("na") > goals.na ? "var(--red)" : "var(--text)"}">${num(avg("na"))}mg</b></div>
     <div class="stat"><span>평균 식이섬유</span><b style="color:${avg("fib") < goals.fib ? "var(--red)" : "var(--green)"}">${avg("fib")}g</b></div>
@@ -1939,7 +1939,7 @@ function renderCal() {
       <div class="stat"><span>지방</span><b>${m.f}g</b></div>
       <div class="stat"><span>목표</span><b>${num(m.kcal)}</b></div>
     </div>
-    <div class="hint">단백질 ${ffm ? `<b>${(m.p / ffm).toFixed(2)} g/제지방kg</b> (체중 기준 ${ppk.toFixed(2)})` : `${ppk.toFixed(2)} g/체중kg <b>— 인바디에 체지방량이 없어 체중 기준으로 계산했습니다</b>`} · 지방 ${fpk.toFixed(2)} g/체중kg · 탄수 ${w.wt ? (m.c / w.wt).toFixed(2) : "-"} g/체중kg</div>
+    <div class="hint">탄수 ${w.wt ? (m.c / w.wt).toFixed(2) : "-"} g/체중kg · 단백질 ${ffm ? `<b>${(m.p / ffm).toFixed(2)} g/제지방kg</b> (체중 기준 ${ppk.toFixed(2)})` : `${ppk.toFixed(2)} g/체중kg <b>— 인바디에 체지방량이 없어 체중 기준으로 계산했습니다</b>`} · 지방 ${fpk.toFixed(2)} g/체중kg</div>
     ${fpk && fpk < 0.6 ? `<div class="warn">⚠️ 지방 ${m.f}g = ${fpk.toFixed(2)} g/체중kg. 하한 0.6(${Math.round(w.wt * 0.6)}g) 아래입니다 — 호르몬·지용성 비타민에 직접 영향이 있어 더 내리지 마세요.</div>` : ""}
     ${w.bmr && m.kcal < w.bmr ? `<div class="warn">⚠️ 목표 ${num(m.kcal)}kcal 이 기초대사량 ${num(w.bmr)}kcal 보다 낮습니다. 적자를 줄이거나 활동량을 늘리세요.</div>` : ""}
     ${w.wt && m.c / w.wt < 1 ? `<div class="warn">⚠️ 탄수 ${m.c}g = 체중 kg당 ${(m.c / w.wt).toFixed(2)}g. 1g 아래면 웨이트 세트 볼륨이 떨어집니다.</div>` : ""}
@@ -1981,7 +1981,14 @@ function refreshGoalsFromInbody(ds) {
   save("dt_goals", goals); setMeta("goals", goals);
   return { before, after: m.kcal, from: ds, bmr: w.bmr, avg: w.avg };
 }
+// 인바디는 하루 한 줄이다. 같은 날짜가 이미 있으면 새 값으로 갈아끼운다 —
+// 덧붙이면 표와 그래프에 같은 검사가 두 번 찍힌다.
 async function pushInbody(item) {
+  const olds = inbody.filter(x => x.date === item.date);
+  if (olds.length) {
+    if (!confirm(`${item.date} 인바디 기록이 이미 있습니다.` + "\n\n지우고 새 값으로 바꿀까요?")) return;
+    for (const o of olds) await delInbodyRec(o.id);
+  }
   const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5);
   inbody.push({ ...item, id: tmpId }); inbody.sort(cmpDate); save("dt_inbody", inbody); render();
   const rg = +item.bmr > 0 || +item.weight > 0 ? refreshGoalsFromInbody(item.date) : null;
@@ -2009,6 +2016,26 @@ async function delInbodyRec(id) {
     if (pi >= 0) { ibPending.splice(pi, 1); save("dt_ib_pending", ibPending); }
   } else api({ action: "del", type: "inbody", id }).catch(() => setStatus("● 삭제 동기화 실패", "var(--red)"));
 }
+// 이미 시트에 들어가 있는 중복을 치운다. 날짜도 값도 똑같은 줄만 지운다 —
+// 값이 다르면 재측정일 수 있으므로 건드리지 않는다.
+// 여러 기기가 같은 inbox 지시를 각자 적용하면 생긴다 (적용 기록이 시트에 오르기
+// 전에 다른 기기가 열린 경우). 계산은 ibAt 이 날짜당 하나만 쓰므로 멀쩡했지만
+// 기록 표와 추세 그래프에는 같은 점이 두 번 찍힌다.
+async function dedupeInbody() {
+  const key = x => [x.date, +x.weight || 0, +x.smm || 0, +x.bfm || 0, +x.pbf || 0,
+                    +x.bmi || 0, +x.bmr || 0, +x.score || 0].join("|");
+  // 아직 시트에 안 올라간 tmp- 를 뒤로 보내 진짜 id 를 가진 줄을 남긴다
+  const order = inbody.slice().sort((a, b) => cmpDate(a, b)
+    || (String(a.id).startsWith("tmp-") ? 1 : 0) - (String(b.id).startsWith("tmp-") ? 1 : 0));
+  const seen = {}, dups = [];
+  order.forEach(x => { const k = key(x); if (seen[k]) dups.push(x); else seen[k] = 1; });
+  if (!dups.length) return;
+  for (const d of dups) await delInbodyRec(d.id);
+  alert(`인바디 중복 ${dups.length}건을 정리했습니다.` + "\n\n"
+      + dups.map(d => `• ${d.date} ${fmt(d.weight)}kg`).join("\n")
+      + "\n\n같은 날짜·같은 값이 두 줄 이상 들어가 있던 것입니다. 값은 그대로입니다.");
+}
+
 function renderInbody() {
   if (!ibDate.value) ibDate.value = todayStr();
   const recs = inbody.slice().sort(cmpDate);
@@ -2377,6 +2404,7 @@ render();
   if (cfg) await fullSync();
   await applyHashAdd();
   await applyInbox();
+  await dedupeInbody();          // 동기화가 끝난 뒤라야 중복이 다 보인다
 })();
 if (!cfg) { setStatus("설정 필요 →", "var(--red)"); openSettings(); }
 </script>
