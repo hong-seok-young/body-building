@@ -123,6 +123,15 @@
   .mrow .kc { font-weight: 700; white-space: nowrap; }
   .mrow .del, .plan-head .del { border: none; background: none; color: var(--sub); cursor: pointer; font-size: 13px; padding: 2px 3px; }
   .mrow .del:hover, .plan-head .del:hover { color: var(--red); }
+  /* 꾹 눌러 다른 끼니로 옮기기 */
+  .mrow[data-id] { touch-action: pan-y; }
+  .mrow.dragsrc { opacity: .32; }
+  .meal.dragon { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .meal.dragon .meal-head .nm::after { content: " ← 여기로"; color: var(--accent); font-size: 11px; }
+  #dragGhost { position: fixed; z-index: 60; pointer-events: none; left: 0; top: 0;
+    background: var(--card2); border: 1px solid var(--accent); border-radius: 10px;
+    padding: 9px 13px; font-size: 13px; font-weight: 700; box-shadow: 0 10px 26px rgba(0,0,0,.45);
+    max-width: 74vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .meal-act { display: flex; gap: 7px; padding: 10px 15px; background: var(--card2); border-top: 1px solid var(--line); }
 
   /* 버튼 */
@@ -212,7 +221,8 @@
   canvas { max-height: 250px; }
   /* 달력 */
   .datebtn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px;
-             padding: 8px 14px; font-size: 14px; font-weight: 700; cursor: pointer; min-width: 160px; }
+             padding: 8px 12px; font-size: 14px; font-weight: 700; cursor: pointer;
+             white-space: nowrap; flex: 0 1 auto; min-width: 0; }
   .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
   .cal .dow { text-align: center; font-size: 10.5px; color: var(--sub); padding: 3px 0 5px; }
   .cal .dow.sun { color: var(--red); }
@@ -225,7 +235,6 @@
   .cal button.today b { text-decoration: underline; }
   .cal button.ok    { background: rgba(34,197,94,.22); }
   .cal button.over  { background: rgba(239,68,68,.22); }
-  .cal button.under { background: rgba(245,158,11,.25); }
   .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11.5px; color: var(--sub); margin-top: 11px; }
   .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
   /* 설치 안내 배너 */
@@ -569,9 +578,8 @@
     </div>
     <div class="cal" id="calGrid"></div>
     <div class="legend">
-      <span><i style="background:rgba(34,197,94,.5)"></i>목표 ±10%</span>
+      <span><i style="background:rgba(34,197,94,.5)"></i>목표 이하</span>
       <span><i style="background:rgba(239,68,68,.5)"></i>초과</span>
-      <span><i style="background:rgba(245,158,11,.6)"></i>미달</span>
       <span><i style="background:var(--card2)"></i>기록 없음</span>
     </div>
     <div class="btns mt">
@@ -766,10 +774,15 @@ function save(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
 // 편의를 택한 것. 실수로 지워져도 구글 시트의 [파일 → 버전 기록]에서 복구된다.
 // 되돌리려면 url 을 빈 문자열로 두면 ⚙️ 에서 직접 입력하는 예전 방식이 된다.
 const BUILTIN_CFG = {
-  url: "http://localhost:8764/gs",
-  secret: "test-secret",
+  url: "https://script.google.com/macros/s/AKfycbytKK3MFfrhE1rP88lz_sMRaEaYPqrP_e9qySdldZNemlIm8E13vZ06PwT4Y4B-YGsF/exec",
+  secret: "wlsrur93",
 };
 let cfg = load("dt_cfg", null) || (BUILTIN_CFG.url ? { ...BUILTIN_CFG } : null);
+// 안전장치: 테스트용 주소가 배포에 섞여 들어가면 시트 동기화가 통째로 죽고
+// 기기마다 제 로컬 기록만 쌓여 "과거 데이터가 막 바뀌는" 것처럼 보인다.
+// 한 번 그렇게 커밋한 적이 있어서, 조용히 넘어가지 않고 화면에 띄운다.
+if (cfg && /localhost|127\.0\.0\.1/.test(cfg.url) && !/^(localhost|127\.0\.0\.1)/.test(location.hostname))
+  addEventListener("load", () => alert("⚠️ 백엔드 주소가 테스트용(localhost)으로 되어 있어 구글 시트 동기화가 안 됩니다.\n이 기기 안에만 기록됩니다 — 코드를 고쳐야 합니다."));
 let cache = load("dt_cache", {});
 let goals = { ...DEFAULT_GOALS, ...load("dt_goals", {}) };
 let calc = { ...DEFAULT_CALC, ...load("dt_calc", {}) };
@@ -866,11 +879,21 @@ async function api(params) {
   return j;
 }
 function setStatus(txt, color) { statusEl.textContent = txt; statusEl.style.color = color || "var(--sub)"; }
+const metaQ = {};
+// 같은 키에 연달아 쓰면 응답 순서가 뒤바뀌어 옛 값이 나중에 도착해 덮어쓸 수 있다.
+// 그래서 키별로 한 줄로 세우고, 기다려야 하는 곳에서 await 할 수 있게 프라미스를 돌려준다.
 function setMeta(key, value) {
-  api({ action: "setMeta", key, value })
-    .then(() => { if (metaDirty[key]) { delete metaDirty[key]; save("dt_meta_dirty", metaDirty); } })
-    .catch(() => { metaDirty[key] = 1; save("dt_meta_dirty", metaDirty); });
+  const run = () => api({ action: "setMeta", key, value })
+    .then(() => { if (metaDirty[key]) { delete metaDirty[key]; save("dt_meta_dirty", metaDirty); } return true; })
+    .catch(() => { metaDirty[key] = 1; save("dt_meta_dirty", metaDirty); return false; });
+  metaQ[key] = (metaQ[key] || Promise.resolve()).then(run, run);
+  return metaQ[key];
 }
+const nowIso = () => new Date().toISOString();
+// 목표·열량설정을 내가 앱에서 직접 바꾼 시각을 함께 남긴다.
+// inbox 의 오래된 지시가 이 시각보다 앞서면 되덮어쓰지 않는다 (applyPayload 의 stale 검사)
+function saveGoals() { goals = { ...goals, at: nowIso() }; save("dt_goals", goals); return setMeta("goals", goals); }
+function saveCalcMeta() { calc = { ...calc, at: nowIso() }; save("dt_calc", calc); return setMeta("calc", calc); }
 // 로컬의 최신 설정값을 돌려주는 표 — flushMeta 가 무엇을 올릴지 여기서 찾는다
 function localMeta() { return { goals, presets, plan, calc, act, sets, mealcount: mealCount }; }
 async function flushMeta() {
@@ -1065,10 +1088,25 @@ async function copyDay(n) {
 }
 
 // ═════════ 열량 계산 ═════════
-function lastIb(key) {
-  const r = inbody.slice().sort(cmpDate);
-  for (let i = r.length - 1; i >= 0; i--) if (+r[i][key] > 0) return +r[i][key];
-  return 0;
+// 그 날짜에 유효했던 인바디 값 = 그 날(당일 포함) 이전의 가장 최근 검사.
+// 첫 검사 이전 날짜는 첫 검사값으로 대신한다.
+// 최신 인바디를 모든 날짜에 소급 적용하면 새 인바디를 올리는 순간 과거 날짜의
+// 목표 열량과 과부족이 전부 바뀐다 — 그래서 "검사한 날부터" 만 바뀌게 한다.
+function ibAt(key, ds) {
+  const r = inbody.slice().sort(cmpDate).filter(x => +x[key] > 0);
+  if (!r.length) return 0;
+  let v = 0;
+  for (const x of r) { if (!ds || x.date <= ds) v = +x[key]; else break; }
+  return v || +r[0][key];
+}
+function lastIb(key) { return ibAt(key, ""); }
+// 그 날짜의 목표가 어느 인바디에 근거했는지 (화면에 표시해서 눈으로 확인하게)
+function ibDateAt(key, ds) {
+  const r = inbody.slice().sort(cmpDate).filter(x => +x[key] > 0);
+  if (!r.length) return "";
+  let d = "";
+  for (const x of r) { if (!ds || x.date <= ds) d = x.date; else break; }
+  return d || r[0].date;
 }
 function ibDateOf(key) {
   const r = inbody.slice().sort(cmpDate);
@@ -1076,18 +1114,21 @@ function ibDateOf(key) {
   return "";
 }
 // 인바디에 값이 있으면 그것을, 없으면 수동 입력값을 쓴다
-function calcBase() {
-  const bmr = lastIb("bmr") || +calc.bmr || 0;
-  const wt = lastIb("weight") || +calc.wt || 0;
+// ds 를 주면 그 날짜 기준 인바디로 계산한다 (안 주면 최신 인바디 = 오늘 기준)
+function calcBase(ds) {
+  const ibB = ibAt("bmr", ds);
+  const bmr = ibB || +calc.bmr || 0;
+  const wt = ibAt("weight", ds) || +calc.wt || 0;
   const sed = bmr * calc.af;                          // 좌식 + 소화열
   const stepK = calc.steps * wt * STEP_K;
-  return { bmr, wt, sed, stepK, rest: sed + stepK, src: lastIb("bmr") ? "인바디" : "수동" };
+  return { bmr, wt, sed, stepK, rest: sed + stepK,
+           src: ibB ? "인바디" : "수동", ibDate: ibB ? ibDateAt("bmr", ds) : "" };
 }
 function burnLift(h, wt) { return h * wt * LIFT_K; }
 function burnCardio(h, wt, i) { return h * wt * (CARDIO_K[i] || CARDIO_K["중"]); }
 
-function calcWeek() {
-  const b = calcBase();
+function calcWeek(ds) {
+  const b = calcBase(ds);
   const lift = burnLift(calc.wH, b.wt), cardio = burnCardio(calc.cH, b.wt, calc.cI);
   const ov = Math.max(0, calc.wD + calc.cD - 7);
   const dW = calc.wD - ov, dC = calc.cD - ov, dB = 7 - dW - dC - ov;
@@ -1100,9 +1141,9 @@ function macrosFor(kcal) {
 }
 // 그날 활동이 기록돼 있으면 그날 TDEE 로, 없으면 주 평균 목표로
 function dayTarget(ds) {
-  const a = act[ds], w = calcWeek();
-  if (!a || !w.wt) return { ...goals, kcal: goals.kcal, src: "주 평균 목표", adjusted: false };
-  const b = calcBase();
+  const a = act[ds], w = calcWeek(ds);
+  if (!a || !w.wt) return { ...goals, kcal: goals.kcal, src: "주 평균 목표", adjusted: false, ibDate: w.ibDate };
+  const b = calcBase(ds);
   const tdee = b.sed + (+a.steps || 0) * b.wt * STEP_K
              + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci);
   const m = macrosFor(floorBmr(tdee - calc.deficit, b.bmr));
@@ -1110,7 +1151,8 @@ function dayTarget(ds) {
   if (+a.steps) parts.push(num(a.steps) + "보");
   if (+a.wh) parts.push(`웨이트 ${+a.wh}h`);
   if (+a.ch) parts.push(`유산소 ${+a.ch}h(${a.ci || calc.cI})`);
-  return { ...goals, ...m, tdee, src: parts.length ? parts.join(" · ") : "완전 휴식", adjusted: true };
+  return { ...goals, ...m, tdee, bmr: b.bmr, ibDate: b.ibDate,
+           src: parts.length ? parts.join(" · ") : "완전 휴식", adjusted: true };
 }
 
 function saveAct() {
@@ -1154,7 +1196,7 @@ function saveCalc() {
     cH: +cCh.value || 0, cD: Math.min(7, +cCd.value || 0), cI: cCi.value,
     deficit: +cDef.value || 0,
     pC: +cPc.value || 0, pP: +cPp.value || 0, pF: +cPf.value || 0 };
-  save("dt_calc", calc); setMeta("calc", calc); render();
+  saveCalcMeta(); render();
 }
 // 단백질·지방을 체중 기준 g/kg 으로 먼저 확보하고 나머지를 탄수로
 function macroFromGperKg() {
@@ -1163,13 +1205,13 @@ function macroFromGperKg() {
   const pG = 1.9 * w.wt, fG = 0.7 * w.wt;
   const pPct = Math.round(pG * 4 / w.target * 100), fPct = Math.round(fG * 9 / w.target * 100);
   calc = { ...calc, pP: pPct, pF: fPct, pC: 100 - pPct - fPct };
-  save("dt_calc", calc); setMeta("calc", calc); render();
+  saveCalcMeta(); render();
 }
 function applyCalcGoals() {
   const w = calcWeek();
   const m = macrosFor(w.target);
   goals = { ...goals, kcal: m.kcal, p: m.p, c: m.c, f: m.f };
-  save("dt_goals", goals); setMeta("goals", goals); render();
+  saveGoals(); render();
 }
 
 // ═════════ 달력 ═════════
@@ -1200,8 +1242,7 @@ function dayState(ds) {
   const t = totals(dayLog(ds));
   if (!t.kcal) return { cls: "", kcal: 0 };
   const g = dayTarget(ds).kcal || goals.kcal;
-  const r = t.kcal / g;
-  return { cls: r > 1.1 ? "over" : r < 0.9 ? "under" : "ok", kcal: t.kcal };
+  return { cls: t.kcal > g ? "over" : "ok", kcal: t.kcal };
 }
 function renderCalendar() {
   const [from] = monthRange(calMonth);
@@ -1272,7 +1313,7 @@ function renderDay() {
     actFilledFor = curDate;
     aSteps.value = a.steps || ""; aWh.value = a.wh || ""; aCh.value = a.ch || ""; aCi.value = a.ci || calc.cI;
   }
-  const w = calcWeek();
+  const w = calcWeek(curDate);          // 이 날짜에 유효했던 인바디 기준
   actInfo.innerHTML = !w.wt
     ? `인바디 탭에서 <b>체중·기초대사량</b>을 먼저 넣어주세요. 그때부터 활동량이 목표에 반영됩니다.`
     : g.adjusted
@@ -1315,7 +1356,7 @@ function renderDay() {
         <span class="st">${st}</span></div>`;
     }).join("") +
     `<div class="diff" style="border-top:1px solid var(--line);padding-top:11px;margin-top:12px">
-      <b>기초대사량 ${num(w.bmr)}</b> <span style="color:var(--sub)">(인바디 ${ibDateOf("bmr").slice(2) || "-"})</span><br>
+      <b>기초대사량 ${num(w.bmr)}</b> <span style="color:var(--sub)">(인바디 ${(w.ibDate || "").slice(2) || "-"} 기준)</span><br>
       ＋ 좌식·소화열 ×${calc.af} <b>${num(w.sed)}</b><br>
       ${g.adjusted
         ? `＋ 오늘 활동 <b>+${num(g.tdee - w.sed)}</b> <span style="color:var(--sub)">(${esc(g.src)})</span><br>
@@ -1333,7 +1374,7 @@ function renderDay() {
   // 끼니 카드
   mealsEl.innerHTML = meals().map((m, mi) => {
     const items = mealLog(curDate, m), mt = totals(items), open = mealOpen[m] !== false;
-    return `<div class="meal">
+    return `<div class="meal" data-meal="${m}">
       <div class="meal-head" onclick="toggleMeal('${m}')">
         <span style="width:9px;height:9px;border-radius:3px;background:${mealColor(mi)};flex:none"></span>
         <span class="nm">${m}</span>
@@ -1342,8 +1383,8 @@ function renderDay() {
         <span class="arw">${open ? "▲" : "▼"}</span>
       </div>
       ${items.length ? `<div class="meal-sub">지방 <b>${fmt(mt.f)}</b> · 탄수 <b>${fmt(mt.c)}</b> · 단백질 <b>${fmt(mt.p)}</b> · 나트륨 <b>${num(mt.na)}</b>mg</div>` : ""}
-      ${open ? items.map(x => `<div class="mrow">
-        <span class="nm" onclick="event.stopPropagation();toggleRowEdit('${x.id}')" style="cursor:pointer">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · Na " + num(x.na) : ""}${+x.sug ? " · 당 " + fmt(x.sug) : ""}${+x.sat ? " · 포화 " + fmt(x.sat) : ""} · <b>탭 = 양 수정</b></small></span>
+      ${open ? items.map(x => `<div class="mrow" data-id="${x.id}">
+        <span class="nm" onclick="event.stopPropagation();toggleRowEdit('${x.id}')" style="cursor:pointer">${esc(x.name)}<small>지 ${fmt(+x.f || 0)} · 탄 ${fmt(+x.c || 0)} · 단 ${fmt(+x.p || 0)}${+x.na ? " · Na " + num(x.na) : ""}${+x.sug ? " · 당 " + fmt(x.sug) : ""}${+x.sat ? " · 포화 " + fmt(x.sat) : ""} · <b>탭 = 양 수정 · 꾹 = 끼니 이동</b></small></span>
         <span class="kc">${num(x.kcal)}</span>
         <button class="del" onclick="event.stopPropagation();delItem('${curDate}','${x.id}')">✕</button></div>${rowEdit === x.id ? `<div class="mrow" style="background:var(--card2);flex-wrap:wrap;gap:7px">
         <span style="flex:1 0 100%;font-size:11.5px;color:var(--sub)">먹은 양을 고치세요 — 지금 <b>${amtStr(itemAmt(x).amt)}${itemAmt(x).unit}</b> / ${num(x.kcal)}kcal. 영양성분이 전부 같이 조정됩니다.</span>
@@ -1528,8 +1569,102 @@ async function addFoodInline(e, m) {
   render();
 }
 
+// ── 꾹 눌러 다른 끼니로 옮기기
+// 폰에서는 HTML5 드래그가 안 먹어서 롱프레스 + touchmove 로 직접 만든다.
+// 백엔드에 update 액션이 없으므로 옮기기 = 지우고 새 끼니로 다시 넣기.
+const LONGPRESS = 380, SLOP = 10;
+let dragT = null, drag = null, dragEndAt = 0, dragStartX = 0, dragStartY = 0;
+function dragGhostEl(txt) {
+  const el = document.createElement("div");
+  el.id = "dragGhost"; el.textContent = txt;
+  document.body.appendChild(el); return el;
+}
+function pointOf(e) {
+  const t = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0];
+  return t ? { x: t.clientX, y: t.clientY } : { x: e.clientX, y: e.clientY };
+}
+function mealUnder(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const card = el && el.closest && el.closest(".meal[data-meal]");
+  return card ? card.getAttribute("data-meal") : null;
+}
+function dragStop() {
+  if (dragT) { clearTimeout(dragT); dragT = null; }
+  if (!drag) return;
+  if (drag.ghost) drag.ghost.remove();
+  if (drag.row) drag.row.classList.remove("dragsrc");
+  document.querySelectorAll(".meal.dragon").forEach(el => el.classList.remove("dragon"));
+  const d = drag; drag = null; dragEndAt = Date.now();
+  return d;
+}
+function dragDown(e) {
+  const row = e.target.closest && e.target.closest(".mrow[data-id]");
+  if (!row || e.target.closest(".del")) return;
+  if (meals().length < 2) return;                   // 옮길 곳이 없다
+  const id = row.getAttribute("data-id");
+  const x = dayLog(curDate).find(i => i.id === id);
+  if (!x) return;
+  const p0 = pointOf(e);
+  dragT = setTimeout(() => {
+    dragT = null;
+    drag = { id, row, from: mealOf(x), name: x.name, ghost: dragGhostEl(x.name), moved: false, p0 };
+    row.classList.add("dragsrc");
+    drag.ghost.style.transform = `translate(${p0.x - 40}px,${p0.y - 22}px)`;
+    if (navigator.vibrate) navigator.vibrate(18);   // 잡혔다는 감각 신호
+  }, LONGPRESS);
+}
+function dragMove(e) {
+  const p = pointOf(e);
+  if (dragT) {                                      // 아직 잡히기 전 — 손가락이 움직이면 스크롤이므로 취소
+    if (Math.abs(p.y - dragStartY) > SLOP || Math.abs(p.x - dragStartX) > SLOP) {
+      clearTimeout(dragT); dragT = null;
+    }
+    return;
+  }
+  if (!drag) return;
+  e.preventDefault();                               // 잡은 뒤엔 화면이 따라 스크롤되지 않게
+  drag.moved = true;
+  drag.ghost.style.transform = `translate(${p.x - 40}px,${p.y - 22}px)`;
+  const m = mealUnder(p.x, p.y);
+  document.querySelectorAll(".meal.dragon").forEach(el => el.classList.remove("dragon"));
+  if (m && m !== drag.from) {
+    const card = document.querySelector(`.meal[data-meal="${m}"]`);
+    if (card) card.classList.add("dragon");
+  }
+}
+async function dragUp(e) {
+  const p = pointOf(e);
+  const d = dragStop();
+  if (!d) return;
+  const to = mealUnder(p.x, p.y);
+  if (!to || to === d.from) { render(); return; }
+  await moveItemMeal(curDate, d.id, to);
+}
+async function moveItemMeal(ds, id, to) {
+  const x = dayLog(ds).find(i => i.id === id);
+  if (!x) { render(); return; }
+  const { id: _i, date: _d, meal: _m, ...rest } = x;
+  await delItem(ds, id);
+  await pushItem({ ...rest, date: ds, meal: to });
+  render();
+}
+mealsEl.addEventListener("touchstart", e => {
+  const p = pointOf(e); dragStartX = p.x; dragStartY = p.y; dragDown(e);
+}, { passive: true });
+mealsEl.addEventListener("touchmove", dragMove, { passive: false });
+mealsEl.addEventListener("touchend", dragUp);
+mealsEl.addEventListener("touchcancel", () => { dragStop(); render(); });
+mealsEl.addEventListener("mousedown", e => {
+  const p = pointOf(e); dragStartX = p.x; dragStartY = p.y; dragDown(e);
+});
+addEventListener("mousemove", e => { if (dragT || drag) dragMove(e); });
+addEventListener("mouseup", e => { if (drag) dragUp(e); else if (dragT) dragStop(); });
+
 // ── 기록한 항목의 양 정정 (영양성분 비례 조정)
-function toggleRowEdit(id) { rowEdit = rowEdit === id ? null : id; render(); }
+function toggleRowEdit(id) {
+  if (Date.now() - dragEndAt < 350) return;        // 방금 끝난 드래그의 클릭은 무시
+  rowEdit = rowEdit === id ? null : id; render();
+}
 async function applyRowScale(ds, id) {
   const el = document.getElementById("rq");
   const x = dayLog(ds).find(i => i.id === id);
@@ -1744,9 +1879,25 @@ async function addInbody(e) {
   ibW.value = ibS.value = ibBfm.value = ibPbf.value = ibBmi.value = ibBmr.value = ibScore.value = ibNote.value = "";
   await pushInbody(item);
 }
+// 인바디를 새로 올리면 그 기초대사량·체중으로 목표 열량을 다시 잡는다.
+// "검사한 날짜부터" 바뀌어야 하므로 과거 날짜는 손대지 않는다 —
+// 날짜별 목표는 dayTarget 이 ibAt() 으로 그 날짜의 인바디를 따로 찾아 쓴다.
+// 여기서 갱신하는 goals 는 활동 기록이 없는 날에 쓰이는 주 평균 목표다.
+function refreshGoalsFromInbody(ds) {
+  const recs = inbody.slice().sort(cmpDate);
+  if (!recs.length || recs[recs.length - 1].date !== ds) return null;   // 과거 검사를 끼워넣은 것이면 그대로
+  const w = calcWeek();
+  if (!w.wt || !w.bmr) return null;
+  const m = macrosFor(w.target);
+  const before = goals.kcal;
+  goals = { ...goals, kcal: m.kcal, p: m.p, c: m.c, f: m.f, at: nowIso() };
+  save("dt_goals", goals); setMeta("goals", goals);
+  return { before, after: m.kcal, from: ds, bmr: w.bmr, avg: w.avg };
+}
 async function pushInbody(item) {
   const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5);
   inbody.push({ ...item, id: tmpId }); inbody.sort(cmpDate); save("dt_inbody", inbody); render();
+  const rg = +item.bmr > 0 || +item.weight > 0 ? refreshGoalsFromInbody(item.date) : null;
   try {
     const r = await api({ action: "add", type: "inbody", item });
     const idx = inbody.findIndex(x => x.id === tmpId);
@@ -1757,6 +1908,10 @@ async function pushInbody(item) {
     setStatus(`● 오프라인 (대기 ${pending.length + ibPending.length})`, "var(--red)");
   }
   render();
+  if (rg && rg.after !== rg.before)
+    alert(`인바디 ${rg.from} 반영\n\n기초대사량 ${num(rg.bmr)} → 유지 열량 ${num(rg.avg)}\n`
+        + `− 적자 ${num(calc.deficit)} → 목표 ${num(rg.before)} → ${num(rg.after)}kcal\n\n`
+        + `${rg.from} 부터 이 기준으로 계산합니다. 그 이전 날짜는 예전 인바디 기준 그대로 남습니다.`);
 }
 async function delInbodyRec(id) {
   const idx = inbody.findIndex(x => x.id === id);
@@ -1847,7 +2002,7 @@ async function logAllPlan() {
 function applyPlanAsGoals() {
   const t = planTotals();
   goals = { ...goals, kcal: Math.round(t.kcal), p: Math.round(t.p), c: Math.round(t.c), f: Math.round(t.f) };
-  save("dt_goals", goals); setMeta("goals", goals); render();
+  saveGoals(); render();
 }
 function resetPlan() {
   if (!confirm("지금 계획을 지우고 기본 계획으로 되돌릴까요?")) return;
@@ -1870,7 +2025,7 @@ function addPlanItem(e, i) {
 function renderPlan() {
   planDate.textContent = dateLabel(curDate);
   const t = planTotals(), g = dayTarget(curDate);
-  const wt = calcBase().wt, bmr = calcBase().bmr;
+  const bs = calcBase(curDate), wt = bs.wt, bmr = bs.bmr;
   const minFat = wt ? Math.round(wt * 0.6) : 60, minCarb = wt ? Math.round(wt) : 100;
   planSummary.innerHTML = `
     <h3>계획 하루 합계 <span class="muted">${plan.length}끼니</span></h3>
@@ -1946,7 +2101,7 @@ async function saveSettings() {
   goals = { kcal: +gKcal.value || 0, p: +gP.value || 0, c: +gC.value || 0, f: +gF.value || 0,
     na: +gNa.value || DEFAULT_GOALS.na, fib: +gFib.value || DEFAULT_GOALS.fib,
     sug: +gSug.value || DEFAULT_GOALS.sug, sat: +gSat.value || DEFAULT_GOALS.sat,
-    trans: +gTrans.value || DEFAULT_GOALS.trans, chol: +gChol.value || DEFAULT_GOALS.chol };
+    trans: +gTrans.value || DEFAULT_GOALS.trans, chol: +gChol.value || DEFAULT_GOALS.chol, at: nowIso() };
   save("dt_goals", goals);
   const url = cfgUrl.value.trim(), secret = cfgSecret.value.trim();
   if (!url) { cfgMsg.textContent = "URL이 없어 목표만 저장했습니다"; cfgMsg.className = "msg err"; render(); return; }
@@ -2206,7 +2361,28 @@ async function applyHashAdd() {
 // 저장소의 inbox.json 을 읽어 자동 반영한다.
 // 앱이 이 저장소에서 서빙되므로(같은 출처) 내가 파일을 커밋하면 앱이 알아서 가져간다.
 // 이미 반영한 id 는 기기에 남겨서 두 번 적용하지 않는다.
-let inboxDone = load("dt_inbox_done", []);
+// 적용 기록을 기기에만 두면 다른 기기에서 전부 다시 적용된다 —
+// 삭제 지시가 재실행되고 목표·적자 설정이 되덮어써져서 "과거 데이터가 바뀌는" 증상이 났다.
+// 그래서 시트에 동기화되는 calc.inbox 에 함께 저장하고, 로컬은 오프라인 대비로만 쓴다.
+// (calc 는 이미 동기화되는 키라 백엔드를 다시 배포하지 않아도 동작한다)
+function inboxDone() {
+  const a = Array.isArray(calc.inbox) ? calc.inbox : [];
+  const b = load("dt_inbox_done", []);
+  return a.concat(b.filter(x => a.indexOf(x) < 0));
+}
+// 적용 기록은 반드시 시트에 올라가야 한다. 실패한 채로 넘어가면 다음 기기가
+// 같은 지시를 처음 보는 것으로 알고 다시 적용한다 (= 과거 데이터가 되돌아감).
+// 그래서 적용 "전에" 먼저 등록하고 응답을 기다린다. 등록이 안 되면 적용도 안 한다
+// — 지시 하나를 나중으로 미루는 편이 기록을 망치는 것보다 낫다.
+async function markInboxDone(ids) {
+  const cur = inboxDone();
+  const all = cur.concat(ids.filter(x => cur.indexOf(x) < 0)).slice(-300);
+  const next = { ...calc, inbox: all };
+  // 시트에 못 올렸으면 로컬에도 남기지 않는다 — 남기면 이 기기에서 영영 반영되지 않는다
+  if (cfg && !(await setMeta("calc", next))) return false;
+  calc = next; save("dt_calc", calc); save("dt_inbox_done", all);
+  return true;
+}
 async function applyInbox() {
   let box;
   try {
@@ -2214,20 +2390,26 @@ async function applyInbox() {
     if (!r.ok) return;
     box = await r.json();
   } catch (e) { return; }               // 파일이 없거나 오프라인이면 조용히 넘어간다
-  const fresh = (box && box.items || []).filter(x => x && x.id && inboxDone.indexOf(x.id) < 0);
+  const seen = inboxDone();
+  const fresh = (box && box.items || []).filter(x => x && x.id && seen.indexOf(x.id) < 0);
   if (!fresh.length) return;
+  if (!(await markInboxDone(fresh.map(x => x.id)))) {
+    setStatus("● 반영 보류 (동기화 실패)", "var(--red)");
+    return;                            // 등록 실패 — 다음에 다시 시도한다
+  }
   const done = [];
   for (const it of fresh) {
     const r = await applyPayload(it);
     if (it.note) done.push("• " + it.note);
     r.forEach(x => done.push("   " + x));
-    inboxDone.push(it.id);
   }
-  inboxDone = inboxDone.slice(-200);
-  save("dt_inbox_done", inboxDone);
   if (done.length) alert("✓ 새 내용을 반영했습니다\n\n" + done.join("\n"));
 }
 
+// 지시(o.at) 보다 뒤에 내가 직접 바꾼 설정인가
+function stale(o, cur) {
+  return !!(o.at && cur && cur.at && String(cur.at) > String(o.at));
+}
 // 실제 반영. 삭제 → 인바디 → 식단 → 프리셋 → 목표/설정 순서
 async function applyPayload(o) {
   const done = [];
@@ -2236,7 +2418,9 @@ async function applyPayload(o) {
   for (const d of (o.del || [])) {
     if (!d || !d.name) continue;
     const ds = d.date || todayStr();
-    const hits = dayLog(ds).filter(x => x.name === d.name && (!d.meal || (x.meal || "간식") === d.meal));
+    // 끼니 이름은 정규화해서 비교한다 — 지시가 "아침"이고 기록이 "1끼"여도 같은 끼니다
+    const dm = d.meal ? mealOf({ meal: d.meal }) : "";
+    const hits = dayLog(ds).filter(x => x.name === d.name && (!dm || mealOf(x) === dm));
     for (const h of hits) { await delItem(ds, h.id); done.push(`🗑 ${ds} ${h.name}`); }
     if (!hits.length) done.push(`🗑 ${d.name} (없어서 건너뜀)`);
   }
@@ -2250,7 +2434,7 @@ async function applyPayload(o) {
   let skipped = 0;
   for (const it of (o.food || [])) {
     if (!it || !it.name) continue;
-    const d = it.date || todayStr(), m = it.meal || guessMeal();
+    const d = it.date || todayStr(), m = mealOf({ meal: it.meal || guessMeal() });
     if (dayLog(d).some(x => mealOf(x) === m && x.name === it.name
                             && Math.abs((+x.kcal || 0) - (+it.kcal || 0)) < 1)) { skipped++; continue; }
     await pushItem({ ...it, date: d, meal: m });
@@ -2263,8 +2447,31 @@ async function applyPayload(o) {
     save("dt_presets", presets); setMeta("presets", presets);
     done.push(`음식 ${newP.length}개 등록`);
   }
-  if (o.goals) { goals = { ...goals, ...o.goals }; save("dt_goals", goals); setMeta("goals", goals); done.push("목표 반영"); }
-  if (o.calc) { calc = { ...calc, ...o.calc }; save("dt_calc", calc); setMeta("calc", calc); done.push("열량 설정 반영"); }
+  // o.at = 이 지시를 작성한 시각. 그 뒤에 내가 앱에서 직접 바꾼 설정이 있으면
+  // 오래된 지시로 되덮어쓰지 않는다 (적용 기록 동기화가 실패했을 때의 2차 안전망)
+  if (o.goals) {
+    if (stale(o, goals)) done.push("목표 건너뜀 (더 최근에 직접 바꿈)");
+    else { goals = { ...goals, ...o.goals, at: o.at || nowIso() }; save("dt_goals", goals); setMeta("goals", goals); done.push("목표 반영"); }
+  }
+  if (o.calc) {
+    if (stale(o, calc)) done.push("열량 설정 건너뜀 (더 최근에 직접 바꿈)");
+    else { calc = { ...calc, ...o.calc, at: o.at || nowIso() }; save("dt_calc", calc); setMeta("calc", calc); done.push("열량 설정 반영"); }
+  }
+  // "인바디 기준으로 목표를 다시 계산" — 숫자를 지시에 박아넣는 대신 앱이 직접 계산한다.
+  // 인바디를 새로 올린 뒤 목표를 그 검사 기준으로 맞출 때 쓴다.
+  if (o.recalc) {
+    if (stale(o, goals)) done.push("목표 재계산 건너뜀 (더 최근에 직접 바꿈)");
+    else {
+      const w = calcWeek();
+      if (!w.wt || !w.bmr) done.push("목표 재계산 건너뜀 (인바디 없음)");
+      else {
+        const m = macrosFor(w.target);
+        goals = { ...goals, kcal: m.kcal, p: m.p, c: m.c, f: m.f, at: o.at || nowIso() };
+        save("dt_goals", goals); setMeta("goals", goals);
+        done.push(`목표 재계산 → ${num(m.kcal)}kcal (인바디 ${ibDateOf("bmr")} · 유지 ${num(w.avg)} − 적자 ${num(calc.deficit)})`);
+      }
+    }
+  }
   if (o.sets) {
     const ns = o.sets.filter(x => x && x.name && !sets.some(z => z.name === x.name));
     if (ns.length) { sets = ns.concat(sets).slice(0, 30); save("dt_sets", sets); setMeta("sets", sets); done.push(`끼니 세트 ${ns.length}개`); }
