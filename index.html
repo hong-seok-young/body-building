@@ -3007,6 +3007,20 @@ async function applyPayload(o) {
     done.push(`${d} ${m} · ${it.name}`);
   }
   if (skipped) done.push(`(중복 ${skipped}건 건너뜀)`);
+  // 활동 — 날짜별 걸음·웨이트·유산소를 지시로 넣는다 (o.act = { "YYYY-MM-DD": {...} }).
+  // 그 날 기록이 있으면 덮어쓴다. null 을 주면 지워서 "평소 하루" 를 따르게 한다.
+  // 지시는 id 로 한 번만 적용되니 나중에 내가 앱에서 고쳐도 되돌아오지 않는다.
+  const actDays = Object.keys(o.act || {});
+  for (const ds of actDays) {
+    const a = o.act[ds];
+    if (!a) { delete act[ds]; done.push(`활동 ${ds} 지움`); continue; }
+    const ci = a.ci || "", cp = a.cp || {};
+    const e = { steps: +a.steps || 0, wh: +a.wh || 0, ch: cardioHours(ci, cp, +a.ch || 0), ci, cp };
+    act[ds] = (!e.steps && !e.wh && !e.ch) ? { ...e, rest: 1 } : e;
+    done.push(`활동 ${ds} · 걸음 ${num(e.steps)}${e.wh ? ` · 웨이트 ${durLabel(e.wh)}` : ""}`
+      + (e.ch ? ` · ${cardioLabel(ci, cp)}` : ""));
+  }
+  if (actDays.length) pushAct();
   const newP = (o.presets || []).filter(x => x && x.name && !presets.some(z => z.name === x.name));
   if (newP.length) {
     presets = newP.concat(presets).slice(0, 300);
