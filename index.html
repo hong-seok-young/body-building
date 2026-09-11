@@ -80,6 +80,12 @@
   .tabbar button.on { color: var(--accent); }
   .tabbar button.on i { filter: none; }
 
+  /* 카드 제목 오른쪽의 켬/끔 토글 */
+  .tgl { margin-left: auto; flex: 0 0 auto; font: inherit; font-size: 11px; font-weight: 700;
+    padding: 4px 10px; border-radius: 20px; cursor: pointer; white-space: nowrap;
+    border: 1px solid var(--line); background: var(--card2); color: var(--sub); }
+  .tgl.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+
   /* 초과분을 태우는 데 필요한 운동 */
   .burnoff { margin-top: 9px; padding: 9px 11px; border-radius: 10px; font-size: 12px; line-height: 1.65;
     background: var(--warnbg); color: var(--warntext); border: 1px solid var(--warnline); }
@@ -2342,6 +2348,7 @@ function renderStreak() {
   streakEl.textContent = `🔥 ${n}일 연속`;
 }
 
+function toggleWeekToday() { save("dt_week_today", !load("dt_week_today", false)); render(); }
 function renderWeek() {
   const start = weekStart(curDate);
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
@@ -2356,7 +2363,10 @@ function renderWeek() {
     const tdee = dt.adjusted ? dt.tdee : calcWeek(d).avg;
     return { d, dow: names[i], t, g, tdee, diff: t.kcal - g, logged: t.kcal > 0, future: d > today };
   });
-  const done = rows.filter(r => r.logged);
+  // 오늘은 아직 남은 끼니가 있어 평균과 합계를 끌어내린다. 기본은 빼고 센다.
+  const incToday = load("dt_week_today", false);
+  const skipToday = !incToday && rows.some(r => r.d === today && r.logged);
+  const done = rows.filter(r => r.logged && (incToday || r.d !== today));
   const sumDiff = done.reduce((a, r) => a + r.diff, 0);      // 계획(목표) 대비
   const sumEat = done.reduce((a, r) => a + r.t.kcal, 0);
   const sumGoal = done.reduce((a, r) => a + r.g, 0);
@@ -2371,7 +2381,9 @@ function renderWeek() {
   // ── 이번 주 장부: 적자 합계 → 예상 체지방 변화 (인바디와 크로스체크용)
   const wk = calcWeek();
   weekLedger.innerHTML = `
-    <h3>이번 주 장부 <span class="muted">기록한 ${done.length}일 기준</span></h3>
+    <h3>이번 주 장부 <span class="muted">기록한 ${done.length}일 기준</span>
+      <button class="tgl${incToday ? " on" : ""}" onclick="toggleWeekToday()">오늘 기록 포함</button></h3>
+    ${!done.length ? `<div class="empty">${skipToday ? "오늘 말고는 기록이 없습니다. 오른쪽 토글을 켜면 오늘도 셉니다." : "이번 주 기록이 없습니다."}</div>` : `
     <div class="stats s3">
       <div class="stat"><span>유지 평균</span><b>${num(sumTdee / done.length)}</b>
         <small>${done.length}일 평균</small></div>
@@ -2387,7 +2399,8 @@ function renderWeek() {
         <small>하루 ${sumReal > 0 ? "+" : ""}${num(sumReal / done.length)}</small></div>
       <div class="stat"><span>예상 체지방</span><b style="color:${fatKg > 0 ? "var(--red)" : "var(--green)"}">${fatKg > 0 ? "+" : ""}${fatKg.toFixed(2)}kg</b>
         <small>미초과시 ${plannedKg > 0 ? "+" : "−"}${Math.abs(plannedKg).toFixed(2)}kg</small></div>
-    </div>
+    </div>`}
+    ${skipToday ? `<div class="hint" style="margin-bottom:0">오늘(${today.slice(5).replace("-", "/")})은 아직 끼니가 남아 있어 <b>합계에서 뺐습니다.</b></div>` : ""}
 `;
 
   // ── 일별 탄단지 (칼로리 기준 스택)
@@ -2429,7 +2442,7 @@ function renderWeek() {
   };
   weekRows.innerHTML = rows.map(r => {
     if (!r.logged) return `<tr style="opacity:.45"><td>${r.dow} ${+r.d.slice(8)}</td><td colspan="4">${r.future ? "—" : "기록 없음"}</td></tr>`;
-    return `<tr><td>${r.dow} ${+r.d.slice(8)}${r.d === today ? " ●" : ""}</td>
+    return `<tr${skipToday && r.d === today ? ` style="opacity:.5"` : ""}><td>${r.dow} ${+r.d.slice(8)}${r.d === today ? " ●" : ""}</td>
       <td>${num(r.t.kcal)}</td><td>${num(r.g)}</td>
       <td style="color:${r.diff > 0 ? "var(--red)" : "var(--green)"};font-weight:700">${r.diff > 0 ? "+" : ""}${num(r.diff)}</td>
       ${macroCell(r.t.c, r.t.p, r.t.f)}</tr>`;
