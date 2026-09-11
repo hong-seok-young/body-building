@@ -747,6 +747,17 @@ const CARDIO = {
   "러닝":     { f: [["pace", "페이스 분/km", 6, 0.1], ["km", "거리 km", 5, 0.1]],
                 met: o => acsmMet(+o.pace > 0 ? 60 / o.pace : 0, 0),
                 hours: o => (+o.pace > 0 && +o.km > 0 ? o.pace * o.km / 60 : 0) },
+  // 섹스 — 횟수와 1회 시간을 주면 시간이 따라 나온다 (러닝과 같은 방식).
+  // 강도는 2011 Compendium of Physical Activities 의 "sexual activity, vigorous
+  // effort" 2.8 MET 을 쓴다. 직접 측정한 연구(Frappier 2013)는 6.0 MET 까지 잡지만
+  // 가속도계가 체열까지 읽어 과대평가로 보이고, 문헌이 2.8~6.0 으로 두 배 벌어진다.
+  // 추정은 나에게 불리한 쪽 — 아래쪽을 쓴다.
+  "섹스":     { f: [["n", "횟수", 1, 1], ["min", "1회 분", 30, 5]],
+                met: () => 2.8,
+                hours: o => (+o.n > 0 && +o.min > 0 ? o.n * o.min / 60 : 0) },
+  // 목록에 없는 활동 — 강도를 MET 로 직접 넣는다. 여기 값은 gross MET 이고
+  // cardioRate 가 -1 해서 순증분으로 바꾼다 (하루치 BMR×1.18 과 겹치지 않게).
+  "기타":     { f: [["met", "강도 MET", 3, 0.1]], met: o => +o.met || 0 },
 };
 const CARDIO_NAMES = Object.keys(CARDIO);
 // 예전 기록은 저/중/고 로 남아 있다. 과거 날짜의 목표가 뒤바뀌면 안 되므로
@@ -776,7 +787,8 @@ function cardioLabel(ci, cp) {
   return ci + " " + c.f.map(([k, l, d]) => {
     const v = cp && cp[k] !== undefined && cp[k] !== "" ? cp[k] : d;
     return k === "spm" ? v + "spm" : k === "kmh" ? v + "km/h" : k === "inc" ? "경사" + v + "%"
-         : k === "pace" ? v + "분/km" : v + "km";
+         : k === "pace" ? v + "분/km" : k === "met" ? v + "MET"
+         : k === "n" ? v + "회" : k === "min" ? v + "분" : v + "km";
   }).join(" · ");
 }
 
