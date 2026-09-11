@@ -368,6 +368,20 @@
   tbody tr.tap { cursor: pointer; }
   tbody tr.tap:active { background: var(--card2); }
   .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  /* 탄단지 설명 팝업 — 이름을 누르면 뜬다 */
+  .macro .nm.tap { cursor: pointer; border-bottom: 1px dotted var(--sub); }
+  .macro .nm.tap:active { color: var(--accent); }
+  .mhelp { font-size: 12.5px; line-height: 1.65; }
+  .mhelp .big { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    padding: 9px 11px; background: var(--card2); border-radius: 9px; margin-bottom: 11px; }
+  .mhelp .big b { font-size: 21px; font-weight: 800; line-height: 1; }
+  .mhelp .big em { font-style: normal; font-size: 11.5px; color: var(--sub); }
+  .mhelp h4 { margin: 13px 0 5px; font-size: 12.5px; }
+  .mhelp h4:first-child { margin-top: 0; }
+  .mhelp p { margin: 0 0 7px; color: var(--sub); }
+  .mhelp b.k { color: var(--text); }
+  .mhelp .rule { margin: 12px 0 0; padding: 9px 11px; border-radius: 9px;
+    background: var(--card2); color: var(--text); font-weight: 700; }
   /* 설치 안내 배너 */
   #installBar { display: none; }
   #installBar.show { display: block; }
@@ -654,6 +668,13 @@
 </div>
 
 <!-- 설정 -->
+<div class="overlay" id="macroOverlay">
+  <div class="modal" style="max-width:430px">
+    <h3 id="mhTitle"></h3>
+    <div class="mhelp" id="mhBody"></div>
+    <div class="row" style="margin-top:14px"><button class="btn" onclick="closeOverlay('macroOverlay')">닫기</button></div>
+  </div>
+</div>
 <div class="overlay" id="settingsOverlay">
   <div class="modal">
     <h2>⚙️ 설정 <span class="muted" style="font-size:11px;font-weight:400">빌드 09-10 13:02</span></h2>
@@ -1541,6 +1562,85 @@ async function offsetBurn(i) {
 
 function burnCardio(h, wt, ci, cp) { return cardioHours(ci, cp, h) * wt * cardioRate(ci, cp); }
 
+// ── 탄단지 설명 — 첫 카드에서 이름을 누르면 뜬다.
+// 규칙을 매번 다시 물어보게 만들지 않으려고 앱 안에 넣어둔다. 숫자는 그날 값으로 채운다.
+// 핵심은 비대칭이다: 열량은 주 단위로 평균 낼 수 있고, 단백질과 지방 하한은 매일이다.
+const PROT_FLOOR_K = 2.0;                 // 체중 kg 당 단백질 하한 (목표는 제지방 × pL)
+function macroHelp(key) {
+  const ds = curDate, g = dayTarget(ds), t = totals(dayLog(ds));
+  const wt = ibAt("weight", ds) || +calc.wt || 0;
+  const floor = Math.round(wt * PROT_FLOOR_K);
+  const fLo = Math.round(wt * (+calc.fMin || 0.6)), fHi = Math.round(wt * (+calc.fMax || 0.9));
+  const tdee = g.adjusted ? g.tdee : calcWeek(ds).avg;
+  const n1 = x => fmt(x);
+  const H = {
+    kcal: ["칼로리 — 주 단위로 본다", `
+      <div class="big"><b>${num(Math.round(g.kcal))}</b><em>목표 · 유지 ${num(Math.round(tdee))} − 적자 ${num(calc.deficit)}</em></div>
+      <h4>하루 숫자는 잡음이다</h4>
+      <p>체지방은 <b class="k">몇 주간 에너지 총합</b>으로 움직인다. 어제 넘치고 오늘 아끼면 상쇄된다.
+         지방 1kg = 7,700kcal 이라 하루 ±200 은 <b class="k">26g</b> 차이다.</p>
+      <h4>목표를 넘겨도 적자일 수 있다</h4>
+      <p>목표에 이미 적자 ${num(calc.deficit)} 이 들어 있다. <b class="k">유지 ${num(Math.round(tdee))}</b> 아래면
+         목표를 넘겨도 지방은 빠지는 중이다. 체지방으로 환산되는 건 목표 초과분이 아니라 유지 대비 초과분이다.</p>
+      <h4>판정은 주간 평균과 인바디로</h4>
+      <p>리포트 탭 주간 평균이 적자 ${num(calc.deficit)} 근처면 계획대로다. 최종 판정은
+         <b class="k">제지방량이 유지되면서 체지방만 내려가는지</b> — 그건 인바디만 답할 수 있다.</p>
+      <div class="rule">열량은 주 단위. 하루에 반응하지 마라.</div>`],
+    p: ["단백질 — 매일 채우는 하한", `
+      <div class="big"><b>${n1(g.p)}</b><em>목표 (제지방 × ${+calc.pL || 2.4})</em>
+        <b style="color:var(--red)">${num(floor)}</b><em>하한 (체중 × ${PROT_FLOOR_K.toFixed(1)})</em></div>
+      <h4>목표와 하한은 다른 숫자다</h4>
+      <p><b class="k">${n1(g.p)}</b> 은 채우면 최선인 목표고, <b class="k">${num(floor)}</b> 은 이 밑으로 내려가지 말라는 선이다.
+         ${num(floor)} 아래로 가면 근손실 위험 구간이고, ${n1(g.p)} 를 넘겨도 근성장이 더 되지는 않는다.</p>
+      <h4>평균을 낼 수 없다</h4>
+      <p>열량은 통장이지만 단백질은 출근이다. <b class="k">몸에 단백질 창고가 없다.</b> 남는 건 태워서 쓴다.
+         운동 뒤 합성 신호는 <b class="k">24~48시간</b> 켜져 있는데, 그 창구에서 모자라면 그 세션의 성장분은 날아간다.
+         내일 많이 먹어도 어제 창구는 닫혔다.</p>
+      <h4>쉬는 날도 같다</h4>
+      <p>쉬는 날은 <b class="k">단백질이 유일한 방어선</b>이다. 훈련한 날은 자극+단백질 둘로 막지만,
+         쉬는 날은 단백질 하나다. 거기서 깎으면 방어가 0이 된다. 게다가 어제 세션은 오늘 먹는 단백질로 조립된다.</p>
+      <h4>끼니에 나눠라</h4>
+      <p>한 끼에 몰면 효율이 떨어진다. 4~5끼에 나누는 게 낫다.</p>
+      <div class="rule">${num(floor)} 은 매일. 훈련 여부와 무관.</div>`],
+    f: ["지방 — 범위 안에서", `
+      <div class="big"><b>${num(fLo)} ~ ${num(fHi)}</b><em>g · 체중 × ${+calc.fMin || 0.6}~${+calc.fMax || 0.9}</em></div>
+      <h4>하한도 상한도 있다</h4>
+      <p>지방은 "덜 먹어도 되는 칸"이 아니다. <b class="k">${num(fLo)}g 밑으로는 내려가면 안 된다.</b></p>
+      <p>· 테스토스테론 등 스테로이드 호르몬의 <b class="k">원료</b>다 — 과하게 깎으면 근육 유지에 직격이다<br>
+         · 지용성 비타민 A·D·E·K 는 지방 없이 <b class="k">흡수가 안 된다</b><br>
+         · 필수지방산은 몸이 <b class="k">못 만든다</b></p>
+      <h4>상한을 넘기는 건 정산된다</h4>
+      <p>${num(fHi)}g 을 넘긴 날은 열량 통장에서 정산된다 — 외식 한 번은 괜찮다.
+         반대로 <b class="k">하한 밑으로 가는 건 정산이 안 된다.</b> 호르몬은 주 평균으로 안 움직인다.</p>
+      <div class="rule">${num(fLo)}g 이상은 매일. 상한 초과는 주 단위로 정산.</div>`],
+    c: ["탄수화물 — 남는 것을 받는 칸", `
+      <div class="big"><b>${n1(g.c)}</b><em>g · 열량에서 단백질·지방을 뗀 나머지</em></div>
+      <h4>유일한 조절 손잡이다</h4>
+      <p>단백질은 하한, 지방은 범위로 묶여 있다. 그래서 그날 활동에 따라 열량이 오르내릴 때
+         <b class="k">그 변동을 전부 탄수가 받는다.</b> 많이 움직인 날은 늘고, 쉬는 날은 줄어든다.</p>
+      <h4>필수 영양소는 아니다</h4>
+      <p>몸이 단백질과 지방으로 포도당을 만들 수 있다. 그래서 셋 중 유일하게 <b class="k">이론적 하한이 없다.</b></p>
+      <h4>그래도 훈련 연료다</h4>
+      <p>주 ${+calc.wD || 7}회 ${durLabel(+calc.wH || 2)} 드는 사람에게 탄수는 수행능력이다.
+         <b class="k">들던 무게가 안 들리기 시작하면 그게 탄수 하한 신호다.</b>
+         체중계도 앱 숫자도 아니고 네 수행능력이 제일 정확하다.</p>
+      <h4>쉬는 날 깎는 건 여기서</h4>
+      <p>헬스를 안 하면 유지 열량이 내려가고 목표도 내려간다. 그 차이는
+         <b class="k">탄수에서 빼고 단백질은 그대로 둔다.</b></p>
+      <div class="rule">깎아도 되는 건 탄수뿐. 단 수행능력이 버티는 선까지만.</div>`],
+  };
+  const h = H[key];
+  if (!h) return;
+  mhTitle.textContent = h[0];
+  mhBody.innerHTML = h[1] + `
+    <h4 style="margin-top:15px">사진으로 준 음식은 엄격하게 본다</h4>
+    <p>사진 판독엔 ±15% 오차가 붙는다. 그 안에서 <b class="k">단백질은 낮은 쪽, 탄수·지방·나트륨은 높은 쪽</b>을
+       고른다. 가장 그럴듯한 값이 아니라 불리한 모서리를 일부러 고르는 것이다 —
+       단백질을 후하게 쳐주면 채운 줄 알고 넘어가고, 열량을 적게 잡으면 체지방이 조용히 붙는다.
+       <b class="k">포장 표기값이 있으면 그 값을 그대로 쓴다.</b></p>`;
+  openOverlay("macroOverlay");
+}
+
 function calcWeek(ds) {
   const b = calcBase(ds);
   const lift = burnLift(calc.wH, b.wt), cardio = burnCardio(calc.cH, b.wt, calc.cI, calc.cP);
@@ -1823,11 +1923,11 @@ function renderDay() {
     ((ak, gk) => `<div class="macros">` +
     `<div class="macro mhead"><span class="nm"></span><span class="val">섭취 (비율) / 목표 (비율)</span>
        <span></span><span class="st">남음</span></div>` +
-    [{ l: "칼로리", v: t.kcal, g: g.kcal, d: 0, c: "var(--kcal)" },
+    [{ key: "kcal", l: "칼로리", v: t.kcal, g: g.kcal, d: 0, c: "var(--kcal)" },
      // band: 목표 대비 이만큼까지의 초과는 오차로 본다. 그 위는 탄수를 밀어내는 초과다
-     { l: "탄수화물", v: t.c, g: g.c, d: 1, c: "var(--carb)", k: 4 },
-     { l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", band: 0.1, k: 4 },
-     { l: "지방", v: t.f, g: g.f, d: 1, c: "var(--fat)", k: 9 }].map(r => {
+     { key: "c", l: "탄수화물", v: t.c, g: g.c, d: 1, c: "var(--carb)", k: 4 },
+     { key: "p", l: "단백질", v: t.p, g: g.p, d: 1, c: "var(--protein)", band: 0.1, k: 4 },
+     { key: "f", l: "지방", v: t.f, g: g.f, d: 1, c: "var(--fat)", k: 9 }].map(r => {
       const pct = r.g ? Math.min(100, r.v / r.g * 100) : 0, over = r.v - r.g;
       const n = x => r.d ? fmt(x) : num(x);
       // 허용 범위가 있는 줄(단백질)은 범위 안까지만 초록, 그 위는 노랑(초과).
@@ -1838,7 +1938,7 @@ function renderDay() {
         : `<span class="remain">${n(r.g - r.v)}</span>`;
       const sh = (x, tot) => r.k && tot > 0 ? `<small>(${Math.round(x * r.k / tot * 100)}%)</small>` : "";
       return `<div class="macro">
-        <span class="nm">${r.l}</span>
+        <span class="nm tap" onclick="macroHelp('${r.key}')">${r.l}</span>
         <span class="val">${n(r.v)}${sh(r.v, ak)} / ${n(r.g)}${sh(r.g, gk)}</span>
         <span class="bar"><div style="width:${pct}%;background:${tooMuch ? (r.band ? "var(--warntext)" : "var(--red)") : r.c}"></div></span>
         <span class="st">${st}</span></div>`;
