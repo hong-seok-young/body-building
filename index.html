@@ -1492,10 +1492,10 @@ function burnOff(kcal, wt) {
     const min = kcal / (rate * wt) * 60;
     if (c.hours) {                                     // 러닝은 거리로 말해주는 게 낫다
       const km = +o.pace > 0 ? min / o.pace : 0;
-      return { ci, cp: { ...o, km: Math.round(km * 10) / 10 }, min,
+      return { ci, cp: { ...o, km: Math.round(km * 10) / 10 }, min, kcal,
                html: `${ci} ${o.pace}분/km <b>${km.toFixed(1)}km</b> <span class="muted">(${Math.round(min)}분)</span>` };
     }
-    return { ci, cp: o, min, html: `${cardioLabel(ci, o)} <b>${Math.round(min)}분</b>` };
+    return { ci, cp: o, min, kcal, html: `${cardioLabel(ci, o)} <b>${Math.round(min)}분</b>` };
   }).filter(Boolean);
 }
 // 상쇄 후보를 버튼과 함께 뿌린다. 누르면 그 운동이 오늘 활동에 기록된다
@@ -1513,16 +1513,28 @@ async function offsetBurn(i) {
   if (!o) return;
   const a = act[curDate] || {};
   const sameType = a.ci === o.ci;
-  // 러닝은 시간이 거리에서 나온다 — 같은 종류면 거리를 더하고, 아니면 갈아끼운다
-  let cp = { ...o.cp }, ch = o.min / 60;
-  if (sameType) {
-    if (o.ci === "러닝") cp.km = Math.round(((+((a.cp || {}).km) || 0) + (+o.cp.km || 0)) * 10) / 10;
-    else ch = (+a.ch || 0) + o.min / 60;
+  // 유산소 칸은 하나뿐이다. 종류가 다른데 갈아끼우면 이미 기록한 운동이 날아간다 —
+  // 섹스 1.5h(266kcal) 를 계단 6분(82) 으로 바꿔버려 유지 열량이 오히려 185 내려갔다.
+  // 칸이 비었거나 같은 종류일 때만 칸을 쓰고, 아니면 추가 소모로 따로 쌓는다.
+  let how;
+  if (!(+a.ch) || sameType) {
+    // 러닝은 시간이 거리에서 나온다 — 같은 종류면 거리를 더한다
+    let cp = { ...o.cp }, ch = o.min / 60;
+    if (sameType) {
+      if (o.ci === "러닝") cp.km = Math.round(((+((a.cp || {}).km) || 0) + (+o.cp.km || 0)) * 10) / 10;
+      else ch = (+a.ch || 0) + o.min / 60;
+    }
+    act[curDate] = { ...a, ci: o.ci, cp, ch: o.ci === "러닝" ? 0 : ch };
+    how = `${cardioLabel(o.ci, cp)} ${sameType ? "합산" : "기록"}`;
+  } else {
+    const lbl = `${cardioLabel(o.ci, o.cp)} ${Math.round(o.min)}분`;
+    act[curDate] = { ...a, xk: (+a.xk || 0) + o.kcal,
+                     xl: ((a.xl ? a.xl + " · " : "") + lbl).slice(-60) };
+    how = `${lbl} 추가 (${cardioLabel(a.ci, a.cp)} 는 그대로)`;
   }
-  act[curDate] = { ...a, ci: o.ci, cp, ch: o.ci === "러닝" ? 0 : ch };
   delete act[curDate].rest;
   await pushAct();
-  toast(`${cardioLabel(o.ci, cp)} ${sameType ? "합산" : "기록"} — 오늘 목표가 올라갑니다`, 4000);
+  toast(`${how} — 오늘 목표가 올라갑니다`, 4000);
 }
 
 function burnCardio(h, wt, ci, cp) { return cardioHours(ci, cp, h) * wt * cardioRate(ci, cp); }
@@ -1599,6 +1611,7 @@ function actLabel(a) {
   if (+a.steps) parts.push(num(a.steps) + "보");
   if (+a.wh) parts.push(`웨이트 ${durLabel(a.wh)}`);
   if (+a.ch) parts.push(`${cardioLabel(a.ci || calc.cI, a.cp)} ${durLabel(a.ch)}`);
+  if (+a.xk) parts.push(`${a.xl || "추가"} (+${num(Math.round(a.xk))})`);
   return parts.length ? parts.join(" · ") : "완전 휴식";
 }
 // 그날 활동으로 TDEE 를 잡는다. 기록이 없으면 평소 하루를 쓴다
@@ -1607,7 +1620,8 @@ function dayTarget(ds) {
   if (!w.wt) return { ...goals, kcal: goals.kcal, src: "주 평균 목표", adjusted: false, ibDate: w.ibDate };
   const b = calcBase(ds);
   const tdee = b.sed + (+a.steps || 0) * b.wt * STEP_K
-             + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci, a.cp);
+             + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci, a.cp)
+             + (+a.xk || 0);                     // 상쇄로 따로 쌓은 추가 소모
   const m = macrosFor(floorBmr(tdee - calc.deficit, b.bmr), ds);
   return { ...goals, ...m, tdee, bmr: b.bmr, ibDate: b.ibDate,
            src: actLabel(a), adjusted: true, isDefault: !!a.def };
@@ -1615,8 +1629,10 @@ function dayTarget(ds) {
 
 function saveAct() {
   const ci = aCi.value, cp = readCardio("a_", ci);
+  const old = act[curDate] || {};
   const a = { steps: +aSteps.value || 0, wh: m2h(aWh.value), ch: cardioHours(ci, cp, m2h(aCh.value)), ci, cp };
-  if (!a.steps && !a.wh && !a.ch) act[curDate] = { ...a, rest: 1 }; else act[curDate] = a;
+  if (+old.xk) { a.xk = old.xk; a.xl = old.xl; }     // 상쇄로 쌓은 건 폼에 칸이 없다 — 지켜서 넘긴다
+  if (!a.steps && !a.wh && !a.ch && !a.xk) act[curDate] = { ...a, rest: 1 }; else act[curDate] = a;
   closeAct(); pushAct();
 }
 // 지금 칸에 있는 값을 "이 날부터" 의 평소 하루로 등록한다.
