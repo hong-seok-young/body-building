@@ -752,12 +752,12 @@ const CARDIO = {
   // effort" 2.8 MET 을 쓴다. 직접 측정한 연구(Frappier 2013)는 6.0 MET 까지 잡지만
   // 가속도계가 체열까지 읽어 과대평가로 보이고, 문헌이 2.8~6.0 으로 두 배 벌어진다.
   // 추정은 나에게 불리한 쪽 — 아래쪽을 쓴다.
+  // disp/hide: 메인 화면·리포트에는 "기타" 로만 찍는다. 남이 볼 수 있는 화면에
+  // 종목 이름과 횟수가 그대로 떠 있는 게 불편하다. 저장값(ci)은 그대로라 계산은 안 바뀐다.
+  // noOff: 상쇄 후보로는 내보내지 않는다 — 마음대로 늘릴 수 있는 운동이 아니다.
   "섹스":     { f: [["n", "횟수", 1, 1], ["min", "1회 분", 30, 5]],
-                met: () => 2.8,
+                met: () => 2.8, disp: "기타", hide: true, noOff: true,
                 hours: o => (+o.n > 0 && +o.min > 0 ? o.n * o.min / 60 : 0) },
-  // 목록에 없는 활동 — 강도를 MET 로 직접 넣는다. 여기 값은 gross MET 이고
-  // cardioRate 가 -1 해서 순증분으로 바꾼다 (하루치 BMR×1.18 과 겹치지 않게).
-  "기타":     { f: [["met", "강도 MET", 3, 0.1]], met: o => +o.met || 0 },
 };
 const CARDIO_NAMES = Object.keys(CARDIO);
 // 예전 기록은 저/중/고 로 남아 있다. 과거 날짜의 목표가 뒤바뀌면 안 되므로
@@ -784,7 +784,8 @@ const cpOf = (ci, storedCi, storedCp) => (ci === storedCi ? storedCp : null) || 
 function cardioLabel(ci, cp) {
   const c = CARDIO[ci];
   if (!c) return ci || "";
-  return ci + " " + c.f.map(([k, l, d]) => {
+  if (c.hide) return c.disp || ci;              // 파라미터까지 감추는 종목
+  return (c.disp || ci) + " " + c.f.map(([k, l, d]) => {
     const v = cp && cp[k] !== undefined && cp[k] !== "" ? cp[k] : d;
     return k === "spm" ? v + "spm" : k === "kmh" ? v + "km/h" : k === "inc" ? "경사" + v + "%"
          : k === "pace" ? v + "분/km" : k === "met" ? v + "MET"
@@ -1398,7 +1399,8 @@ function readCardio(pre, ci) {
 // 셀렉트를 채운다. 예전 값(저/중/고)이 저장돼 있으면 그것도 항목으로 남겨
 // 저절로 다른 종류로 바뀌지 않게 한다
 function fillCardioSelect(el, cur) {
-  el.innerHTML = CARDIO_NAMES.map(x => `<option${x === cur ? " selected" : ""}>${x}</option>`).join("");
+  el.innerHTML = CARDIO_NAMES.map(x =>
+    `<option value="${x}"${x === cur ? " selected" : ""}>${(CARDIO[x] || {}).disp || x}</option>`).join("");
   el.value = CARDIO_NAMES.includes(cur) ? cur : CARDIO_NAMES[0];
 }
 // which: 'c' = 열량 탭 설정, 'a' = 활동 모달. keep=1 이면 칸은 그대로 두고 요약만 갱신
@@ -1483,7 +1485,7 @@ function cumBalance() {
 // 그 값으로, 없으면 종류별 기본값으로 계산한다.
 function burnOff(kcal, wt) {
   if (!(kcal > 0) || !(wt > 0)) return [];
-  return CARDIO_NAMES.map(ci => {
+  return CARDIO_NAMES.filter(ci => !CARDIO[ci].noOff).map(ci => {
     const c = CARDIO[ci], o = {};
     c.f.forEach(([k, l, d]) => { o[k] = d; });
     Object.assign(o, cpOf(ci, calc.cI, calc.cP));      // 내 설정과 종류가 같으면 그걸 쓴다
