@@ -1,0 +1,32 @@
+# inbox.json 을 커밋하면 시트에 자동으로 반영한다.
+# 예전에는 내가 폰에서 앱을 열어야 그때부터 동기화가 시작됐다.
+name: 시트 자동 반영
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - inbox.json
+      - index.html
+      - .github/auto-sync.mjs
+      - .github/workflows/auto-sync.yml
+  workflow_dispatch:          # 액션 탭에서 손으로도 돌릴 수 있다
+
+# 연달아 커밋해도 마지막 것 하나만 돌린다. 동시에 두 개가 돌면
+# 같은 inbox 항목을 둘 다 "처음 보는 것"으로 알고 두 번 넣을 수 있다
+concurrency:
+  group: sheet-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm init -y && npm i --no-save playwright@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: node .github/auto-sync.mjs

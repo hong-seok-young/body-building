@@ -3198,12 +3198,20 @@ render();
 // 순서가 중요하다: 시트 동기화를 먼저 끝내야 중복 검사가 제대로 걸린다.
 // inboxDone 은 기기별 기록이라 새 기기는 "이미 적용됨"을 모른다. 그때 로컬
 // 캐시가 비어 있으면 중복 검사를 통과해 시트에 같은 항목이 두 번 들어간다.
+// ?auto=1 — GitHub Actions 가 헤드리스 크롬으로 여는 자동 반영 모드.
+// inbox.json 을 커밋하면 내가 앱을 열지 않아도 시트에 바로 들어간다.
+// 이때는 inbox 반영까지만 한다 — 중복정리·프리셋 복구는 기기별 로컬 기록에 기대는
+// 동작이라, 매번 빈 기기로 뜨는 헤드리스에서 돌리면 일부러 지운 음식이 되살아난다.
+const AUTO = /[?&]auto=1/.test(location.search);
 (async () => {
   if (cfg) await fullSync();
   await applyHashAdd();
   await applyInbox();
-  await dedupeInbody();          // 동기화가 끝난 뒤라야 중복이 다 보인다
-  recoverPresets();              // 기록에 있는데 내 음식에서 사라진 것을 되살린다
+  if (!AUTO) {
+    await dedupeInbody();        // 동기화가 끝난 뒤라야 중복이 다 보인다
+    recoverPresets();            // 기록에 있는데 내 음식에서 사라진 것을 되살린다
+  }
+  window.__autoDone = true;      // 헤드리스가 "끝났다"를 아는 유일한 신호
 })();
 if (!cfg) { setStatus("설정 필요 →", "var(--red)"); openSettings(); }
 </script>
