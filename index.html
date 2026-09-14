@@ -675,6 +675,30 @@
     <div class="row" style="margin-top:14px"><button class="btn" onclick="closeOverlay('macroOverlay')">닫기</button></div>
   </div>
 </div>
+<div class="overlay" id="loginOverlay">
+  <div class="modal" style="max-width:330px">
+    <h2 id="lgTitle">로그인</h2>
+    <p class="muted" id="lgHint" style="font-size:12px">기록은 계정마다 따로 저장됩니다.</p>
+    <label>아이디</label>
+    <input id="lgId" autocomplete="username" autocapitalize="off" spellcheck="false">
+    <label>비밀번호</label>
+    <input id="lgPw" type="password" autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="lgNew" style="display:none">
+      <label style="margin-top:14px">Apps Script 웹앱 URL <span class="muted">본인 구글 시트</span></label>
+      <input id="lgUrl" placeholder="https://script.google.com/macros/s/.../exec">
+      <label>비밀키 (Code.gs 의 SECRET)</label>
+      <input id="lgSecret" placeholder="비밀키">
+      <p class="muted" style="font-size:11px;margin-top:8px">
+        시트 만드는 법은 저장소의 SETUP.md 에 있습니다 (10분).</p>
+    </div>
+    <div class="msg" id="lgMsg"></div>
+    <div class="btns mt">
+      <button class="btn pri" id="lgGo" onclick="doLogin()">로그인</button>
+      <button class="btn" id="lgToggle" onclick="toggleSignup()">새로 시작</button>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="settingsOverlay">
   <div class="modal">
     <h2>⚙️ 설정 <span class="muted" style="font-size:11px;font-weight:400">빌드 09-10 13:02</span></h2>
@@ -709,6 +733,7 @@
     <div class="msg" id="cfgMsg"></div>
     <div class="btns mt">
       <button class="btn" onclick="closeSettings()">닫기</button>
+      <button class="btn" onclick="logout()">로그아웃</button>
       <button class="btn pri" onclick="saveSettings()">저장 &amp; 연결 테스트</button>
     </div>
   </div>
@@ -945,7 +970,28 @@ const BUILTIN_CFG = {
   url: "https://script.google.com/macros/s/AKfycbytKK3MFfrhE1rP88lz_sMRaEaYPqrP_e9qySdldZNemlIm8E13vZ06PwT4Y4B-YGsF/exec",
   secret: "wlsrur93",
 };
-let cfg = load("dt_cfg", null) || (BUILTIN_CFG.url ? { ...BUILTIN_CFG } : null);
+// 로그인 — 보안 장치가 아니라 계정 분리 장치다.
+// 예전에는 이 페이지를 열면 곧바로 내 백엔드에 붙었다. 친구한테 링크를 주면
+// 친구 폰에 내 기록이 다 내려가고 친구가 먹은 게 내 시트로 올라간다.
+// 그래서 로그인을 통과해야 백엔드가 붙게 했다. 한 번 하면 기기에 남는다.
+//
+// 비밀번호는 평문으로 두지 않는다. 이 저장소는 공개라 평문을 넣으면 크롤링돼서
+// 다른 서비스에 대입된다. PBKDF2-SHA256 해시만 둔다 — 원문은 어디에도 없다.
+// (소스를 뜯으면 백엔드 주소는 여전히 보인다. 그건 처음부터 감수한 부분이다)
+const PBKDF2_ITER = 150000;
+const ACCOUNTS = [
+  { id: "goldenbrain93",
+    salt: "994b03c2b238edc4f0524231c38c5ebe",
+    hash: "44fd0968382ef9fe25df9b0476143cd7585eb7e72bc390ba76f1707043a6cbc5",
+    cfg: { ...BUILTIN_CFG } },
+];
+// 친구가 이 기기에서 직접 만든 계정 (저장소에 안 올라가고 기기에만 남는다)
+const localAccounts = () => load("dt_acct", []);
+const findAccount = id => ACCOUNTS.concat(localAccounts())
+  .find(a => a.id.toLowerCase() === String(id || "").trim().toLowerCase());
+const AUTO = /[?&]auto=1/.test(location.search);
+// ?auto=1 은 GitHub Actions 가 여는 헤드리스 모드다. 사람이 쓰는 화면이 아니라 통과시킨다
+let cfg = load("dt_cfg", null) || (AUTO && BUILTIN_CFG.url ? { ...BUILTIN_CFG } : null);
 // 안전장치: 테스트용 주소가 배포에 섞여 들어가면 시트 동기화가 통째로 죽고
 // 기기마다 제 로컬 기록만 쌓여 "과거 데이터가 막 바뀌는" 것처럼 보인다.
 // 한 번 그렇게 커밋한 적이 있어서, 조용히 넘어가지 않고 화면에 띄운다.
@@ -2938,6 +2984,88 @@ function renderInbody() {
 }
 
 // ═════════ 설정 ═════════
+// PBKDF2-SHA256. 브라우저 WebCrypto 와 Node 가 같은 값을 낸다 (해시 만들 때 Node 로 뽑았다)
+async function pbkdf2Hex(pw, saltHex) {
+  const enc = new TextEncoder();
+  const salt = Uint8Array.from(saltHex.match(/../g).map(h => parseInt(h, 16)));
+  const k = await crypto.subtle.importKey("raw", enc.encode(pw), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: PBKDF2_ITER, hash: "SHA-256" }, k, 256);
+  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+const randHex = n => [...crypto.getRandomValues(new Uint8Array(n))]
+  .map(b => b.toString(16).padStart(2, "0")).join("");
+
+let loginResolve = null, signupMode = false;
+function toggleSignup() {
+  signupMode = !signupMode;
+  lgNew.style.display = signupMode ? "" : "none";
+  lgTitle.textContent = signupMode ? "새로 시작" : "로그인";
+  lgHint.textContent  = signupMode
+    ? "본인 구글 시트를 연결합니다. 기록이 섞이지 않습니다."
+    : "기록은 계정마다 따로 저장됩니다.";
+  lgGo.textContent = signupMode ? "만들고 시작" : "로그인";
+  lgToggle.textContent = signupMode ? "로그인으로" : "새로 시작";
+  lgMsg.textContent = ""; lgMsg.className = "msg";
+}
+function showLogin() {
+  return new Promise(res => {
+    loginResolve = res;
+    lgId.value = (load("dt_auth", {}) || {}).id || "";
+    lgPw.value = "";
+    loginOverlay.classList.add("show");      // 뒤로가기로 닫히면 안 되니 openOverlay 를 안 쓴다
+    setTimeout(() => (lgId.value ? lgPw : lgId).focus(), 60);
+  });
+}
+async function doLogin() {
+  const id = lgId.value.trim(), pw = lgPw.value;
+  if (!id || !pw) { lgMsg.textContent = "아이디와 비밀번호를 입력하세요"; lgMsg.className = "msg err"; return; }
+  lgGo.disabled = true;
+  lgMsg.textContent = "확인 중…"; lgMsg.className = "msg";
+  try {
+    if (signupMode) {
+      const url = lgUrl.value.trim(), secret = lgSecret.value.trim();
+      if (!url) throw new Error("Apps Script URL 을 입력하세요");
+      if (findAccount(id)) throw new Error("이미 있는 아이디입니다");
+      const salt = randHex(16);
+      const acc = { id, salt, hash: await pbkdf2Hex(pw, salt), cfg: { url, secret } };
+      save("dt_acct", localAccounts().concat([acc]));
+      finishLogin(acc);
+    } else {
+      const acc = findAccount(id);
+      // 아이디가 없어도 같은 문구를 쓴다 — 어떤 아이디가 있는지 알려줄 이유가 없다
+      if (!acc || (await pbkdf2Hex(pw, acc.salt)) !== acc.hash)
+        throw new Error("아이디나 비밀번호가 맞지 않습니다");
+      finishLogin(acc);
+    }
+  } catch (e) {
+    lgMsg.textContent = "✗ " + (e && e.message || e); lgMsg.className = "msg err";
+  }
+  lgGo.disabled = false;
+}
+function finishLogin(acc) {
+  cfg = { ...acc.cfg };
+  save("dt_cfg", cfg); save("dt_auth", { id: acc.id });
+  loginOverlay.classList.remove("show");
+  lgPw.value = "";
+  const r = loginResolve; loginResolve = null;
+  if (r) r(true);
+}
+// 이미 붙어 있으면 통과. #cfg= 링크로 받은 기기도 여기로 걸린다
+async function requireLogin() {
+  if (AUTO || load("dt_cfg", null)) return true;
+  return showLogin();
+}
+function logout() {
+  if (pending.length || ibPending.length) {
+    if (!confirm(`아직 시트에 못 올린 기록이 ${pending.length + ibPending.length}건 있습니다.\n그래도 로그아웃할까요? (그 기록은 사라집니다)`)) return;
+  } else if (!confirm("로그아웃하면 이 기기의 기록 사본을 지웁니다.\n시트에 있는 원본은 그대로이고 다시 로그인하면 받아옵니다.")) return;
+  ["dt_cfg","dt_auth","dt_cache","dt_goals","dt_calc","dt_act","dt_presets","dt_inbody",
+   "dt_pending","dt_ib_pending","dt_meta_dirty","dt_inbox_done","dt_recovered","dt_sets",
+   "dt_presets_bak","dt_mealcount"].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+  location.replace(location.pathname);
+}
+
 function openSettings() {
   cfgUrl.value = cfg?.url || ""; cfgSecret.value = cfg?.secret || "";
   gKcal.value = goals.kcal; gP.value = goals.p; gC.value = goals.c; gF.value = goals.f;
@@ -3256,8 +3384,8 @@ render();
 // inbox.json 을 커밋하면 내가 앱을 열지 않아도 시트에 바로 들어간다.
 // 이때는 inbox 반영까지만 한다 — 중복정리·프리셋 복구는 기기별 로컬 기록에 기대는
 // 동작이라, 매번 빈 기기로 뜨는 헤드리스에서 돌리면 일부러 지운 음식이 되살아난다.
-const AUTO = /[?&]auto=1/.test(location.search);
 (async () => {
+  await requireLogin();                      // 로그인 전에는 백엔드에 손대지 않는다
   if (cfg) await fullSync();
   await applyHashAdd();
   await applyInbox();
@@ -3267,7 +3395,7 @@ const AUTO = /[?&]auto=1/.test(location.search);
   }
   window.__autoDone = true;      // 헤드리스가 "끝났다"를 아는 유일한 신호
 })();
-if (!cfg) { setStatus("설정 필요 →", "var(--red)"); openSettings(); }
+if (!cfg && !loginOverlay.classList.contains("show")) { setStatus("설정 필요 →", "var(--red)"); openSettings(); }
 </script>
 </body>
 </html>
