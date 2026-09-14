@@ -62,6 +62,27 @@ try {
   if (left.length) { logs.push("[미반영] " + left.join(", ")); code = 1; }
 } catch (e) { logs.push("[확인 실패] " + (e && e.message || e)); code = 1; }
 
+// id 만 등록되고 음식 줄은 안 들어가는 상태가 있을 수 있다 —
+// setMeta 는 닿았는데 그 뒤 add 가 죽으면 위의 "남은 id" 검사는 통과해버린다.
+// 그래서 마지막 항목이 건드린 날짜의 실제 시트 기록을 찍어서 눈으로 확인한다.
+try {
+  const days = await page.evaluate(async () => {
+    const box = await (await fetch("./inbox.json", { cache: "no-store" })).json();
+    const items = (box && box.items) || [];
+    const last = items[items.length - 1] || {};
+    const ds = [...new Set([...(last.food || []).map(f => f.date),
+                            ...Object.keys(last.act || {})])].filter(Boolean);
+    return ds.map(d => ({
+      d,
+      rows: (cache[d] || []).map(x => `${mealOf(x)} · ${x.name} — ${Math.round(+x.kcal || 0)}kcal`),
+      kcal: Math.round((totals(cache[d] || []) || {}).kcal || 0),
+    }));
+  });
+  for (const x of days)
+    logs.push(`[시트] ${x.d} — ${x.rows.length}줄 · 합계 ${x.kcal}kcal\n  `
+              + (x.rows.join("\n  ") || "(비어 있음)"));
+} catch (e) { logs.push("[시트 확인 실패] " + (e && e.message || e)); }
+
 await browser.close();
 srv.close();
 
