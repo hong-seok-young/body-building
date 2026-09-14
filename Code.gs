@@ -32,7 +32,12 @@ const META_KEYS = ["goals", "presets", "plan", "calc", "act", "sets"];
 
 function doPost(e) {
   try {
-    const req = JSON.parse(e.postData.contents);
+    const raw = (e && e.postData && e.postData.contents) || "";
+    let req = null;
+    try { req = JSON.parse(raw); } catch (x) { req = null; }
+    // 외부 웹훅(삼성헬스 → Health Connect → 웹훅 앱)은 우리 형식을 모른다.
+    // action 이 없으면 걸음수 웹훅으로 보고 따로 받는다. 비밀키는 주소의 ?k= 로 받는다
+    if (!req || !req.action) return hookSteps(e, raw, req);
     if (req.secret !== SECRET) return out({ ok: false, error: "bad-secret" });
 
     const type = req.type === "inbody" ? "inbody" : "food";
@@ -50,6 +55,69 @@ function doPost(e) {
   } catch (err) {
     return out({ ok: false, error: String(err && err.message || err) });
   }
+}
+
+// ── 걸음수 웹훅 ──────────────────────────────────────────────────────
+// 삼성헬스는 외부에 주는 웹 API 가 없다. 대신 걸음수를 Health Connect 로 넘기고,
+// "Health Connect Webhook" 같은 폰 앱이 그걸 아무 주소로나 POST 해준다.
+// 그 앱이 어떤 모양으로 보낼지는 정해져 있지 않아서 관대하게 받는다 —
+// 숫자만 찾아내고, 원문은 meta 의 _hook 에 남겨서 나중에 형식을 맞출 수 있게 한다.
+//
+// 주소: .../exec?k=<SECRET>          (헤더를 못 넣는 앱이 많아 쿼리로 받는다)
+function hookSteps(e, raw, body) {
+  const key = (e && e.parameter && (e.parameter.k || e.parameter.secret)) || "";
+  if (key !== SECRET) return out({ ok: false, error: "bad-secret (주소 끝에 ?k=비밀키 를 붙이세요)" });
+
+  // 무엇이 왔는지 항상 남긴다. 형식을 모르는 채로 시작하기 때문에 이게 유일한 단서다
+  const seen = { at: new Date().toISOString(), raw: String(raw).slice(0, 4000),
+                 query: (e && e.parameter) || {} };
+  try { setMeta("_hook", seen); } catch (x) { /* 로그 실패가 본 작업을 막지는 않게 */ }
+
+  const steps = Math.round(findNum(body, ["steps", "stepcount", "step_count", "totalsteps", "count", "value", "total"]));
+  if (!(steps > 0)) return out({ ok: false, error: "걸음수를 못 찾았습니다", got: seen.raw.slice(0, 300) });
+
+  const ds = findDate(body) || todayKst();
+  const act = getAllMeta().act || {};
+  const day = act[ds] || {};
+  day.steps = steps;
+  delete day.rest;                       // 걸음이 있으면 완전휴식이 아니다
+  act[ds] = day;
+  setMeta("act", act);
+  return out({ ok: true, date: ds, steps: steps });
+}
+// 중첩된 객체 어디에 숨어 있어도 찾아낸다 (앱마다 모양이 다르다)
+function findNum(o, names) {
+  let best = 0;
+  (function walk(v) {
+    if (v === null || typeof v !== "object") return;
+    Object.keys(v).forEach(function (k) {
+      const low = String(k).toLowerCase().replace(/[^a-z]/g, "");
+      const val = v[k];
+      if (names.indexOf(low) >= 0) {
+        const n = typeof val === "number" ? val : parseFloat(val);
+        if (!isNaN(n) && n > best) best = n;
+      }
+      walk(val);
+    });
+  })(o);
+  return best;
+}
+// YYYY-MM-DD 를 아무 문자열 값에서나 뽑는다
+function findDate(o) {
+  let found = "";
+  (function walk(v) {
+    if (v === null || found) return;
+    if (typeof v === "string") {
+      const m = v.match(/\d{4}-\d{2}-\d{2}/);
+      if (m) found = m[0];
+      return;
+    }
+    if (typeof v === "object") Object.keys(v).forEach(function (k) { walk(v[k]); });
+  })(o);
+  return found;
+}
+function todayKst() {
+  return Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd");
 }
 
 // 브라우저에서 URL 을 그냥 열었을 때 살아있는지 확인용 (데이터는 주지 않음)
