@@ -66,21 +66,33 @@ try {
 // setMeta 는 닿았는데 그 뒤 add 가 죽으면 위의 "남은 id" 검사는 통과해버린다.
 // 그래서 마지막 항목이 건드린 날짜의 실제 시트 기록을 찍어서 눈으로 확인한다.
 try {
-  const days = await page.evaluate(async () => {
+  const chk = await page.evaluate(async () => {
     const box = await (await fetch("./inbox.json", { cache: "no-store" })).json();
     const items = (box && box.items) || [];
     const last = items[items.length - 1] || {};
-    const ds = [...new Set([...(last.food || []).map(f => f.date),
+    const want = (last.food || []).map(f => ({ d: f.date, n: f.name }));
+    const ds = [...new Set([...want.map(w => w.d),
                             ...Object.keys(last.act || {})])].filter(Boolean);
-    return ds.map(d => ({
-      d,
-      rows: (cache[d] || []).map(x => `${mealOf(x)} · ${x.name} — ${Math.round(+x.kcal || 0)}kcal`),
-      kcal: Math.round((totals(cache[d] || []) || {}).kcal || 0),
-    }));
+    return {
+      id: last.id || "",
+      missing: want.filter(w => !(cache[w.d] || []).some(x => x.name === w.n))
+                   .map(w => `${w.d} · ${w.n}`),
+      days: ds.map(d => ({
+        d,
+        rows: (cache[d] || []).map(x => `${mealOf(x)} · ${x.name} — ${Math.round(+x.kcal || 0)}kcal`),
+        kcal: Math.round((totals(cache[d] || []) || {}).kcal || 0),
+      })),
+    };
   });
-  for (const x of days)
+  for (const x of chk.days)
     logs.push(`[시트] ${x.d} — ${x.rows.length}줄 · 합계 ${x.kcal}kcal\n  `
               + (x.rows.join("\n  ") || "(비어 있음)"));
+  // 마지막 항목은 뒤에서 지우는 지시가 있을 수 없다. 그 음식 줄이 시트에 없으면
+  // id 만 등록되고 내용은 빠진 상태다 — 조용히 넘기면 하루치가 통째로 사라진다
+  if (chk.missing.length) {
+    logs.push(`[빠짐] ${chk.id} 의 음식이 시트에 없다:\n  ` + chk.missing.join("\n  "));
+    code = 1;
+  }
 } catch (e) { logs.push("[시트 확인 실패] " + (e && e.message || e)); }
 
 await browser.close();

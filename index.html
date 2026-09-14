@@ -3072,12 +3072,27 @@ function unmarkInboxDone(id) {
   save("dt_calc", calc); save("dt_inbox_done", all);
   if (cfg) setMeta("calc", calc);
 }
+// setMeta 가 실패로 돌아와도 시트에는 실제로 들어가 있을 수 있다 —
+// 요청은 닿았는데 응답만 404 나 타임아웃으로 깨진 경우다. 그걸 곧이곧대로 실패로
+// 믿으면 최악의 상태가 된다: id 는 시트에 "적용 완료" 로 박혀 있는데 음식은 안 들어갔고,
+// 그 id 는 다시 시도되지도 않는다. 실제로 한 번 그렇게 하루치가 통째로 비었다.
+// 그래서 실패했을 때 시트를 한 번 되읽어 진짜로 안 들어갔는지 확인한다.
+async function inboxIdOnSheet(id) {
+  try {
+    const t = todayStr();
+    const r = await api({ action: "list", from: t, to: t });
+    const a = r && r.calc && Array.isArray(r.calc.inbox) ? r.calc.inbox : [];
+    return a.indexOf(id) >= 0;
+  } catch (e) { return false; }
+}
 async function markInboxDone(ids) {
   const cur = inboxDone();
   const all = cur.concat(ids.filter(x => cur.indexOf(x) < 0)).slice(-300);
   const next = { ...calc, inbox: all };
-  // 시트에 못 올렸으면 로컬에도 남기지 않는다 — 남기면 이 기기에서 영영 반영되지 않는다
-  if (cfg && !(await setMeta("calc", next))) return false;
+  // 시트에 못 올렸으면 로컬에도 남기지 않는다 — 남기면 이 기기에서 영영 반영되지 않는다.
+  // 단, 되읽어서 이미 올라가 있으면 올라간 것이다. 그대로 진행해야 음식이 들어간다
+  if (cfg && !(await setMeta("calc", next))
+           && !(await inboxIdOnSheet(ids[ids.length - 1]))) return false;
   calc = next; save("dt_calc", calc); save("dt_inbox_done", all);
   return true;
 }
