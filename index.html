@@ -3396,11 +3396,22 @@ async function applyPayload(o) {
     if (ibLast && ibLast.after !== ibLast.before)
       done.push(`   ${ibLast.from} 기준 목표 ${num(ibLast.before)} → ${num(ibLast.after)}kcal`);
   } else if (ibSkip) done.push(`인바디 ${ibSkip}건 (이미 있음)`);
-  // 식단도 중복 방지 — 같은 날짜·끼니에 같은 이름·열량이 이미 있으면 건너뛴다
-  // (링크를 두 번 눌러도 두 번 기록되지 않게)
+  // 식단 중복 방지 — 같은 날짜·끼니에 같은 이름·열량이 이미 있으면 건너뛴다.
+  // 판단 기준은 로컬 캐시가 아니라 **지금 시트에 있는 것**이다. 캐시는 부팅 때
+  // 한 번 받아온 스냅샷이라, 폰·PC·액션이 같은 지시를 비슷한 시각에 집으면
+  // 셋 다 "아직 없네" 로 보고 각자 넣는다 — 실제로 약과가 세 줄 들어갔다.
+  // 등록(markInboxDone)이 적용 뒤로 옮겨지면서 그 창이 더 넓어졌다.
   let skipped = 0;
-  for (const it of (o.food || [])) {
-    if (!it || !it.name) continue;
+  const foods = (o.food || []).filter(it => it && it.name);
+  for (const d of [...new Set(foods.map(it => it.date || todayStr()))]) {
+    if (!cfg) break;
+    try {
+      const r = await api({ action: "list", from: d, to: d });
+      cache[d] = (r.items || []).filter(x => x.date === d);
+      save("dt_cache", cache);
+    } catch (e) { /* 못 읽으면 캐시로 간다 — 넣는 것 자체를 막지는 않는다 */ }
+  }
+  for (const it of foods) {
     const d = it.date || todayStr(), m = mealOf({ meal: it.meal || guessMeal() });
     if (dayLog(d).some(x => mealOf(x) === m && x.name === it.name
                             && Math.abs((+x.kcal || 0) - (+it.kcal || 0)) < 1)) { skipped++; continue; }
