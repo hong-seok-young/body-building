@@ -3354,6 +3354,25 @@ function stale(o, cur) {
 // 실제 반영. 삭제 → 인바디 → 식단 → 프리셋 → 목표/설정 순서
 async function applyPayload(o) {
   const done = [];
+  // 이 지시가 건드릴 날짜는 먼저 시트에서 다시 읽는다. 캐시는 부팅 때 떠온
+  // 스냅샷이라 다른 기기가 방금 넣은 줄을 모른다 — 폰·PC·액션이 같은 지시를
+  // 비슷한 시각에 집으면 셋 다 "아직 없네" 로 보고 각자 넣는다 (약과가 세 줄
+  // 들어갔다).
+  //
+  // 반드시 **지우기보다 앞에서** 읽어야 한다. 뒤에서 읽으면 방금 낸 삭제가 아직
+  // 시트에 안 닿아서(delItem 은 응답을 안 기다린다) 지운 줄이 그대로 돌아오고,
+  // 정정 지시의 "다시 넣기" 를 중복으로 보고 건너뛴다. 실제로 그렇게 깨졌다.
+  if (cfg) {
+    const days = [...new Set([...(o.del || []), ...(o.food || [])]
+      .filter(x => x && x.name).map(x => x.date || todayStr()))];
+    for (const d of days) {
+      try {
+        const r = await api({ action: "list", from: d, to: d });
+        cache[d] = (r.items || []).filter(x => x.date === d);
+      } catch (e) { /* 못 읽으면 캐시로 간다 — 넣는 것 자체를 막지는 않는다 */ }
+    }
+    if (days.length) save("dt_cache", cache);
+  }
   // 삭제를 먼저 처리한다 — 나중에 하면 방금 추가한 것을 지워버린다.
   // 정정할 때 잘못된 항목을 빼고 새 값을 넣는 걸 링크 하나로 하기 위한 것
   for (const d of (o.del || [])) {
@@ -3397,21 +3416,9 @@ async function applyPayload(o) {
       done.push(`   ${ibLast.from} 기준 목표 ${num(ibLast.before)} → ${num(ibLast.after)}kcal`);
   } else if (ibSkip) done.push(`인바디 ${ibSkip}건 (이미 있음)`);
   // 식단 중복 방지 — 같은 날짜·끼니에 같은 이름·열량이 이미 있으면 건너뛴다.
-  // 판단 기준은 로컬 캐시가 아니라 **지금 시트에 있는 것**이다. 캐시는 부팅 때
-  // 한 번 받아온 스냅샷이라, 폰·PC·액션이 같은 지시를 비슷한 시각에 집으면
-  // 셋 다 "아직 없네" 로 보고 각자 넣는다 — 실제로 약과가 세 줄 들어갔다.
-  // 등록(markInboxDone)이 적용 뒤로 옮겨지면서 그 창이 더 넓어졌다.
+  // 판단 기준이 되는 캐시는 이 함수 맨 앞에서 시트로부터 다시 채워둔 것이다.
   let skipped = 0;
-  const foods = (o.food || []).filter(it => it && it.name);
-  for (const d of [...new Set(foods.map(it => it.date || todayStr()))]) {
-    if (!cfg) break;
-    try {
-      const r = await api({ action: "list", from: d, to: d });
-      cache[d] = (r.items || []).filter(x => x.date === d);
-      save("dt_cache", cache);
-    } catch (e) { /* 못 읽으면 캐시로 간다 — 넣는 것 자체를 막지는 않는다 */ }
-  }
-  for (const it of foods) {
+  for (const it of (o.food || []).filter(x => x && x.name)) {
     const d = it.date || todayStr(), m = mealOf({ meal: it.meal || guessMeal() });
     if (dayLog(d).some(x => mealOf(x) === m && x.name === it.name
                             && Math.abs((+x.kcal || 0) - (+it.kcal || 0)) < 1)) { skipped++; continue; }
