@@ -4,16 +4,17 @@
  * 설치 방법은 SETUP.md 참고. 요약:
  *   1) 구글 시트 새로 만들기 → 확장 프로그램 → Apps Script
  *   2) 이 파일 내용을 전부 붙여넣기
- *   3) 아래 SECRET 을 본인이 정한 긴 문자열로 바꾸기
- *   4) 배포 → 새 배포 → 유형 "웹 앱" / 실행 계정 "나" / 액세스 "모든 사용자"
- *   5) 나온 URL 과 SECRET 을 앱 ⚙️ 설정에 입력
+ *   3) 배포 → 새 배포 → 유형 "웹 앱" / 실행 계정 "나" / 액세스 "모든 사용자"
+ *   4) 나온 URL 과 SECRET 을 앱 ⚙️ 설정에 입력
  *
- * ⚠️ 액세스가 "모든 사용자"라서 URL 을 아는 사람은 누구나 요청을 보낼 수 있습니다.
- *    실제 방어는 SECRET 하나뿐이니, 길고 추측 불가능한 값으로 바꾸고
- *    URL·SECRET 을 공개 저장소나 채팅에 올리지 마세요.
- *    (이 파일은 템플릿이므로 아래 값을 그대로 쓰면 안 됩니다.)
+ * 항목(컬럼)을 늘린 뒤에는 이 파일을 다시 붙여넣고 **배포 → 배포 관리 → 새 버전**
+ * 까지 눌러야 반영됩니다. 앱이 쓰는 /exec 주소는 배포된 버전에 고정돼 있어서,
+ * 저장만 하면 시트에 열이 안 붙고 새 값이 조용히 버려집니다.
+ *
+ * SECRET 은 앱(index.html) 의 BUILTIN_CFG 와 같은 값이어야 합니다. 이 저장소는
+ * 공개지만 담기는 건 내 식단 기록뿐이라, 어디서나 바로 쓰려고 일부러 같이 둡니다.
  */
-const SECRET = "여기에-본인이-정한-긴-비밀키-넣기";
+const SECRET = "wlsrur93";
 
 // 시트 이름과 컬럼. 컬럼을 추가하고 싶으면 여기에 이름만 넣으면 되고,
 // 읽기/쓰기는 헤더 기준으로 자동 매핑되므로 아래 코드는 고칠 필요가 없습니다.
@@ -39,9 +40,7 @@ function doPost(e) {
     const raw = (e && e.postData && e.postData.contents) || "";
     let req = null;
     try { req = JSON.parse(raw); } catch (x) { req = null; }
-    // 외부 웹훅(삼성헬스 → Health Connect → 웹훅 앱)은 우리 형식을 모른다.
-    // action 이 없으면 걸음수 웹훅으로 보고 따로 받는다. 비밀키는 주소의 ?k= 로 받는다
-    if (!req || !req.action) return hookSteps(e, raw, req);
+    if (!req || !req.action) return out({ ok: false, error: "no-action" });
     if (req.secret !== SECRET) return out({ ok: false, error: "bad-secret" });
 
     const type = req.type === "inbody" ? "inbody" : "food";
@@ -59,69 +58,6 @@ function doPost(e) {
   } catch (err) {
     return out({ ok: false, error: String(err && err.message || err) });
   }
-}
-
-// ── 걸음수 웹훅 ──────────────────────────────────────────────────────
-// 삼성헬스는 외부에 주는 웹 API 가 없다. 대신 걸음수를 Health Connect 로 넘기고,
-// "Health Connect Webhook" 같은 폰 앱이 그걸 아무 주소로나 POST 해준다.
-// 그 앱이 어떤 모양으로 보낼지는 정해져 있지 않아서 관대하게 받는다 —
-// 숫자만 찾아내고, 원문은 meta 의 _hook 에 남겨서 나중에 형식을 맞출 수 있게 한다.
-//
-// 주소: .../exec?k=<SECRET>          (헤더를 못 넣는 앱이 많아 쿼리로 받는다)
-function hookSteps(e, raw, body) {
-  const key = (e && e.parameter && (e.parameter.k || e.parameter.secret)) || "";
-  if (key !== SECRET) return out({ ok: false, error: "bad-secret (주소 끝에 ?k=비밀키 를 붙이세요)" });
-
-  // 무엇이 왔는지 항상 남긴다. 형식을 모르는 채로 시작하기 때문에 이게 유일한 단서다
-  const seen = { at: new Date().toISOString(), raw: String(raw).slice(0, 4000),
-                 query: (e && e.parameter) || {} };
-  try { setMeta("_hook", seen); } catch (x) { /* 로그 실패가 본 작업을 막지는 않게 */ }
-
-  const steps = Math.round(findNum(body, ["steps", "stepcount", "step_count", "totalsteps", "count", "value", "total"]));
-  if (!(steps > 0)) return out({ ok: false, error: "걸음수를 못 찾았습니다", got: seen.raw.slice(0, 300) });
-
-  const ds = findDate(body) || todayKst();
-  const act = getAllMeta().act || {};
-  const day = act[ds] || {};
-  day.steps = steps;
-  delete day.rest;                       // 걸음이 있으면 완전휴식이 아니다
-  act[ds] = day;
-  setMeta("act", act);
-  return out({ ok: true, date: ds, steps: steps });
-}
-// 중첩된 객체 어디에 숨어 있어도 찾아낸다 (앱마다 모양이 다르다)
-function findNum(o, names) {
-  let best = 0;
-  (function walk(v) {
-    if (v === null || typeof v !== "object") return;
-    Object.keys(v).forEach(function (k) {
-      const low = String(k).toLowerCase().replace(/[^a-z]/g, "");
-      const val = v[k];
-      if (names.indexOf(low) >= 0) {
-        const n = typeof val === "number" ? val : parseFloat(val);
-        if (!isNaN(n) && n > best) best = n;
-      }
-      walk(val);
-    });
-  })(o);
-  return best;
-}
-// YYYY-MM-DD 를 아무 문자열 값에서나 뽑는다
-function findDate(o) {
-  let found = "";
-  (function walk(v) {
-    if (v === null || found) return;
-    if (typeof v === "string") {
-      const m = v.match(/\d{4}-\d{2}-\d{2}/);
-      if (m) found = m[0];
-      return;
-    }
-    if (typeof v === "object") Object.keys(v).forEach(function (k) { walk(v[k]); });
-  })(o);
-  return found;
-}
-function todayKst() {
-  return Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd");
 }
 
 // 브라우저에서 URL 을 그냥 열었을 때 살아있는지 확인용 (데이터는 주지 않음)
