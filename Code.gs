@@ -23,7 +23,10 @@ const SHEETS = {
   //  sat 포화지방 / trans 트랜스지방 / chol 콜레스테롤 / fib 식이섬유
   food:   ["id", "date", "meal", "name", "kcal", "p", "c", "f", "na", "fib", "sug", "sat", "trans", "chol"],
   // pa = 위상각(Phase Angle). 수분 이동에 안 흔들려서 진짜 근손실인지 가리는 값
-  inbody: ["id", "date", "weight", "smm", "bfm", "pbf", "bmi", "bmr", "score", "pa", "note"],
+  //  pa 위상각 / ecw 세포외수분비 / vfl 내장지방레벨
+  //  tbw 체수분 / prot 단백질 / min 무기질 — 셋에 체지방량을 더하면 체중이 된다
+  inbody: ["id", "date", "weight", "smm", "bfm", "pbf", "bmi", "bmr", "score",
+           "tbw", "prot", "min", "pa", "ecw", "vfl", "note"],
   meta:   ["key", "value"],
 };
 // list 응답에 함께 실어 보낼 meta 키 (앱이 기대하는 것)

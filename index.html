@@ -561,18 +561,8 @@
 <!-- ══════════ 인바디 ══════════ -->
 <section id="section-inbody" style="display:none">
   <div class="card" id="ibLatest"></div>
-  <div class="card">
-    <h3>체성분 추세 <span class="muted">체중·제지방량·골격근량·체지방량 kg</span></h3>
-    <canvas id="ibChart1"></canvas>
-    <div class="chklegend" id="ibLeg1"></div>
-    <div class="empty" id="ibChartEmpty">기록이 없어요</div>
-  </div>
-  <div class="card" id="ibCard2"><h3>체지방률 · BMI 추세</h3><canvas id="ibChart2"></canvas>
-    <div class="chklegend" id="ibLeg2"></div></div>
-  <div class="card" id="ibCard3">
-    <h3>나머지 항목 <span class="muted">눈금이 달라 따로 그린다</span></h3>
-    <div class="minis" id="ibMinis"></div>
-  </div>
+  <div id="ibCharts"></div>
+  <div class="card" id="ibChartEmpty"><div class="empty">기록이 없어요</div></div>
   <div class="card">
     <h3>기록 <span class="muted" id="ibCount"></span></h3>
     <table><thead><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방</th><th>체지방률</th><th>위상각</th><th>BMR</th></tr></thead>
@@ -591,17 +581,7 @@
   <div class="modal">
     <h3 id="ibFormTitle">인바디 기록 추가</h3>
     <form onsubmit="addInbody(event)">
-      <div class="fields g2">
-        <label>날짜<input type="date" id="ibDate"></label>
-        <label>체중 (kg)<input type="number" step="any" min="0" id="ibW" placeholder="필수" required></label>
-        <label>골격근량 (kg)<input type="number" step="any" min="0" id="ibS" placeholder="SMM"></label>
-        <label>체지방량 (kg)<input type="number" step="any" min="0" id="ibBfm"></label>
-        <label>체지방률 (%)<input type="number" step="any" min="0" id="ibPbf"></label>
-        <label>BMI<input type="number" step="any" min="0" id="ibBmi"></label>
-        <label>기초대사량 (kcal)<input type="number" step="any" min="0" id="ibBmr" placeholder="열량 계산에 사용"></label>
-        <label>인바디 점수<input type="number" step="any" min="0" id="ibScore"></label>
-        <label>위상각 (°)<input type="number" step="any" min="0" id="ibPa" placeholder="Phase Angle"></label>
-      </div>
+      <div class="fields g2" id="ibFields"></div>
       <div class="fields" style="margin-top:9px"><label>메모<input id="ibNote" placeholder="선택"></label></div>
       <div class="hint">기초대사량과 체중이 들어가면 <b>열량 탭이 자동으로 다시 계산됩니다.</b></div>
       <div class="btns mt">
@@ -1016,8 +996,8 @@ function toggleBurn() { burnOpen = !burnOpen; save("dt_burn_open", burnOpen); re
 let calcOpen = load("dt_calc_open", false);   // 요약 카드의 계산 근거를 펼쳤나
 let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
-let weekChart = null, monthChart = null, ibChart1 = null, ibChart2 = null;
-let ibMiniCharts = [];                 // 인바디 개별 항목 작은 그래프들 (개수가 항목에 따라 변한다)
+let weekChart = null, monthChart = null;
+let ibChartObjs = [];                  // 인바디 그래프들 — 기록에 있는 항목만 그려서 개수가 변한다
 let mealOpen = {};
 let mealFormOpen = null;                      // 인라인 음식추가 폼이 열린 끼니
 let rowEdit = null;                           // 수량 정정 중인 항목 id
@@ -1085,7 +1065,7 @@ function toggleSeries(id, i) {
   }
   render();                                          // 등록 전이거나 Chart.js 가 없으면 평소대로
 }
-const legendIdOf = id => ({ ibChart1: "ibLeg1", ibChart2: "ibLeg2" }[id] || id + "Leg");
+const legendIdOf = id => id + "Leg";
 // 범례를 체크박스로 직접 그린다 (Chart.js 기본 범례는 끈 계열에 취소선만 긋는다)
 function drawLegend(legEl, chart, id) {
   if (!legEl) return;
@@ -2802,19 +2782,33 @@ function renderCal() {
 // 인바디 항목을 한 곳에 모아둔다 — 타일·그래프·CSV 가 전부 여기서 나온다.
 // 항목을 하나 늘리려면 이 줄 하나만 추가하면 된다.
 //   d: 좋은 방향 (up 오를수록 / dn 내릴수록 / n 판정 안 함)
-//   g: 어느 그래프에 실을지 (kg 체성분판 / idx 지수판 / solo 각자 작은 그래프)
 //   p: 소수점 자리 (기본 1). 위상각은 5.9↔6.1 이 전부라 자리를 버리면 아무것도 안 보인다
+//   un: 입력칸에 쓸 단위 (없으면 u 를 쓴다) · t: 작은 그래프 제목
 const IB_M = [
-  { k: "weight", l: "체중",       u: "kg", c: "#2563eb", d: "n",  g: "kg" },
-  { k: "ffm",    l: "제지방량",   u: "kg", c: "#0ea5e9", d: "up", g: "kg" },
-  { k: "smm",    l: "골격근량",   u: "kg", c: "#16a34a", d: "up", g: "kg" },
-  { k: "bfm",    l: "체지방량",   u: "kg", c: "#f59e0b", d: "dn", g: "kg" },
-  { k: "pbf",    l: "체지방률",   u: "%",  c: "#ef4444", d: "dn", g: "idx" },
-  { k: "bmi",    l: "BMI",        u: "",   c: "#8b5cf6", d: "dn", g: "idx" },
-  { k: "bmr",    l: "기초대사량", u: "",   c: "#d946ef", d: "up", g: "solo", p: 0, t: "기초대사량 (kcal)" },
-  { k: "score",  l: "인바디점수", u: "",   c: "#0891b2", d: "up", g: "solo", p: 0, t: "인바디 점수" },
-  { k: "pa",     l: "위상각",     u: "°",  c: "#7c3aed", d: "up", g: "solo", t: "위상각 (°)" },
+  { k: "weight", l: "체중",         u: "kg", c: "#2563eb", d: "n"  },
+  { k: "ffm",    l: "제지방량",     u: "kg", c: "#0ea5e9", d: "up" },
+  { k: "smm",    l: "골격근량",     u: "kg", c: "#16a34a", d: "up" },
+  { k: "bfm",    l: "체지방량",     u: "kg", c: "#f59e0b", d: "dn" },
+  { k: "tbw",    l: "체수분",       u: "L",  c: "#0284c7", d: "up" },
+  { k: "prot",   l: "단백질",       u: "kg", c: "#059669", d: "up" },
+  { k: "min",    l: "무기질",       u: "kg", c: "#a16207", d: "up", p: 2 },
+  { k: "pbf",    l: "체지방률",     u: "%",  c: "#ef4444", d: "dn" },
+  { k: "bmi",    l: "BMI",          u: "",   c: "#8b5cf6", d: "dn" },
+  { k: "bmr",    l: "기초대사량",   u: "",   c: "#d946ef", d: "up", p: 0, un: "kcal", t: "기초대사량 (kcal)" },
+  { k: "score",  l: "인바디점수",   u: "",   c: "#0891b2", d: "up", p: 0, t: "인바디 점수" },
+  { k: "pa",     l: "위상각",       u: "°",  c: "#7c3aed", d: "up", t: "위상각 (°)" },
+  { k: "ecw",    l: "세포외수분비", u: "",   c: "#db2777", d: "dn", p: 3, t: "세포외수분비 (ECW/TBW)" },
+  { k: "vfl",    l: "내장지방레벨", u: "",   c: "#ea580c", d: "dn", p: 0, t: "내장지방레벨" },
 ];
+// 한 판에 같이 그릴 항목들. 눈금이 비슷한 것끼리만 묶는다 —
+// 자릿수가 다른 값이 끼면 작은 쪽이 바닥에 눌어붙어 움직임이 안 보인다.
+const IB_CHARTS = [
+  { id: "ibcBody", t: "체성분 추세",   sub: "kg",                  keys: ["weight", "ffm", "smm", "bfm"] },
+  { id: "ibcComp", t: "몸을 이루는 것", sub: "넷을 더하면 체중이다", keys: ["tbw", "prot", "min", "bfm"] },
+  { id: "ibcIdx",  t: "체지방률 · BMI", sub: "",                    keys: ["pbf", "bmi"] },
+];
+const IB_SOLO = ["bmr", "score", "pa", "ecw", "vfl"];   // 각자 제 눈금으로 따로
+const ibM = k => IB_M.find(m => m.k === k);
 // 74.4 옆에 24 가 서면 같은 단위로 안 보인다 — 항목마다 자릿수를 고정한다
 const ibFmt = (m, v) => (+v || 0).toFixed(m.p == null ? 1 : m.p);
 // 제지방량은 재는 값이 아니라 체중 − 체지방량이다. 인바디가 체지방량을 안 주면 모른다.
@@ -2828,14 +2822,22 @@ let actBase = 0;                       // 활동 팝업을 열 때의 초과분 
 let ibAll = false, ibEdit = null;      // ibEdit: 수정 중인 기록 id
 function toggleIbAll() { ibAll = !ibAll; render(); }
 // id 를 주면 그 기록 수정, 안 주면 새로 추가
+// 입력칸을 IB_M 에서 만든다 — 항목을 늘릴 때 고칠 곳이 한 군데로 모인다.
+// 제지방량은 체중 − 체지방량이라 받을 칸이 없다.
+const ibInputs = () => IB_M.filter(m => m.k !== "ffm");
+const ibIn = k => document.getElementById("ibf_" + k);
 function openIb(id) {
   const r = id ? inbody.find(x => x.id === id) : null;
   ibEdit = r ? r.id : null;
-  ibDate.value = r ? r.date : todayStr();
-  const v = k => (r && +r[k] > 0 ? r[k] : "");
-  ibW.value = v("weight"); ibS.value = v("smm"); ibBfm.value = v("bfm");
-  ibPbf.value = v("pbf"); ibBmi.value = v("bmi"); ibBmr.value = v("bmr");
-  ibScore.value = v("score"); ibPa.value = v("pa"); ibNote.value = r && r.note || "";
+  ibFields.innerHTML = `<label>날짜<input type="date" id="ibf_date"></label>`
+    + ibInputs().map(m => {
+      const un = m.un != null ? m.un : m.u;
+      return `<label>${m.l}${un ? ` (${un})` : ""}<input type="number" step="any" min="0" id="ibf_${m.k}"${
+        m.k === "weight" ? ` placeholder="필수" required` : ""}></label>`;
+    }).join("");
+  ibIn("date").value = r ? r.date : todayStr();
+  ibInputs().forEach(m => ibIn(m.k).value = r && +r[m.k] > 0 ? r[m.k] : "");
+  ibNote.value = r && r.note || "";
   ibFormTitle.textContent = r ? `${r.date} 기록 수정` : "인바디 기록 추가";
   ibSubmit.textContent = r ? "저장" : "기록 추가";
   ibDelRow.hidden = !r;
@@ -2853,9 +2855,8 @@ async function askDelInbody() {
 }
 async function addInbody(e) {
   e.preventDefault();
-  const item = { date: ibDate.value || todayStr(), weight: +ibW.value || 0, smm: +ibS.value || 0,
-    bfm: +ibBfm.value || 0, pbf: +ibPbf.value || 0, bmi: +ibBmi.value || 0, bmr: +ibBmr.value || 0,
-    score: +ibScore.value || 0, pa: +ibPa.value || 0, note: ibNote.value.trim() };
+  const item = { date: ibIn("date").value || todayStr(), note: ibNote.value.trim() };
+  ibInputs().forEach(m => item[m.k] = +ibIn(m.k).value || 0);
   const editing = ibEdit;
   closeIb();
   // 수정은 지우고 다시 넣는다 (백엔드에 update 액션이 없다).
@@ -2965,15 +2966,13 @@ function renderInbody() {
   } else ibLatest.innerHTML = `<div class="empty">아직 인바디 기록이 없어요. 위에서 첫 기록을 추가해보세요.</div>`;
 
   const labels = recs.map(r => r.date.slice(5).replace("-", "/"));
-  ibChartEmpty.style.display = recs.length ? "none" : "block";
+  ibChartEmpty.hidden = recs.length > 0;
   const full = recs.map(r => r.date);                 // 툴팁에는 연도까지 보여준다
   const ds = m => ({ label: m.l, unit: m.u, dec: m.p == null ? 1 : m.p, data: recs.map(r => ibVal(r, m.k) || null),
     borderColor: m.c, backgroundColor: m.c, spanGaps: true, tension: .3, pointRadius: 3, pointHitRadius: 12 });
   const has = m => recs.some(r => ibVal(r, m.k) > 0);      // 한 번도 안 잰 항목은 그리지 않는다
-  if (ibChart1) { ibChart1.destroy(); ibChart1 = null; }
-  if (ibChart2) { ibChart2.destroy(); ibChart2 = null; }
-  ibMiniCharts.forEach(c => c && c.destroy && c.destroy());
-  ibMiniCharts = [];
+  ibChartObjs.forEach(c => c && c.destroy && c.destroy());
+  ibChartObjs = [];
   // 점을 정확히 짚지 않아도 그 세로줄 전체가 잡히게 한다 (index + intersect:false).
   // 손가락으로 좌우로 끌면 툴팁과 세로선이 따라온다.
   const optOf = (id, dec) => ({
@@ -2989,30 +2988,41 @@ function renderInbody() {
     scales: { y: { grid: { color: "rgba(148,163,184,.18)" }, ...(dec === 0 ? { ticks: { precision: 0 } } : {}) },
               x: { grid: { display: false } } },
   });
-  const build = (id, sets) => {
-    const c = newChart(document.getElementById(id), { type: "line",
-      data: { labels, datasets: sets.map((d, i) => ({ ...d, hidden: seriesOff(id, i) })) }, options: optOf(id) });
-    chartReg[id] = c;
-    drawLegend(document.getElementById(legendIdOf(id)), c, id);
-    return c;
-  };
-  const grp = g => IB_M.filter(m => m.g === g && has(m));
-  const kg = grp("kg"), idx = grp("idx"), solo = grp("solo");
-  if (recs.length && kg.length) ibChart1 = build("ibChart1", kg.map(ds));
-  else { document.getElementById("ibChart1").style.display = "none"; ibLeg1.innerHTML = ""; }
-  ibCard2.hidden = !(recs.length && idx.length);
-  if (!ibCard2.hidden) ibChart2 = build("ibChart2", idx.map(ds));
-  else ibLeg2.innerHTML = "";
+  // 한 번도 안 잰 항목은 카드째 안 만든다 — 빈 그래프가 자리만 차지한다.
+  // 그래서 카드를 고정 마크업으로 두지 않고 여기서 통째로 그려 넣는다.
+  const cur = recs[recs.length - 1];
+  // 체지방량은 두 판에 다 든다. 체수분·단백질·무기질을 아직 안 넣었으면 "몸을
+  // 이루는 것" 판에 체지방량 하나만 남는데, 그건 위 판에 이미 있는 선이다 —
+  // 앞 판에 다 나온 항목뿐인 판은 만들지 않는다.
+  const drawn = [];
+  const grps = !recs.length ? [] : IB_CHARTS
+    .map(g => ({ ...g, ms: g.keys.map(ibM).filter(has) }))
+    .filter(g => {
+      if (!g.ms.some(m => drawn.indexOf(m.k) < 0)) return false;
+      g.ms.forEach(m => drawn.push(m.k));
+      return true;
+    });
+  const solo = recs.length ? IB_SOLO.map(ibM).filter(has) : [];
+  ibCharts.innerHTML = grps.map(g => `<div class="card"><h3>${g.t}${
+      g.sub ? ` <span class="muted">${g.sub}</span>` : ""}</h3>
+    <canvas id="${g.id}"></canvas><div class="chklegend" id="${g.id}Leg"></div></div>`).join("")
+    + (solo.length ? `<div class="card"><h3>나머지 항목 <span class="muted">눈금이 달라 따로 그린다</span></h3>
+      <div class="minis">` + solo.map(m => `<div class="mini"><h4>${m.t || m.l}<b>${
+        ibFmt(m, ibVal(cur, m.k))}${m.u}</b></h4><canvas id="ibMini_${m.k}"></canvas></div>`).join("")
+      + `</div></div>` : "");
 
-  // 기초대사량(≈2000) · 인바디점수(≈80) · 위상각(≈6) 은 자릿수가 달라 한 판에 겹치면
-  // 작은 값이 바닥에 눌어붙어 움직임이 안 보인다. 각자 제 눈금으로 따로 그린다.
-  ibCard3.hidden = !(recs.length && solo.length);
-  ibMinis.innerHTML = solo.map(m => `<div class="mini"><h4>${m.t || m.l}<b>${
-    ibFmt(m, ibVal(recs[recs.length - 1], m.k))}${m.u}</b></h4><canvas id="ibMini_${m.k}"></canvas></div>`).join("");
+  grps.forEach(g => {
+    const c = newChart(document.getElementById(g.id), { type: "line",
+      data: { labels, datasets: g.ms.map((m, i) => ({ ...ds(m), hidden: seriesOff(g.id, i) })) },
+      options: optOf(g.id) });
+    chartReg[g.id] = c;
+    drawLegend(document.getElementById(legendIdOf(g.id)), c, g.id);
+    if (c) ibChartObjs.push(c);
+  });
   solo.forEach(m => {
     const c = newChart(document.getElementById("ibMini_" + m.k),
       { type: "line", data: { labels, datasets: [ds(m)] }, options: optOf("ibMini_" + m.k, m.p) });
-    if (c) ibMiniCharts.push(c);
+    if (c) ibChartObjs.push(c);
   });
 
   const rev = recs.slice().reverse();
