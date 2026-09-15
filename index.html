@@ -645,6 +645,9 @@
       <div id="aCp" style="display:contents"></div>
     </div>
     <div class="hint" id="aCardioInfo" style="margin-top:7px"></div>
+    <label style="display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12.5px">
+      <input type="checkbox" id="aRefeed" onchange="actLive()" style="width:auto;margin:0">
+      <span><b>리피드</b> — 이 날만 적자 0 (글리코겐 채우는 날)</span></label>
     <div class="hint" id="actInfo"></div>
     <div class="btns mt">
       <button class="btn" onclick="clearAct()">기본값으로</button>
@@ -1818,7 +1821,8 @@ function actLabel(a) {
   if (+a.wh) parts.push(`웨이트 ${durLabel(a.wh)}`);
   if (+a.ch) parts.push(`${cardioLabel(a.ci || calc.cI, a.cp)} ${durLabel(a.ch)}`);
   if (+a.xk) parts.push(`${a.xl || "추가"} (+${num(Math.round(a.xk))})`);
-  return parts.length ? parts.join(" · ") : "완전 휴식";
+  const base = parts.length ? parts.join(" · ") : "완전 휴식";
+  return a.refeed ? `${base} · 리피드(적자 0)` : base;
 }
 // 그날 활동으로 TDEE 를 잡는다. 기록이 없으면 평소 하루를 쓴다
 function dayTarget(ds) {
@@ -1828,7 +1832,17 @@ function dayTarget(ds) {
   const tdee = b.sed + (+a.steps || 0) * b.wt * STEP_K
              + burnLift(+a.wh || 0, b.wt) + burnCardio(+a.ch || 0, b.wt, a.ci, a.cp)
              + (+a.xk || 0);                     // 상쇄로 따로 쌓은 추가 소모
-  const m = macrosFor(floorBmr(tdee - calc.deficit, b.bmr), ds);
+  // 리피드 날은 그날만 적자를 0 으로 본다. 전역 적자를 건드리면 지난 날짜의
+  // 목표까지 다 바뀌고, 안 건드리면 리피드 날마다 "초과" 로 떠서 눈이 무뎌진다.
+  const base = macrosFor(floorBmr(tdee - calc.deficit, b.bmr), ds);
+  let m = base;
+  if (a.refeed) {
+    // 늘어난 열량을 탄단지가 비율대로 나눠 가지면 지방까지 같이 올라간다 —
+    // 그러면 정작 글리코겐이 덜 찬다. 리피드는 탄수를 사는 날이므로 지방은
+    // 평소 날 값에 묶어두고 남는 열량을 전부 탄수로 보낸다.
+    const kc = floorBmr(tdee, b.bmr);
+    m = { ...base, kcal: kc, c: Math.round((kc - base.p * 4 - base.f * 9) / 4) };
+  }
   return { ...goals, ...m, tdee, bmr: b.bmr, ibDate: b.ibDate,
            src: actLabel(a), adjusted: true, isDefault: !!a.def };
 }
@@ -1837,6 +1851,7 @@ function saveAct() {
   const ci = aCi.value, cp = readCardio("a_", ci);
   const old = act[curDate] || {};
   const a = { steps: +aSteps.value || 0, wh: m2h(aWh.value), ch: cardioHours(ci, cp, m2h(aCh.value)), ci, cp };
+  if (aRefeed.checked) a.refeed = 1;
   if (+old.xk) { a.xk = old.xk; a.xl = old.xl; }     // 상쇄로 쌓은 건 폼에 칸이 없다 — 지켜서 넘긴다
   if (!a.steps && !a.wh && !a.ch && !a.xk) act[curDate] = { ...a, rest: 1 }; else act[curDate] = a;
   closeAct(); pushAct();
@@ -1872,6 +1887,7 @@ function openAct() {
   const [aci, acp] = unLegacy(a.ci || calc.cI, a.cp);
   fillCardioSelect(aCi, aci);
   aSteps.value = a.steps || ""; aWh.value = h2m(a.wh); aCh.value = h2m(a.ch);
+  aRefeed.checked = !!a.refeed;
   aCp.innerHTML = cardioFieldsHtml("a_", aCi.value, cpOf(aCi.value, aci, acp));
   onCardioType("a", 1);
   const dd = defaultDay(curDate);
@@ -3435,6 +3451,7 @@ async function applyPayload(o) {
     if (!a) { delete act[ds]; done.push(`활동 ${ds} 지움`); continue; }
     const ci = a.ci || "", cp = a.cp || {};
     const e = { steps: +a.steps || 0, wh: +a.wh || 0, ch: cardioHours(ci, cp, +a.ch || 0), ci, cp };
+    if (a.refeed) e.refeed = 1;
     act[ds] = (!e.steps && !e.wh && !e.ch) ? { ...e, rest: 1 } : e;
     done.push(`활동 ${ds} · 걸음 ${num(e.steps)}${e.wh ? ` · 웨이트 ${durLabel(e.wh)}` : ""}`
       + (e.ch ? ` · ${cardioLabel(ci, cp)}` : ""));
