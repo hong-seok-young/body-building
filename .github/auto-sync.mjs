@@ -73,8 +73,24 @@ try {
     const want = (last.food || []).map(f => ({ d: f.date, n: f.name }));
     const ds = [...new Set([...want.map(w => w.d),
                             ...Object.keys(last.act || {})])].filter(Boolean);
+    // 인바디는 백엔드가 헤더에 없는 칸을 조용히 버린다 — 백엔드를 다시 배포하기
+    // 전에 새 항목을 넣으면 "반영 완료" 도장만 찍히고 값은 어디에도 안 남는다.
+    // 그래서 시트에서 다시 읽어 넣으려던 값이 실제로 거기 있는지 본다.
+    const ibMissing = [];
+    if ((last.inbody || []).length) {
+      await syncInbody();
+      for (const w of last.inbody) {
+        const r = inbody.find(x => x.date === w.date) || {};
+        for (const k of Object.keys(w)) {
+          if (k === "date" || k === "id" || !(+w[k] > 0)) continue;
+          if (+r[k] !== +w[k])
+            ibMissing.push(`${w.date} · ${k} = ${w[k]} (시트: ${r[k] === undefined ? "칸 자체가 없음" : r[k]})`);
+        }
+      }
+    }
     return {
       id: last.id || "",
+      ibMissing,
       missing: want.filter(w => !(cache[w.d] || []).some(x => x.name === w.n))
                    .map(w => `${w.d} · ${w.n}`),
       days: ds.map(d => ({
@@ -91,6 +107,11 @@ try {
   // id 만 등록되고 내용은 빠진 상태다 — 조용히 넘기면 하루치가 통째로 사라진다
   if (chk.missing.length) {
     logs.push(`[빠짐] ${chk.id} 의 음식이 시트에 없다:\n  ` + chk.missing.join("\n  "));
+    code = 1;
+  }
+  if (chk.ibMissing.length) {
+    logs.push(`[빠짐] ${chk.id} 의 인바디 값이 시트에 없다 — 백엔드를 다시 배포했는지 확인:\n  `
+              + chk.ibMissing.join("\n  "));
     code = 1;
   }
 } catch (e) { logs.push("[시트 확인 실패] " + (e && e.message || e)); }
