@@ -47,6 +47,7 @@ function doPost(e) {
     switch (req.action) {
       case "list":    return out(Object.assign({ ok: true }, listItems(type, req.from, req.to)));
       case "add":     return out({ ok: true, item: addItem(type, req.item) });
+      case "addMany": return out({ ok: true, items: addItems(type, req.items) });
       case "del":     return out({ ok: true, id: delItem(type, req.id) });
       case "setMeta": return out({ ok: true, key: req.key, value: setMeta(req.key, req.value) });
       case "foodSearch": return out({ ok: true, items: foodSearch(req.q, req.debug) });
@@ -184,6 +185,48 @@ function rowOfDate(sh, hdr, ds) {
   const vals = sh.getRange(2, col, last - 1, 1).getValues();
   for (let i = 0; i < vals.length; i++) if (asDateStr(vals[i][0]) === ds) return i + 2;
   return 0;
+}
+
+// 여러 건을 한 번에 넣는다. 한 건씩 부르면 28건에 왕복 28번이라 1~2분이 걸리고,
+// 그 사이 앱이 닫히면 절반만 들어간다. 시트는 한 번만 읽고, append 도 한 번에 쓴다.
+function addItems(type, items) {
+  if (!items || !items.length) return [];
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sh = sheetOf(type);
+    const hdr = headers(sh);
+    const idCol = hdr.indexOf("id") + 1;
+    const dateCol = hdr.indexOf("date") + 1;
+    // 인바디는 하루 한 줄이다 — 날짜별 행번호를 미리 훑어둔다
+    const rowOf = {};
+    const last = sh.getLastRow();
+    if (type === "inbody" && dateCol > 0 && last > 1) {
+      const vals = sh.getRange(2, dateCol, last - 1, 1).getValues();
+      for (let i = 0; i < vals.length; i++) rowOf[asDateStr(vals[i][0])] = i + 2;
+    }
+    const done = [], append = [], appendAt = {};
+    for (let i = 0; i < items.length; i++) {
+      const rec = Object.assign({}, items[i], { id: Utilities.getUuid() });
+      rec.date = asDateStr(rec.date);
+      const row = rowOf[rec.date];
+      if (row) {
+        const keep = idCol > 0 ? sh.getRange(row, idCol).getValue() : "";
+        if (keep) rec.id = String(keep);     // id 는 유지해야 앱의 삭제가 계속 맞는다
+        sh.getRange(row, 1, 1, hdr.length).setValues([objToRow(hdr, rec)]);
+      } else if (type === "inbody" && appendAt[rec.date] !== undefined) {
+        append[appendAt[rec.date]] = objToRow(hdr, rec);   // 같은 배치에 같은 날짜가 또 오면 덮는다
+      } else {
+        appendAt[rec.date] = append.length;
+        append.push(objToRow(hdr, rec));
+      }
+      done.push(rec);
+    }
+    if (append.length) sh.getRange(sh.getLastRow() + 1, 1, append.length, hdr.length).setValues(append);
+    return done;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function delItem(type, id) {
