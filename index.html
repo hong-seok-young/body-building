@@ -1093,11 +1093,25 @@ function newChart(el, c) {
 }
 
 // ═════════ API / 동기화 ═════════
+// res.json() 을 바로 부르면 구글이 HTML 을 돌려줬을 때 "Unexpected token '<'" 만
+// 남는다. 그 HTML 이 로그인 페이지인지, 스크립트 오류 페이지인지, 주소가 틀려서
+// 나온 404 인지에 따라 고칠 곳이 전혀 다른데 그걸 구분할 수가 없다.
+// 그래서 글로 먼저 받아서 무엇이 왔는지 이름을 붙인다.
 async function api(params) {
   if (!cfg) throw new Error("no-config");
   const res = await fetch(cfg.url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({ ...params, secret: cfg.secret }) });
-  const j = await res.json();
+  const txt = await res.text();
+  let j = null;
+  try { j = JSON.parse(txt); } catch (e) {
+    const one = txt.replace(/\s+/g, " ").slice(0, 100);
+    const kind = /accounts\.google\.com|ServiceLogin|계정을 선택|Choose an account|Sign in/i.test(txt) ? "구글 로그인 페이지"
+      : /승인이 필요|Authorization is required|requires authorization/i.test(txt) ? "승인 필요 — /exec 를 브라우저로 한 번 열어 허용"
+      : /스크립트 함수를 찾을 수 없|Script function not found|TypeError|ReferenceError/i.test(txt) ? "스크립트 오류 — Code.gs 확인"
+      : /찾을 수 없|not found|NoSuchDeployment/i.test(txt) ? "배포를 못 찾음 — 주소 확인"
+      : "JSON 아님";
+    throw new Error(`${kind} (HTTP ${res.status}${res.redirected ? " 리다이렉트" : ""}) ${one}`);
+  }
   if (!j.ok) throw new Error(j.error || "api-error");
   return j;
 }
