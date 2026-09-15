@@ -667,7 +667,8 @@
 </div>
 <div class="overlay" id="settingsOverlay">
   <div class="modal">
-    <h2>⚙️ 설정 <span class="muted" style="font-size:11px;font-weight:400">빌드 09-10 13:02</span></h2>
+    <h2>⚙️ 설정 <span class="muted" style="font-size:11px;font-weight:400" id="cfgBuild"></span></h2>
+    <div class="hint" id="cfgErr" hidden></div>
     <p>이미 연결돼 있습니다 — 어느 기기에서 열어도 바로 동작합니다. 백엔드를 바꿀 때만 아래를 고치세요.</p>
     <label>Apps Script 웹앱 URL</label>
     <input id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec">
@@ -1160,6 +1161,14 @@ if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
   });
 }
 function setStatus(txt, color) { statusEl.textContent = txt; statusEl.style.color = color || "var(--sub)"; }
+// 마지막 동기화 실패 이유. "오프라인" 한 마디만으로는 폰이 안 터진 건지 백엔드가
+// 거절한 건지(bad-secret 같은) 알 수가 없어서, 짧으면 상태줄에 같이 띄우고
+// 전문은 설정 팝업에 남긴다.
+let lastSyncErr = "";
+const errBrief = e => {
+  const m = String(e && e.message || e || "").trim();
+  return m === "Failed to fetch" || m === "Load failed" || /NetworkError/i.test(m) ? "네트워크" : m.slice(0, 40);
+};
 // 알림창을 띄우지 않는다 — 내가 고치고 내가 보고 있으므로 조용히 알려주면 된다
 let toastT = null;
 function toast(msg, ms) {
@@ -1259,10 +1268,12 @@ async function fullSync() {
     await syncRange(addDays(todayStr(), -92), todayStr());
     await syncInbody();
     setStatus("● 동기화됨", "var(--green)");
+    lastSyncErr = "";
     ok = true;
   } catch (e) {
     const w = pending.length + ibPending.length + Object.keys(metaDirty).length;
-    setStatus("● 오프라인" + (w ? ` (대기 ${w})` : ""), "var(--red)");
+    lastSyncErr = `${new Date().toTimeString().slice(0, 5)} · ${String(e && e.message || e)}`;
+    setStatus(`● 오프라인 (${errBrief(e)}${w ? ` · 대기 ${w}` : ""})`, "var(--red)");
   }
   render();
   return ok;
@@ -3082,6 +3093,13 @@ function openSettings() {
   gNa.value = goals.na; gFib.value = goals.fib; gSug.value = goals.sug;
   gSat.value = goals.sat; gTrans.value = goals.trans; gChol.value = goals.chol;
   cfgMsg.textContent = ""; cfgMsg.className = "msg";
+  // 손으로 적어둔 빌드 날짜는 한 번 적고 안 고쳐서 계속 틀렸다. 서버가 주는
+  // 파일 시각을 쓰면 틀릴 수가 없다.
+  const lm = new Date(document.lastModified);
+  cfgBuild.textContent = isNaN(lm) ? "" : `빌드 ${String(lm.getMonth() + 1).padStart(2, "0")}-${
+    String(lm.getDate()).padStart(2, "0")} ${lm.toTimeString().slice(0, 5)}`;
+  cfgErr.hidden = !lastSyncErr;
+  cfgErr.innerHTML = lastSyncErr ? `마지막 동기화 실패 — <b>${esc(lastSyncErr)}</b>` : "";
   openOverlay("settingsOverlay");
 }
 function closeSettings() { closeOverlay("settingsOverlay"); }
