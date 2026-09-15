@@ -336,6 +336,11 @@
   .msg.ok { color: var(--green); } .msg.err { color: var(--red); }
 
   canvas { max-height: 250px; }
+  /* 눈금이 서로 다른 항목은 한 판에 못 겹친다 — 각자 작은 그래프로 따로 그린다 */
+  .minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+  .mini h4 { margin: 0 0 3px; font-size: 11px; color: var(--sub); font-weight: 700; }
+  .mini h4 b { color: var(--text); font-size: 14px; margin-left: 4px; letter-spacing: -.3px; }
+  .mini canvas { max-height: 120px; }
   /* 달력 */
   /* 화살표와 달리 남는 폭을 차지한다. 글자가 커도 버튼 밖으로 새지 않게 잘라낸다
      (.nav button 의 width:34px 을 반드시 되돌려야 한다 — 안 그러면 버튼이 화살표 크기로 쪼그라든다) */
@@ -557,16 +562,20 @@
 <section id="section-inbody" style="display:none">
   <div class="card" id="ibLatest"></div>
   <div class="card">
-    <h3>체성분 추세 <span class="muted">체중·골격근량·체지방량 kg</span></h3>
+    <h3>체성분 추세 <span class="muted">체중·제지방량·골격근량·체지방량 kg</span></h3>
     <canvas id="ibChart1"></canvas>
     <div class="chklegend" id="ibLeg1"></div>
     <div class="empty" id="ibChartEmpty">기록이 없어요</div>
   </div>
-  <div class="card"><h3>체지방률 · BMI 추세</h3><canvas id="ibChart2"></canvas>
+  <div class="card" id="ibCard2"><h3>체지방률 · BMI 추세</h3><canvas id="ibChart2"></canvas>
     <div class="chklegend" id="ibLeg2"></div></div>
+  <div class="card" id="ibCard3">
+    <h3>나머지 항목 <span class="muted">눈금이 달라 따로 그린다</span></h3>
+    <div class="minis" id="ibMinis"></div>
+  </div>
   <div class="card">
     <h3>기록 <span class="muted" id="ibCount"></span></h3>
-    <table><thead><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방</th><th>체지방률</th><th>BMR</th></tr></thead>
+    <table><thead><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방</th><th>체지방률</th><th>위상각</th><th>BMR</th></tr></thead>
       <tbody id="ibBody"></tbody></table>
     <div class="empty" id="ibTableEmpty">기록이 없어요</div>
     <div class="btns mt">
@@ -591,6 +600,7 @@
         <label>BMI<input type="number" step="any" min="0" id="ibBmi"></label>
         <label>기초대사량 (kcal)<input type="number" step="any" min="0" id="ibBmr" placeholder="열량 계산에 사용"></label>
         <label>인바디 점수<input type="number" step="any" min="0" id="ibScore"></label>
+        <label>위상각 (°)<input type="number" step="any" min="0" id="ibPa" placeholder="Phase Angle"></label>
       </div>
       <div class="fields" style="margin-top:9px"><label>메모<input id="ibNote" placeholder="선택"></label></div>
       <div class="hint">기초대사량과 체중이 들어가면 <b>열량 탭이 자동으로 다시 계산됩니다.</b></div>
@@ -1007,6 +1017,7 @@ let calcOpen = load("dt_calc_open", false);   // 요약 카드의 계산 근거�
 let curDate = todayStr();
 let curMonth = curDate.slice(0, 7);
 let weekChart = null, monthChart = null, ibChart1 = null, ibChart2 = null;
+let ibMiniCharts = [];                 // 인바디 개별 항목 작은 그래프들 (개수가 항목에 따라 변한다)
 let mealOpen = {};
 let mealFormOpen = null;                      // 인라인 음식추가 폼이 열린 끼니
 let rowEdit = null;                           // 수량 정정 중인 항목 id
@@ -1230,9 +1241,21 @@ async function flushPending() {
     pending.shift(); save("dt_pending", pending); save("dt_cache", cache);
   }
 }
+// 백엔드에 항목이 늘면 시트에 열이 자동으로 붙지만, 그 백엔드를 다시 배포하기
+// 전까지는 시트가 그 칸을 아예 모른다 — 응답에 키 자체가 없이 온다. 그때만 내가
+// 들고 있던 값을 남긴다. 빈 값으로 온 칸은 지운 것이므로 시트를 따른다.
 async function syncInbody() {
   const r = await api({ action: "list", type: "inbody", from: "2000-01-01", to: todayStr() });
-  inbody = (r.items || []).slice().sort(cmpDate); save("dt_inbody", inbody);
+  const mine = {};
+  inbody.forEach(x => { if (x.id) mine[x.id] = x; });
+  inbody = (r.items || []).map(it => {
+    const old = mine[it.id];
+    if (!old) return it;
+    const keep = {};
+    Object.keys(old).forEach(k => { if (it[k] === undefined && old[k] !== "" && old[k] != null) keep[k] = old[k]; });
+    return Object.keys(keep).length ? { ...it, ...keep } : it;
+  }).sort(cmpDate);
+  save("dt_inbody", inbody);
 }
 async function flushIbPending() {
   while (ibPending.length) {
@@ -2776,6 +2799,29 @@ function renderCal() {
 }
 
 // ═════════ 인바디 ═════════
+// 인바디 항목을 한 곳에 모아둔다 — 타일·그래프·CSV 가 전부 여기서 나온다.
+// 항목을 하나 늘리려면 이 줄 하나만 추가하면 된다.
+//   d: 좋은 방향 (up 오를수록 / dn 내릴수록 / n 판정 안 함)
+//   g: 어느 그래프에 실을지 (kg 체성분판 / idx 지수판 / solo 각자 작은 그래프)
+//   p: 소수점 자리 (기본 1). 위상각은 5.9↔6.1 이 전부라 자리를 버리면 아무것도 안 보인다
+const IB_M = [
+  { k: "weight", l: "체중",       u: "kg", c: "#2563eb", d: "n",  g: "kg" },
+  { k: "ffm",    l: "제지방량",   u: "kg", c: "#0ea5e9", d: "up", g: "kg" },
+  { k: "smm",    l: "골격근량",   u: "kg", c: "#16a34a", d: "up", g: "kg" },
+  { k: "bfm",    l: "체지방량",   u: "kg", c: "#f59e0b", d: "dn", g: "kg" },
+  { k: "pbf",    l: "체지방률",   u: "%",  c: "#ef4444", d: "dn", g: "idx" },
+  { k: "bmi",    l: "BMI",        u: "",   c: "#8b5cf6", d: "dn", g: "idx" },
+  { k: "bmr",    l: "기초대사량", u: "",   c: "#d946ef", d: "up", g: "solo", p: 0, t: "기초대사량 (kcal)" },
+  { k: "score",  l: "인바디점수", u: "",   c: "#0891b2", d: "up", g: "solo", p: 0, t: "인바디 점수" },
+  { k: "pa",     l: "위상각",     u: "°",  c: "#7c3aed", d: "up", g: "solo", t: "위상각 (°)" },
+];
+// 74.4 옆에 24 가 서면 같은 단위로 안 보인다 — 항목마다 자릿수를 고정한다
+const ibFmt = (m, v) => (+v || 0).toFixed(m.p == null ? 1 : m.p);
+// 제지방량은 재는 값이 아니라 체중 − 체지방량이다. 인바디가 체지방량을 안 주면 모른다.
+const ibVal = (r, k) => !r ? 0
+  : k === "ffm" ? (+r.weight > 0 && +r.bfm > 0 ? fmt(+r.weight - +r.bfm) : 0)
+  : +r[k] || 0;
+
 // 목록에 기본으로 보여줄 개수. 전부 늘어놓으면 스크롤만 길어진다
 const IB_SHOWN = 5;
 let actBase = 0;                       // 활동 팝업을 열 때의 초과분 (상쇄 기준)
@@ -2789,7 +2835,7 @@ function openIb(id) {
   const v = k => (r && +r[k] > 0 ? r[k] : "");
   ibW.value = v("weight"); ibS.value = v("smm"); ibBfm.value = v("bfm");
   ibPbf.value = v("pbf"); ibBmi.value = v("bmi"); ibBmr.value = v("bmr");
-  ibScore.value = v("score"); ibNote.value = r && r.note || "";
+  ibScore.value = v("score"); ibPa.value = v("pa"); ibNote.value = r && r.note || "";
   ibFormTitle.textContent = r ? `${r.date} 기록 수정` : "인바디 기록 추가";
   ibSubmit.textContent = r ? "저장" : "기록 추가";
   ibDelRow.hidden = !r;
@@ -2809,7 +2855,7 @@ async function addInbody(e) {
   e.preventDefault();
   const item = { date: ibDate.value || todayStr(), weight: +ibW.value || 0, smm: +ibS.value || 0,
     bfm: +ibBfm.value || 0, pbf: +ibPbf.value || 0, bmi: +ibBmi.value || 0, bmr: +ibBmr.value || 0,
-    score: +ibScore.value || 0, note: ibNote.value.trim() };
+    score: +ibScore.value || 0, pa: +ibPa.value || 0, note: ibNote.value.trim() };
   const editing = ibEdit;
   closeIb();
   // 수정은 지우고 다시 넣는다 (백엔드에 update 액션이 없다).
@@ -2840,12 +2886,21 @@ function refreshGoalsFromInbody(ds) {
 async function pushInbody(item, opts) {
   const quiet = !!(opts && opts.quiet);
   const olds = inbody.filter(x => x.date === item.date);
+  let keepId = "";
   if (olds.length) {
-    if (quiet) return null;                 // 같은 날짜가 있으면 조용히 건너뛴다
-    if (!confirm(`${item.date} 인바디 기록이 이미 있습니다.` + "\n\n지우고 새 값으로 바꿀까요?")) return null;
-    for (const o of olds) await delInbodyRec(o.id);
+    if (opts && opts.replace) {
+      // 백엔드는 같은 날짜 줄을 자리에서 갈아끼우고 id 를 그대로 둔다. 지웠다가
+      // 다시 넣으면 del 이 add 보다 늦게 닿았을 때 방금 넣은 줄까지 지워진다 —
+      // 삭제 요청을 기다리지 않고 보내기 때문이다. 그래서 지우지 않고 덮는다.
+      keepId = (olds.find(x => !String(x.id).startsWith("tmp-")) || olds[0]).id;
+      olds.forEach(o => { const i = inbody.indexOf(o); if (i >= 0) inbody.splice(i, 1); });
+    } else if (quiet) return null;          // 같은 날짜가 있으면 조용히 건너뛴다
+    else {
+      if (!confirm(`${item.date} 인바디 기록이 이미 있습니다.` + "\n\n지우고 새 값으로 바꿀까요?")) return null;
+      for (const o of olds) await delInbodyRec(o.id);
+    }
   }
-  const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5);
+  const tmpId = keepId || ("tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5));
   inbody.push({ ...item, id: tmpId }); inbody.sort(cmpDate); save("dt_inbody", inbody);
   if (!quiet) render();
   const rg = +item.bmr > 0 || +item.weight > 0 ? refreshGoalsFromInbody(item.date) : null;
@@ -2879,8 +2934,7 @@ async function delInbodyRec(id) {
 // 전에 다른 기기가 열린 경우). 계산은 ibAt 이 날짜당 하나만 쓰므로 멀쩡했지만
 // 기록 표와 추세 그래프에는 같은 점이 두 번 찍힌다.
 async function dedupeInbody() {
-  const key = x => [x.date, +x.weight || 0, +x.smm || 0, +x.bfm || 0, +x.pbf || 0,
-                    +x.bmi || 0, +x.bmr || 0, +x.score || 0].join("|");
+  const key = x => [x.date].concat(IB_M.filter(m => m.k !== "ffm").map(m => +x[m.k] || 0)).join("|");
   // 아직 시트에 안 올라간 tmp- 를 뒤로 보내 진짜 id 를 가진 줄을 남긴다
   const order = inbody.slice().sort((a, b) => cmpDate(a, b)
     || (String(a.id).startsWith("tmp-") ? 1 : 0) - (String(b.id).startsWith("tmp-") ? 1 : 0));
@@ -2895,43 +2949,45 @@ function renderInbody() {
   const recs = inbody.slice().sort(cmpDate);
   if (recs.length) {
     const cur = recs[recs.length - 1], prev = recs[recs.length - 2];
-    const tiles = [{ k: "weight", l: "체중", u: "kg", d: "n" }, { k: "smm", l: "골격근량", u: "kg", d: "up" },
-      { k: "bfm", l: "체지방량", u: "kg", d: "dn" }, { k: "pbf", l: "체지방률", u: "%", d: "dn" },
-      { k: "bmr", l: "기초대사량", u: "", d: "up" }, { k: "score", l: "인바디점수", u: "", d: "up" }]
-      .filter(t => +cur[t.k] > 0 || t.k === "weight");
+    const tiles = IB_M.filter(t => ibVal(cur, t.k) > 0 || t.k === "weight");
     ibLatest.innerHTML = `<h3>최근 측정 <span class="muted">${cur.date}${prev ? " · 직전 대비" : ""}</span></h3><div class="stats">` +
       tiles.map(t => {
         let dl = "";
-        if (prev && +prev[t.k] > 0 && +cur[t.k] > 0) {
-          const d = fmt(cur[t.k] - prev[t.k]);
-          if (d !== 0) {
+        if (ibVal(prev, t.k) > 0 && ibVal(cur, t.k) > 0) {
+          const d = fmt(ibVal(cur, t.k) - ibVal(prev, t.k));
+          if (+ibFmt(t, d) !== 0) {
             const good = t.d === "up" ? d > 0 : t.d === "dn" ? d < 0 : null;
-            dl = `<span style="font-size:10.5px;font-weight:700;color:${good === null ? "var(--sub)" : good ? "var(--green)" : "var(--red)"}"> ${d > 0 ? "▲" : "▼"}${fmt(Math.abs(d))}</span>`;
+            dl = `<span style="font-size:10.5px;font-weight:700;color:${good === null ? "var(--sub)" : good ? "var(--green)" : "var(--red)"}"> ${d > 0 ? "▲" : "▼"}${ibFmt(t, Math.abs(d))}</span>`;
           }
         }
-        return `<div class="stat"><span>${t.l}</span><b>${fmt(cur[t.k])}${t.u}${dl}</b></div>`;
+        return `<div class="stat"><span>${t.l}</span><b>${ibFmt(t, ibVal(cur, t.k))}${t.u}${dl}</b></div>`;
       }).join("") + `</div>`;
   } else ibLatest.innerHTML = `<div class="empty">아직 인바디 기록이 없어요. 위에서 첫 기록을 추가해보세요.</div>`;
 
   const labels = recs.map(r => r.date.slice(5).replace("-", "/"));
   ibChartEmpty.style.display = recs.length ? "none" : "block";
   const full = recs.map(r => r.date);                 // 툴팁에는 연도까지 보여준다
-  const ds = (k, c, l, u) => ({ label: l, unit: u, data: recs.map(r => +r[k] || null),
-    borderColor: c, backgroundColor: c, spanGaps: true, tension: .3, pointRadius: 3, pointHitRadius: 12 });
+  const ds = m => ({ label: m.l, unit: m.u, dec: m.p == null ? 1 : m.p, data: recs.map(r => ibVal(r, m.k) || null),
+    borderColor: m.c, backgroundColor: m.c, spanGaps: true, tension: .3, pointRadius: 3, pointHitRadius: 12 });
+  const has = m => recs.some(r => ibVal(r, m.k) > 0);      // 한 번도 안 잰 항목은 그리지 않는다
   if (ibChart1) { ibChart1.destroy(); ibChart1 = null; }
   if (ibChart2) { ibChart2.destroy(); ibChart2 = null; }
+  ibMiniCharts.forEach(c => c && c.destroy && c.destroy());
+  ibMiniCharts = [];
   // 점을 정확히 짚지 않아도 그 세로줄 전체가 잡히게 한다 (index + intersect:false).
   // 손가락으로 좌우로 끌면 툴팁과 세로선이 따라온다.
-  const optOf = id => ({
+  const optOf = (id, dec) => ({
     interaction: { mode: "index", intersect: false },
     plugins: {
       legend: { display: false },                     // 범례는 아래 체크박스로 직접 그린다
       tooltip: { displayColors: true, callbacks: {
         title: it => it.length ? full[it[0].dataIndex] : "",
-        label: c => ` ${c.dataset.label} ${fmt(c.parsed.y)}${c.dataset.unit || ""}`,
+        label: c => ` ${c.dataset.label} ${(+c.parsed.y).toFixed(c.dataset.dec ?? 1)}${c.dataset.unit || ""}`,
       } },
     },
-    scales: { y: { grid: { color: "rgba(148,163,184,.18)" } }, x: { grid: { display: false } } },
+    // 정수 항목(인바디 점수)에 눈금이 77.5 처럼 찍히면 있지도 않은 값처럼 보인다
+    scales: { y: { grid: { color: "rgba(148,163,184,.18)" }, ...(dec === 0 ? { ticks: { precision: 0 } } : {}) },
+              x: { grid: { display: false } } },
   });
   const build = (id, sets) => {
     const c = newChart(document.getElementById(id), { type: "line",
@@ -2940,17 +2996,24 @@ function renderInbody() {
     drawLegend(document.getElementById(legendIdOf(id)), c, id);
     return c;
   };
-  if (recs.length) {
-    ibChart1 = build("ibChart1", [ds("weight", "#2563eb", "체중", "kg"),
-                                  ds("smm", "#16a34a", "골격근량", "kg"),
-                                  ds("bfm", "#f59e0b", "체지방량", "kg")]);
-    ibChart2 = build("ibChart2", [ds("pbf", "#ef4444", "체지방률", "%"),
-                                  ds("bmi", "#8b5cf6", "BMI", "")]);
-  } else {
-    document.getElementById("ibChart1").style.display = "none";
-    document.getElementById("ibChart2").style.display = "none";
-    ibLeg1.innerHTML = ibLeg2.innerHTML = "";
-  }
+  const grp = g => IB_M.filter(m => m.g === g && has(m));
+  const kg = grp("kg"), idx = grp("idx"), solo = grp("solo");
+  if (recs.length && kg.length) ibChart1 = build("ibChart1", kg.map(ds));
+  else { document.getElementById("ibChart1").style.display = "none"; ibLeg1.innerHTML = ""; }
+  ibCard2.hidden = !(recs.length && idx.length);
+  if (!ibCard2.hidden) ibChart2 = build("ibChart2", idx.map(ds));
+  else ibLeg2.innerHTML = "";
+
+  // 기초대사량(≈2000) · 인바디점수(≈80) · 위상각(≈6) 은 자릿수가 달라 한 판에 겹치면
+  // 작은 값이 바닥에 눌어붙어 움직임이 안 보인다. 각자 제 눈금으로 따로 그린다.
+  ibCard3.hidden = !(recs.length && solo.length);
+  ibMinis.innerHTML = solo.map(m => `<div class="mini"><h4>${m.t || m.l}<b>${
+    ibFmt(m, ibVal(recs[recs.length - 1], m.k))}${m.u}</b></h4><canvas id="ibMini_${m.k}"></canvas></div>`).join("");
+  solo.forEach(m => {
+    const c = newChart(document.getElementById("ibMini_" + m.k),
+      { type: "line", data: { labels, datasets: [ds(m)] }, options: optOf("ibMini_" + m.k, m.p) });
+    if (c) ibMiniCharts.push(c);
+  });
 
   const rev = recs.slice().reverse();
   ibTableEmpty.style.display = rev.length ? "none" : "block";
@@ -2961,10 +3024,16 @@ function renderInbody() {
     ? `${rev.length}건` : `최근 ${shown.length}건 / 전체 ${rev.length}건`;
   ibMoreBtn.hidden = rev.length <= IB_SHOWN;
   ibMoreBtn.textContent = ibAll ? "접기" : `전체 ${rev.length}건 보기`;
-  ibBody.innerHTML = shown.map(r => `<tr class="tap" onclick="openIb('${r.id}')">
-    <td>${r.date.slice(2)}</td><td>${r.weight ? fmt(r.weight) : "-"}</td>
-    <td>${r.smm ? fmt(r.smm) : "-"}</td><td>${r.bfm ? fmt(r.bfm) : "-"}</td><td>${r.pbf ? fmt(r.pbf) : "-"}</td>
-    <td>${r.bmr ? num(r.bmr) : "-"}</td></tr>`).join("");
+  // 타일·그래프와 같은 자릿수로 찍는다 — 98.3 옆에 99 가 서면 다른 단위처럼 보인다
+  const cell = (r, k) => {
+    const v = ibVal(r, k);
+    if (!v) return "<td>-</td>";
+    return `<td>${k === "bmr" ? num(v) : ibFmt(IB_M.find(m => m.k === k), v)}</td>`;
+  };
+  ibBody.innerHTML = shown.map(r => `<tr class="tap" onclick="openIb('${r.id}')">`
+    + `<td>${r.date.slice(2)}</td>`
+    + ["weight", "smm", "bfm", "pbf", "pa", "bmr"].map(k => cell(r, k)).join("")
+    + `</tr>`).join("");
 }
 
 // ═════════ 설정 ═════════
@@ -3025,8 +3094,8 @@ const csvCell = v => {
 function exportCsv(kind) {
   let cols, rows;
   if (kind === "inbody") {
-    cols = ["date", "weight", "smm", "bfm", "pbf", "bmi", "bmr", "score", "note"];
-    rows = inbody.slice().sort(cmpDate);
+    cols = ["date"].concat(IB_M.map(m => m.k), ["note"]);
+    rows = inbody.slice().sort(cmpDate).map(r => ({ ...r, ffm: ibVal(r, "ffm") || "" }));
   } else {
     cols = ["date", "meal", "name", "kcal", "p", "c", "f", "na", "sug", "fib", "sat", "trans", "chol"];
     rows = Object.keys(cache).sort().flatMap(d => dayLog(d));
@@ -3185,13 +3254,26 @@ async function applyPayload(o) {
   }
   // 인바디는 여러 건이 한꺼번에 올 수 있다 (결과지 일괄 판독). 건별 알림 대신
   // 개수와 마지막 목표 변화만 한 줄로 남긴다
-  let ibN = 0, ibSkip = 0, ibLast = null;
+  let ibN = 0, ibSkip = 0, ibFill = 0, ibLast = null;
   for (const r of (o.inbody || [])) {
     if (!r || !r.date) continue;
-    if (inbody.some(x => x.date === r.date)) { ibSkip++; continue; }
+    const old = inbody.find(x => x.date === r.date);
+    if (old) {
+      // 같은 날짜가 이미 있으면 비어 있는 칸만 채운다 — 위상각처럼 항목이 나중에
+      // 늘었을 때 지난 기록을 되채우는 길이 이것뿐이다. 값이 이미 있는 칸은
+      // 건드리지 않으니 같은 지시를 두 번 적용해도 결과가 같다.
+      const add = Object.keys(r).filter(k => k !== "date" && k !== "id" && +r[k] > 0 && !(+old[k] > 0));
+      if (!add.length) { ibSkip++; continue; }
+      const merged = { ...old };
+      add.forEach(k => merged[k] = r[k]);
+      delete merged.id;
+      await pushInbody(merged, { quiet: true, replace: true });
+      ibFill++; continue;
+    }
     const rg = await pushInbody(r, { quiet: true });
     ibN++; if (rg) ibLast = rg;
   }
+  if (ibFill) done.push(`인바디 ${ibFill}건 보강`);
   if (ibN) {
     done.push(`인바디 ${ibN}건${ibSkip ? ` (중복 ${ibSkip}건 건너뜀)` : ""}`);
     if (ibLast && ibLast.after !== ibLast.before)
