@@ -2978,19 +2978,28 @@ function renderInbody() {
   const labels = recs.map(r => r.date.slice(5).replace("-", "/"));
   ibChartEmpty.hidden = recs.length > 0;
   const full = recs.map(r => r.date);                 // 툴팁에는 연도까지 보여준다
-  const ds = m => ({ label: m.l, unit: m.u, dec: m.p == null ? 1 : m.p, data: recs.map(r => ibVal(r, m.k) || null),
+  const ds = (m, rows) => ({ label: m.l, unit: m.u, dec: m.p == null ? 1 : m.p,
+    data: rows.map(r => ibVal(r, m.k) || null),
     borderColor: m.c, backgroundColor: m.c, spanGaps: true, tension: .3, pointRadius: 3, pointHitRadius: 12 });
   const has = m => recs.some(r => ibVal(r, m.k) > 0);      // 한 번도 안 잰 항목은 그리지 않는다
+  // 그래프마다 제 값이 있는 구간만 그린다. 세 번 잰 항목을 스물아홉 번 잰 항목과
+  // 같은 가로축에 올리면 점 셋이 오른쪽 끝에 몰리고 왼쪽 90% 가 빈칸이 된다 —
+  // 고장난 것처럼 보이고 실제로 읽을 것도 없다.
+  const spanOf = ms => {
+    let a = -1, b = -1;
+    recs.forEach((r, i) => { if (ms.some(m => ibVal(r, m.k) > 0)) { if (a < 0) a = i; b = i; } });
+    return a < 0 ? [0, 0] : [a, b + 1];
+  };
   ibChartObjs.forEach(c => c && c.destroy && c.destroy());
   ibChartObjs = [];
   // 점을 정확히 짚지 않아도 그 세로줄 전체가 잡히게 한다 (index + intersect:false).
   // 손가락으로 좌우로 끌면 툴팁과 세로선이 따라온다.
-  const optOf = (id, dec) => ({
+  const optOf = (id, dec, days) => ({
     interaction: { mode: "index", intersect: false },
     plugins: {
       legend: { display: false },                     // 범례는 아래 체크박스로 직접 그린다
       tooltip: { displayColors: true, callbacks: {
-        title: it => it.length ? full[it[0].dataIndex] : "",
+        title: it => it.length ? (days || full)[it[0].dataIndex] : "",
         label: c => ` ${c.dataset.label} ${(+c.parsed.y).toFixed(c.dataset.dec ?? 1)}${c.dataset.unit || ""}`,
       } },
     },
@@ -3008,30 +3017,40 @@ function renderInbody() {
   const grps = !recs.length ? [] : IB_CHARTS
     .map(g => ({ ...g, ms: g.keys.map(ibM).filter(has) }))
     .filter(g => {
-      if (!g.ms.some(m => drawn.indexOf(m.k) < 0)) return false;
+      // own = 이 판에서 처음 나오는 항목. 가로축 구간은 이것만 보고 정한다 —
+      // 체지방량처럼 곁들이로 들어간 선이 구간을 스물아홉 칸으로 늘려버리면
+      // 정작 이 판의 주인공(체수분·단백질·무기질)이 오른쪽 끝 점 하나가 된다.
+      g.own = g.ms.filter(m => drawn.indexOf(m.k) < 0);
+      if (!g.own.length) return false;
       g.ms.forEach(m => drawn.push(m.k));
       return true;
     });
   const solo = recs.length ? IB_SOLO.map(ibM).filter(has) : [];
-  ibCharts.innerHTML = grps.map(g => `<div class="card"><h3>${g.t}${
-      g.sub ? ` <span class="muted">${g.sub}</span>` : ""}</h3>
+  const nOf = ms => recs.filter(r => ms.some(m => ibVal(r, m.k) > 0)).length;
+  ibCharts.innerHTML = grps.map(g => `<div class="card"><h3>${g.t}<span class="muted">${
+      g.sub ? ` ${g.sub} ·` : ""} ${nOf(g.own)}회</span></h3>
     <canvas id="${g.id}"></canvas><div class="chklegend" id="${g.id}Leg"></div></div>`).join("")
     + (solo.length ? `<div class="card"><h3>나머지 항목 <span class="muted">눈금이 달라 따로 그린다</span></h3>
       <div class="minis">` + solo.map(m => `<div class="mini"><h4>${m.t || m.l}<b>${
-        ibFmt(m, ibVal(cur, m.k))}${m.u}</b></h4><canvas id="ibMini_${m.k}"></canvas></div>`).join("")
+        ibFmt(m, ibVal(cur, m.k))}${m.u}</b> <span style="font-weight:400">${nOf([m])}회</span></h4>
+        <canvas id="ibMini_${m.k}"></canvas></div>`).join("")
       + `</div></div>` : "");
 
   grps.forEach(g => {
+    const [a, b] = spanOf(g.own), rows = recs.slice(a, b);
     const c = newChart(document.getElementById(g.id), { type: "line",
-      data: { labels, datasets: g.ms.map((m, i) => ({ ...ds(m), hidden: seriesOff(g.id, i) })) },
-      options: optOf(g.id) });
+      data: { labels: labels.slice(a, b),
+              datasets: g.ms.map((m, i) => ({ ...ds(m, rows), hidden: seriesOff(g.id, i) })) },
+      options: optOf(g.id, null, full.slice(a, b)) });
     chartReg[g.id] = c;
     drawLegend(document.getElementById(legendIdOf(g.id)), c, g.id);
     if (c) ibChartObjs.push(c);
   });
   solo.forEach(m => {
-    const c = newChart(document.getElementById("ibMini_" + m.k),
-      { type: "line", data: { labels, datasets: [ds(m)] }, options: optOf("ibMini_" + m.k, m.p) });
+    const [a, b] = spanOf([m]), rows = recs.slice(a, b);
+    const c = newChart(document.getElementById("ibMini_" + m.k), { type: "line",
+      data: { labels: labels.slice(a, b), datasets: [ds(m, rows)] },
+      options: optOf("ibMini_" + m.k, m.p, full.slice(a, b)) });
     if (c) ibChartObjs.push(c);
   });
 
