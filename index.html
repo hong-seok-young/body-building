@@ -1139,6 +1139,35 @@ function hideTopOverlay() {
   return true;
 }
 addEventListener("popstate", hideTopOverlay);        // 팝업이 없으면 그대로 뒤로 간다
+
+// ── PC 에서 닫는 두 가지: Esc, 그리고 팝업 바깥 클릭.
+// 둘 다 closeOverlay 를 거친다 — 직접 숨기면 열 때 밀어넣은 히스토리 한 칸이
+// 그대로 남아서 다음 뒤로가기가 헛돈다.
+function topOverlay() {
+  const open = document.querySelectorAll(".overlay.show");
+  return open[open.length - 1] || null;
+}
+addEventListener("keydown", e => {
+  if (e.key !== "Escape" || e.isComposing) return;   // 한글 조합 중의 Esc 는 조합 취소다
+  const el = topOverlay();
+  if (!el) return;
+  e.preventDefault();
+  closeOverlay(el.id);
+});
+// 바깥 클릭은 마우스가 있는 화면에서만 켠다 — 폰에서는 긴 팝업을 훑다가 여백을
+// 스치기만 해도 닫혀버린다. 폰은 뒤로가기로 닫는 게 이미 편하다.
+if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  // 누른 곳과 뗀 곳이 둘 다 여백이어야 닫는다 — 팝업 안의 글을 드래그하다
+  // 바깥에서 손을 떼는 경우에 닫히면 안 된다.
+  let downAt = null;
+  addEventListener("pointerdown", e => { downAt = e.target; });
+  addEventListener("click", e => {
+    const el = e.target;
+    if (el !== downAt || !el.classList) return;
+    if (!el.classList.contains("overlay") || !el.classList.contains("show")) return;
+    closeOverlay(el.id);
+  });
+}
 function setStatus(txt, color) { statusEl.textContent = txt; statusEl.style.color = color || "var(--sub)"; }
 // 알림창을 띄우지 않는다 — 내가 고치고 내가 보고 있으므로 조용히 알려주면 된다
 let toastT = null;
