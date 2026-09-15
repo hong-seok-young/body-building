@@ -73,7 +73,9 @@ try {
     const items = (box && box.items) || [];
     const last = items[items.length - 1] || {};
     const want = (last.food || []).map(f => ({ d: f.date, n: f.name }));
-    const ds = [...new Set([...want.map(w => w.d),
+    // 오늘은 항상 찍는다 — 마지막 항목이 인바디뿐이면 식단이 한 줄도 안 보여서,
+    // 되감기 같은 사고가 났을 때 중복이 생겼는지 알 길이 없다
+    const ds = [...new Set([todayStr(), ...want.map(w => w.d),
                             ...Object.keys(last.act || {})])].filter(Boolean);
     // 인바디는 백엔드가 헤더에 없는 칸을 조용히 버린다 — 백엔드를 다시 배포하기
     // 전에 새 항목을 넣으면 "반영 완료" 도장만 찍히고 값은 어디에도 안 남는다.
