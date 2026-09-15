@@ -43,7 +43,9 @@ let code = 0;
 try {
   await page.goto(`http://127.0.0.1:${PORT}/index.html?auto=1`, { waitUntil: "domcontentloaded" });
   // fullSync → applyInbox 가 다 끝나야 true 가 된다 (index.html 맨 아래)
-  await page.waitForFunction(() => window.__autoDone === true, null, { timeout: 180000 });
+  // 넉넉하게 준다. 되채우기 지시 하나에 인바디 24건이 들어있으면 시트 왕복만
+  // 24번이라 3분으로는 모자란다 — 중간에 잘리면 남은 id 가 전부 미반영으로 뜬다.
+  await page.waitForFunction(() => window.__autoDone === true, null, { timeout: 900000 });
   await page.waitForTimeout(3000);          // 마지막 setMeta 가 날아갈 시간을 준다
 } catch (e) {
   logs.push("[실패] " + (e && e.message || e));

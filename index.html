@@ -1246,19 +1246,26 @@ async function flushIbPending() {
     ibPending.shift(); save("dt_ib_pending", ibPending); save("dt_inbody", inbody);
   }
 }
+// 성공했는지 돌려준다 — applyInbox 가 이 값을 보고 움직인다. 시트를 못 읽은 채로
+// inbox 를 돌리면 "이미 적용됨" 을 모르는 빈 기기가 되어 과거 지시를 처음부터
+// 다시 적용한다. 실제로 한 번 그렇게 됐다: 시트가 한 번 안 잡혔더니 헤드리스가
+// 9/9 부터 십여 건을 되감으며 지우고 다시 넣었다.
 async function fullSync() {
-  if (!cfg) { setStatus("설정 필요 →", "var(--red)"); return; }
+  if (!cfg) { setStatus("설정 필요 →", "var(--red)"); return false; }
+  let ok = false;
   try {
     setStatus("동기화 중…");
     await flushPending(); await flushIbPending(); await flushMeta();
     await syncRange(addDays(todayStr(), -92), todayStr());
     await syncInbody();
     setStatus("● 동기화됨", "var(--green)");
+    ok = true;
   } catch (e) {
     const w = pending.length + ibPending.length + Object.keys(metaDirty).length;
     setStatus("● 오프라인" + (w ? ` (대기 ${w})` : ""), "var(--red)");
   }
   render();
+  return ok;
 }
 
 // ═════════ 기록 ═════════
@@ -3208,7 +3215,10 @@ async function markInboxDone(ids) {
   calc = next; save("dt_calc", calc); save("dt_inbox_done", all);
   return true;
 }
-async function applyInbox() {
+async function applyInbox(synced) {
+  // 시트를 못 읽었으면 손대지 않는다. 적용 기록(calc.inbox)이 시트에 있어서,
+  // 그걸 못 읽은 채로 돌면 전부 처음 보는 지시가 되어 과거를 되감는다.
+  if (cfg && synced === false) { console.log("[inbox] 시트를 못 읽어서 건너뜀"); return; }
   let box;
   try {
     const r = await fetch("./inbox.json", { cache: "no-store" });
@@ -3405,9 +3415,9 @@ render();
 // 동작이라, 매번 빈 기기로 뜨는 헤드리스에서 돌리면 일부러 지운 음식이 되살아난다.
 const AUTO = /[?&]auto=1/.test(location.search);
 (async () => {
-  if (cfg) await fullSync();
+  const synced = cfg ? await fullSync() : true;
   await applyHashAdd();
-  await applyInbox();
+  await applyInbox(synced);
   if (!AUTO) {
     await dedupeInbody();        // 동기화가 끝난 뒤라야 중복이 다 보인다
     recoverPresets();            // 기록에 있는데 내 음식에서 사라진 것을 되살린다
