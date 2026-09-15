@@ -78,9 +78,11 @@ try {
     // 그래서 시트에서 다시 읽어 넣으려던 값이 실제로 거기 있는지 본다.
     const ibMissing = [];
     if ((last.inbody || []).length) {
-      await syncInbody();
+      // syncInbody 가 아니라 날것으로 읽는다 — 그건 시트가 모르는 칸을 앱이 들고
+      // 있던 값으로 메워주므로 버려진 걸 못 본다
+      const rows = (await api({ action: "list", type: "inbody", from: "2000-01-01", to: todayStr() })).items || [];
       for (const w of last.inbody) {
-        const r = inbody.find(x => x.date === w.date) || {};
+        const r = rows.find(x => x.date === w.date) || {};
         for (const k of Object.keys(w)) {
           if (k === "date" || k === "id" || !(+w[k] > 0)) continue;
           if (+r[k] !== +w[k])

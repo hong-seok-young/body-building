@@ -27,7 +27,7 @@ const SHEETS = {
   //  pa 위상각 / ecw 세포외수분비 / vfl 내장지방레벨
   //  tbw 체수분 / prot 단백질 / min 무기질 — 셋에 체지방량을 더하면 체중이 된다
   inbody: ["id", "date", "weight", "smm", "bfm", "pbf", "bmi", "bmr", "score",
-           "tbw", "prot", "min", "pa", "ecw", "vfl", "note"],
+           "tbw", "prot", "min", "pa", "ecw", "vfl", "waist", "whr", "note"],
   meta:   ["key", "value"],
 };
 // list 응답에 함께 실어 보낼 meta 키 (앱이 기대하는 것)
