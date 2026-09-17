@@ -3101,33 +3101,45 @@ function saveMw() {
   render();
 }
 // 기간 평균 — 빠진 날은 그냥 뺀다. 매일 못 재도 추세는 나온다
-function mwAvg(from, to) {
-  const mw = mwAll();
-  const v = Object.keys(mw).filter(d => d >= from && d <= to).map(d => +mw[d]).filter(x => x > 0);
+function mwAvg(map, from, to) {
+  const v = Object.keys(map).filter(d => d >= from && d <= to).map(d => +map[d]).filter(x => x > 0);
   return v.length ? { avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length } : null;
+}
+// 어느 체중 계열로 볼 것인가.
+// 아침 체중을 안 적으면 인바디 체중으로 간다 — 인바디는 전부 18시대 측정이라
+// 서로 비교는 되지만, 그날 뭘 얼마나 먹었냐에 흔들려서 점 하나의 오차가 아침
+// 공복보다 크다. 그래서 창을 7일이 아니라 14일로 넓혀 점을 더 모은다.
+// 둘을 섞지는 않는다. 아침값과 저녁값이 한 평균에 들어가면 그 평균은
+// "그날 언제 쟀나" 를 재는 값이 되어버린다.
+function wSeries() {
+  const mw = mwAll();
+  if (Object.keys(mw).length >= 6) return { map: mw, win: 7, label: "아침 체중", loose: false };
+  const ib = {};
+  inbody.forEach(r => { if (+r.weight > 0) ib[r.date] = +r.weight; });
+  return { map: ib, win: 14, label: "인바디 체중", loose: true };
 }
 function renderMw() {
   if (!mwDate.value) mwDate.value = todayStr();
-  const days = Object.keys(mwAll()).sort();
+  const S = wSeries(), days = Object.keys(S.map).sort();
   if (!days.length) {
-    mwOut.innerHTML = `<div class="hint" style="margin-top:11px">매일 아침 같은 조건에서 재면 <b>7일 평균</b>이 물살을 지운다. 2주 모이면 유지 열량이 맞는지 계산해준다 — 지금 값은 남의 평균치다.</div>`;
+    mwOut.innerHTML = `<div class="hint" style="margin-top:11px">체중 기록이 없다. 아침 공복으로 적어도 되고, 인바디를 같은 시각에 꾸준히 재도 된다 — 둘 중 아무거나 쌓이면 <b>유지 열량이 맞는지</b> 여기서 계산해준다.</div>`;
     return;
   }
-  // 기준점은 오늘이 아니라 마지막으로 잰 날이다. 며칠 걸러도 창이 비지 않는다
-  const last = days[days.length - 1];
-  const a = mwAvg(addDays(last, -6), last), b = mwAvg(addDays(last, -13), addDays(last, -7));
-  const dl = b ? a.avg - b.avg : null;
+  // 기준점은 오늘이 아니라 마지막으로 잰 날이다. 며칠 걸러도 창이 안 빈다
+  const last = days[days.length - 1], W = S.win;
+  const a = mwAvg(S.map, addDays(last, -(W - 1)), last);
+  const b = mwAvg(S.map, addDays(last, -(2 * W - 1)), addDays(last, -W));
   let html = `<div class="mwsum">
-    <b>${fmt(a.avg)}</b><em>kg · 7일 평균 (${a.n}일)</em>
-    <span class="r">최근 ${last.slice(5).replace("-", "/")} · ${fmt(mwAll()[last])}kg</span></div>`;
-  if (dl === null) {
-    html += `<div class="hint">직전 주가 모이면 주간 변화와 유지 열량 검증이 나온다 (앞으로 ${Math.max(1, 14 - days.length)}일쯤).</div>`;
+    <b>${fmt(a.avg)}</b><em>kg · ${W}일 평균 (${a.n}회)</em>
+    <span class="r">${S.label} 기준<br>최근 ${last.slice(5).replace("-", "/")} · ${fmt(S.map[last])}kg</span></div>`;
+  if (!b) {
+    html += `<div class="hint">직전 ${W}일이 모이면 주간 변화와 유지 열량 검증이 나온다.</div>`;
   } else {
     // 체중이 말하는 하루 수지. 지방 1kg = 7,700kcal
-    const real = dl * 7700 / 7;
+    const dl = a.avg - b.avg, real = dl * 7700 / W;
     // 장부가 말하는 하루 수지 — 식단 기록이 있는 날만 센다
     let led = 0, n = 0;
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < W; i++) {
       const d = addDays(last, -i), log = dayLog(d);
       if (!log.length) continue;
       const g = dayTarget(d);
@@ -3135,14 +3147,17 @@ function renderMw() {
       led += totals(log).kcal - g.tdee; n++;
     }
     const sgn = x => (x > 0 ? "+" : "") + num(Math.round(x));
-    html += `<div class="hint" style="margin-top:9px">지난주 대비 <b style="color:${dl < 0 ? "var(--green)" : "var(--red)"}">${dl > 0 ? "+" : ""}${fmt(dl)}kg</b>`
+    html += `<div class="hint" style="margin-top:9px">직전 ${W}일 대비 <b style="color:${dl < 0 ? "var(--green)" : "var(--red)"}">${dl > 0 ? "+" : ""}${fmt(dl)}kg</b>`
           + ` — 체중이 말하는 하루 수지 <b>${sgn(real)}kcal</b></div>`;
-    if (n >= 5) {
+    const need = Math.max(5, Math.round(W * 0.7));
+    if (n >= need) {
       const err = real - led / n;
       html += `<div class="hint">장부는 하루 <b>${sgn(led / n)}</b> 이라고 했다 (${n}일 기록).`
             + ` 차이 <b>${sgn(err)}</b> — 유지 열량을 하루 <b>${num(Math.round(Math.abs(err)))}kcal ${err > 0 ? "높게" : "낮게"}</b> 잡고 있다는 뜻이다.</div>`;
+      if (S.loose)
+        html += `<div class="hint">인바디 체중은 저녁 측정이라 그날 먹은 양에 흔들린다. 이 숫자의 오차는 ±200kcal 쯤 본다 — 아침 공복으로 적으면 절반으로 준다.</div>`;
     } else {
-      html += `<div class="hint">식단 기록이 ${n}일치뿐이라 유지 열량 검증은 아직이다 — 5일은 있어야 한다.</div>`;
+      html += `<div class="hint">식단 기록이 ${n}일치뿐이라 유지 열량 검증은 아직이다 — ${need}일은 있어야 한다.</div>`;
     }
   }
   mwOut.innerHTML = html;
