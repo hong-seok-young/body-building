@@ -3300,9 +3300,21 @@ async function inboxIdOnSheet(id) {
     return a.indexOf(id) >= 0;
   } catch (e) { return false; }
 }
-async function markInboxDone(ids) {
+async function markInboxDone(ids, live) {
   const cur = inboxDone();
-  const all = cur.concat(ids.filter(x => cur.indexOf(x) < 0)).slice(-300);
+  let all = cur.concat(ids.filter(x => cur.indexOf(x) < 0));
+  // 오래된 것부터 개수로 잘라내면 안 된다. 목록에서 밀려난 id 는 다음에 "처음 보는
+  // 지시" 가 되어 과거를 통째로 다시 적용한다 — 그때 이미 정정으로 지웠던 줄까지
+  // 되살아나서, 먹지도 않은 식사가 중복으로 올라온다.
+  // 지금 inbox.json 에 없는 id 는 다시 나올 길이 자체가 없으니, 그것만 버린다.
+  // 그러면 기록은 inbox.json 크기를 절대 넘지 않는다.
+  if (live && live.size) all = all.filter(x => live.has(x));
+  // 시트 한 칸에 담기는 양에는 끝이 있으니 마지막 안전장치는 남긴다. 여기까지
+  // 왔으면 inbox.json 자체를 줄여야 하는 것이므로 조용히 넘어가지 않는다
+  if (all.length > 5000) {
+    console.warn(`[inbox] 적용기록이 ${all.length}건이다 — inbox.json 을 줄여야 한다`);
+    all = all.slice(-5000);
+  }
   const next = { ...calc, inbox: all };
   // 시트에 못 올렸으면 로컬에도 남기지 않는다 — 남기면 이 기기에서 영영 반영되지 않는다.
   // 단, 되읽어서 이미 올라가 있으면 올라간 것이다. 그대로 진행해야 음식이 들어간다
@@ -3322,6 +3334,8 @@ async function applyInbox(synced) {
     box = await r.json();
   } catch (e) { return; }               // 파일이 없거나 오프라인이면 조용히 넘어간다
   const seen = inboxDone();
+  // 지금 살아있는 지시의 id — 적용기록을 이 범위로만 남긴다 (markInboxDone 참고)
+  const live = new Set((box && box.items || []).map(x => x && x.id).filter(Boolean));
   const fresh = (box && box.items || []).filter(x => x && x.id && seen.indexOf(x.id) < 0);
   if (!fresh.length) return;
   const done = [], failed = [];
@@ -3340,7 +3354,7 @@ async function applyInbox(synced) {
       //   음식   같은 이름이면 안 넣음
       //   목표·열량설정·재계산  at 이 저장된 것보다 앞서면 건너뜀
       // (applyInbox 가 fullSync 뒤에 돌아서 로컬 캐시가 채워진 상태인 것이 전제다)
-      if (!(await markInboxDone([it.id]))) {
+      if (!(await markInboxDone([it.id], live))) {
         setStatus("● 반영 기록 실패 — 다음에 다시 시도합니다", "var(--red)");
         failed.push((it.note || it.id) + " — 적용은 됐지만 기록을 시트에 못 올렸습니다");
         continue;
@@ -3370,6 +3384,40 @@ function stale(o, cur) {
 // 실제 반영. 삭제 → 인바디 → 식단 → 프리셋 → 목표/설정 순서
 async function applyPayload(o) {
   const done = [];
+  // ── 기록이 끝난 날은 지시로 건드리지 않는다 ──────────────────────────────
+  // 되감긴 inbox 가 과거에 다시 쓰는 것을 막는 자물쇠다. 실제로 9/09~9/11 에
+  // 먹지도 않은 줄이 다섯 개 다시 들어갔고, 그건 열흘 뒤에야 눈에 띄었다.
+  //
+  // 자물쇠가 "지금" 을 기준으로 잠기는 것이 핵심이다. 지시를 쓸 때 그 날짜는
+  // 오늘이라 열려 있지만, 며칠 뒤 같은 지시가 되감기면 이미 잠겨 있다. 그래서
+  // 같은 inbox.json 을 몇 번을 다시 돌려도 지난 기록은 움직이지 않는다.
+  // 적용 기록이 날아가든, 시트를 못 읽든, 기기가 셋이든 상관없이 막힌다.
+  //
+  // 오늘과 어제는 열어둔다 — 어제 저녁을 오늘 아침에 적는 일이 늘 있다.
+  // 그보다 앞을 정말 고쳐야 하면 지시에 unlock 을 적는다 (날짜 배열 또는 true).
+  const lockFrom = addDays(todayStr(), -1);
+  const unl = o.unlock === true ? true : new Set([].concat(o.unlock || []));
+  const locked = ds => ds < lockFrom && unl !== true && !unl.has(ds);
+  const blocked = [];
+  const openOnly = (arr, what) => (arr || []).filter(x => {
+    const ds = x && (x.date || todayStr());
+    if (!x || !locked(ds)) return true;
+    blocked.push(`${what} ${ds} ${x.name || ""}`.trim());
+    return false;
+  });
+  // 인바디는 잠그지 않는다. 하루 한 줄이고 비어 있는 칸만 채우는 구조라 몇 번을
+  // 다시 적용해도 결과가 같다 — 중복될 수가 없다. 반대로 잠가버리면 지난 결과지를
+  // 나중에 읽어 넣는 길이 막힌다 (위상각을 28건 되채운 적이 있다).
+  o = { ...o, del: openOnly(o.del, "지우기"), food: openOnly(o.food, "넣기") };
+  if (o.act) {
+    const open = {};
+    Object.keys(o.act).forEach(ds => { if (locked(ds)) blocked.push(`활동 ${ds}`); else open[ds] = o.act[ds]; });
+    o.act = open;
+  }
+  // 막힌 건 조용히 넘기지 않는다. 내가 일부러 지난 날을 고치려던 것이면
+  // 이 줄을 보고 unlock 을 붙여 다시 내면 된다
+  if (blocked.length)
+    done.push(`🔒 기록이 끝난 날이라 막음 ${blocked.length}건 — ${blocked.slice(0, 4).join(" / ")}${blocked.length > 4 ? " …" : ""}`);
   // 이 지시가 건드릴 날짜는 먼저 시트에서 다시 읽는다. 캐시는 부팅 때 떠온
   // 스냅샷이라 다른 기기가 방금 넣은 줄을 모른다 — 폰·PC·액션이 같은 지시를
   // 비슷한 시각에 집으면 셋 다 "아직 없네" 로 보고 각자 넣는다 (약과가 세 줄
