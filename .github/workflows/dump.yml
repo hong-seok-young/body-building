@@ -1,0 +1,16 @@
+# 시트를 읽어서 그대로 찍는다. 진단용이라 쓰기는 하지 않는다.
+name: 시트 덤프
+on:
+  push:
+    branches: ["claude/**"]
+    paths: [".github/dump.mjs", ".github/workflows/dump.yml"]
+  workflow_dispatch:
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: node .github/dump.mjs
