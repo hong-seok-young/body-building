@@ -218,6 +218,19 @@
   .actchip i { font-style: normal; color: var(--sub); font-size: 10px; margin-left: 2px; }
   .actchip:active { background: var(--line); }
 
+  /* 아침 체중 — 한 줄 입력 */
+  .mwrow { display: flex; gap: 7px; align-items: stretch; }
+  .mwrow input { flex: 1 1 0; min-width: 0; padding: 9px 11px; font-size: 14px;
+    border: 1px solid var(--line); border-radius: 9px; background: var(--card2); color: var(--text); }
+  .mwrow input#mwVal { flex: 0 0 96px; font-weight: 800; text-align: right; }
+  .mwrow .btn { flex: 0 0 auto; }
+  /* 7일 평균 요약 — 큰 숫자 하나와 곁다리 둘 */
+  .mwsum { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-top: 13px;
+    padding-top: 13px; border-top: 1px solid var(--line); }
+  .mwsum b { font-size: 25px; line-height: 1; letter-spacing: -.5px; }
+  .mwsum em { font-style: normal; font-size: 12px; color: var(--sub); }
+  .mwsum .r { margin-left: auto; font-size: 11.5px; color: var(--sub); text-align: right; line-height: 1.5; }
+
   /* 끼니 카드 */
   .meal { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 10px; overflow: hidden; box-shadow: var(--shadow); }
   .meal-head { display: flex; align-items: center; gap: 8px; padding: 13px 15px; cursor: pointer; }
@@ -564,6 +577,15 @@
 
 <!-- ══════════ 인바디 ══════════ -->
 <section id="section-inbody" style="display:none">
+  <div class="card" id="mwCard">
+    <h3>아침 체중 <span class="muted">공복 · 화장실 다녀와서 · 매일 같은 시각</span></h3>
+    <div class="mwrow">
+      <input id="mwDate" type="date">
+      <input id="mwVal" type="number" step="0.1" inputmode="decimal" placeholder="99.0">
+      <button class="btn pri" onclick="saveMw()">기록</button>
+    </div>
+    <div id="mwOut"></div>
+  </div>
   <div class="card" id="ibLatest"></div>
   <div id="ibCharts"></div>
   <div class="card" id="ibChartEmpty"><div class="empty">기록이 없어요</div></div>
@@ -3060,7 +3082,74 @@ async function dedupeInbody() {
   toast(`인바디 중복 ${dups.length}건 정리 (같은 날짜·같은 값)`, 4000);
 }
 
+// ── 아침 체중 ──────────────────────────────────────────────────────────────
+// 인바디 체중과 따로 둔다. 인바디는 전부 저녁 측정이라 아침 공복 값과 1kg 넘게
+// 차이가 나는데, 한 계열에 섞으면 7일 평균이 "그날 언제 쟀나" 에 따라 출렁여서
+// 정작 보려던 추세를 덮어버린다.
+// calc 에 얹어 시트로 같이 다닌다 — META_KEYS 에 이미 있어 재배포가 필요 없다.
+const mwAll = () => (calc.mw && typeof calc.mw === "object") ? calc.mw : {};
+function saveMw() {
+  const d = mwDate.value || todayStr(), v = +mwVal.value;
+  if (!(v > 0)) { toast("체중을 입력하세요"); return; }
+  const mw = { ...mwAll(), [d]: fmt(v) };
+  // 400일치만 남긴다. 추세를 보는 데 그보다 오랜 값은 안 쓰고, 시트 한 칸에는 끝이 있다
+  const keep = Object.keys(mw).sort().slice(-400);
+  calc = { ...calc, mw: Object.fromEntries(keep.map(k => [k, mw[k]])) };
+  save("dt_calc", calc); setMeta("calc", calc);
+  mwVal.value = "";
+  toast(`${d.slice(5).replace("-", "/")} ${fmt(v)}kg 기록`);
+  render();
+}
+// 기간 평균 — 빠진 날은 그냥 뺀다. 매일 못 재도 추세는 나온다
+function mwAvg(from, to) {
+  const mw = mwAll();
+  const v = Object.keys(mw).filter(d => d >= from && d <= to).map(d => +mw[d]).filter(x => x > 0);
+  return v.length ? { avg: v.reduce((a, b) => a + b, 0) / v.length, n: v.length } : null;
+}
+function renderMw() {
+  if (!mwDate.value) mwDate.value = todayStr();
+  const days = Object.keys(mwAll()).sort();
+  if (!days.length) {
+    mwOut.innerHTML = `<div class="hint" style="margin-top:11px">매일 아침 같은 조건에서 재면 <b>7일 평균</b>이 물살을 지운다. 2주 모이면 유지 열량이 맞는지 계산해준다 — 지금 값은 남의 평균치다.</div>`;
+    return;
+  }
+  // 기준점은 오늘이 아니라 마지막으로 잰 날이다. 며칠 걸러도 창이 비지 않는다
+  const last = days[days.length - 1];
+  const a = mwAvg(addDays(last, -6), last), b = mwAvg(addDays(last, -13), addDays(last, -7));
+  const dl = b ? a.avg - b.avg : null;
+  let html = `<div class="mwsum">
+    <b>${fmt(a.avg)}</b><em>kg · 7일 평균 (${a.n}일)</em>
+    <span class="r">최근 ${last.slice(5).replace("-", "/")} · ${fmt(mwAll()[last])}kg</span></div>`;
+  if (dl === null) {
+    html += `<div class="hint">직전 주가 모이면 주간 변화와 유지 열량 검증이 나온다 (앞으로 ${Math.max(1, 14 - days.length)}일쯤).</div>`;
+  } else {
+    // 체중이 말하는 하루 수지. 지방 1kg = 7,700kcal
+    const real = dl * 7700 / 7;
+    // 장부가 말하는 하루 수지 — 식단 기록이 있는 날만 센다
+    let led = 0, n = 0;
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(last, -i), log = dayLog(d);
+      if (!log.length) continue;
+      const g = dayTarget(d);
+      if (!(g.tdee > 0)) continue;
+      led += totals(log).kcal - g.tdee; n++;
+    }
+    const sgn = x => (x > 0 ? "+" : "") + num(Math.round(x));
+    html += `<div class="hint" style="margin-top:9px">지난주 대비 <b style="color:${dl < 0 ? "var(--green)" : "var(--red)"}">${dl > 0 ? "+" : ""}${fmt(dl)}kg</b>`
+          + ` — 체중이 말하는 하루 수지 <b>${sgn(real)}kcal</b></div>`;
+    if (n >= 5) {
+      const err = real - led / n;
+      html += `<div class="hint">장부는 하루 <b>${sgn(led / n)}</b> 이라고 했다 (${n}일 기록).`
+            + ` 차이 <b>${sgn(err)}</b> — 유지 열량을 하루 <b>${num(Math.round(Math.abs(err)))}kcal ${err > 0 ? "높게" : "낮게"}</b> 잡고 있다는 뜻이다.</div>`;
+    } else {
+      html += `<div class="hint">식단 기록이 ${n}일치뿐이라 유지 열량 검증은 아직이다 — 5일은 있어야 한다.</div>`;
+    }
+  }
+  mwOut.innerHTML = html;
+}
+
 function renderInbody() {
+  renderMw();
   const recs = inbody.slice().sort(cmpDate);
   if (recs.length) {
     const cur = recs[recs.length - 1], prev = recs[recs.length - 2];
