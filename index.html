@@ -202,8 +202,12 @@
   .remain-big b { font-size: 31px; line-height: 1; letter-spacing: -1px; flex: 0 0 auto; white-space: nowrap; }
   .remain-big em { font-size: 12px; color: var(--sub); font-style: normal;
     flex: 0 0 auto; white-space: nowrap; }
-  /* 큰 숫자 옆의 누계 — 오늘 하루와 구분되게 점으로 끊는다 */
-  .remain-big em.cum::before { content: "· "; opacity: .55; }
+  /* 큰 숫자 옆의 기록 끝 버튼. 누르면 그 날은 지시로도 손으로도 바로 안 바뀐다 */
+  .donechip { flex: 0 0 auto; align-self: center; border: 1px solid var(--line);
+    background: var(--card2); color: var(--sub); border-radius: 999px;
+    padding: 5px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .donechip.on { border-color: var(--green); color: var(--green); background: transparent; }
+  .donechip:active { background: var(--line); }
   .remain-big .r { margin-left: auto; font-size: 11.5px; color: var(--sub); text-align: right; line-height: 1.55; }
   /* 활동 칩 = 누르면 그날 활동을 고치는 버튼. 평소 하루(기본값) 일 때는 흐리게 */
   .actchip { margin-left: auto; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
@@ -1298,6 +1302,34 @@ async function fullSync() {
 
 // ═════════ 기록 ═════════
 function dayLog(ds) { return cache[ds] || []; }
+// ── 기록 끝 ────────────────────────────────────────────────────────────────
+// 그 날은 다 적었다고 내가 직접 표시하는 것이다. 표시한 날은 지시(inbox)가
+// 아예 못 건드린다 — unlock 을 적어도 안 열린다. 내 손으로 닫은 것은 내 손으로만
+// 연다. '오늘·어제' 자물쇠가 시간으로 막는 것이라면 이건 내가 직접 잠그는 것이고,
+// 그래서 오늘 저녁을 다 먹은 뒤부터는 오늘조차 안 바뀐다.
+// calc 에 얹어 시트로 같이 다닌다 (META_KEYS 에 이미 있어서 재배포가 필요 없다).
+const doneDays = () => Array.isArray(calc.done) ? calc.done : [];
+const isDone = ds => doneDays().indexOf(ds) >= 0;
+function setDone(ds, on) {
+  const rest = doneDays().filter(d => d !== ds);
+  // 400일이 넘으면 앞에서 자른다. 잘려서 잃는 건 화면 표시뿐이다 — 그만큼 지난
+  // 날은 '오늘·어제' 자물쇠가 이미 잠그고 있다
+  calc = { ...calc, done: (on ? rest.concat(ds) : rest).sort().slice(-400) };
+  save("dt_calc", calc); setMeta("calc", calc); render();
+}
+function toggleDone() {
+  if (!isDone(curDate)) { setDone(curDate, true); toast("기록 끝 — 이 날은 이제 안 바뀝니다"); return; }
+  // 닫는 건 되돌릴 수 있으니 안 묻고, 여는 건 안전장치를 떼는 것이라 묻는다
+  if (!confirm(`${dateLabel(curDate)} 기록을 다시 열까요?`)) return;
+  setDone(curDate, false); toast("다시 열었습니다");
+}
+// 손으로 고칠 때도 한 번 막아선다. 지시는 여기까지 오지도 못한다
+function guardDone(ds) {
+  if (!isDone(ds)) return true;
+  if (!confirm(`${dateLabel(ds)} 은 기록이 끝난 날입니다.\n다시 열고 고칠까요?`)) return false;
+  setDone(ds, false);
+  return true;
+}
 function mealLog(ds, meal) { return dayLog(ds).filter(x => mealOf(x) === meal); }
 // 기록에 있는 끼니 번호가 지금 끼니 수보다 크면 자동으로 늘린다 (기록이 숨지 않게)
 function syncMealCount() {
@@ -1322,6 +1354,7 @@ function totals(list) {
   return a;
 }
 async function pushItem(item) {
+  if (!guardDone(item.date || todayStr())) return;
   const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5);
   (cache[item.date] = cache[item.date] || []).push({ ...item, id: tmpId });
   save("dt_cache", cache); render();
@@ -1338,6 +1371,7 @@ async function pushItem(item) {
   }
 }
 async function delItem(ds, id) {
+  if (!guardDone(ds)) return;
   const list = cache[ds] || [];
   const idx = list.findIndex(x => x.id === id);
   if (idx < 0) return;
@@ -2025,7 +2059,7 @@ function renderDay() {
     <div class="remain-big">
       <b style="color:${left < 0 ? "var(--red)" : "var(--text)"}">${num(Math.abs(left))}</b>
       <em>${left < 0 ? "초과" : "남음"}</em>
-      ${cum.days ? `<em class="cum">누계 ${num(Math.abs(cum.plan))}</em>` : ""}
+      <button class="donechip${isDone(curDate) ? " on" : ""}" onclick="toggleDone()">${isDone(curDate) ? "🔒 기록 끝" : "기록 끝"}</button>
       ${g.adjusted
         ? `<button class="actchip${g.isDefault ? " def" : ""}" onclick="openAct()">🔥 ${esc(g.src)} <i>✎</i></button>`
         : `<span class="r">주 평균 목표</span>`}
@@ -3397,12 +3431,13 @@ async function applyPayload(o) {
   // 그보다 앞을 정말 고쳐야 하면 지시에 unlock 을 적는다 (날짜 배열 또는 true).
   const lockFrom = addDays(todayStr(), -1);
   const unl = o.unlock === true ? true : new Set([].concat(o.unlock || []));
-  const locked = ds => ds < lockFrom && unl !== true && !unl.has(ds);
+  // 내가 손으로 닫은 날은 unlock 으로도 안 열린다 — 그게 이 버튼의 뜻이다
+  const locked = ds => isDone(ds) || (ds < lockFrom && unl !== true && !unl.has(ds));
   const blocked = [];
   const openOnly = (arr, what) => (arr || []).filter(x => {
     const ds = x && (x.date || todayStr());
     if (!x || !locked(ds)) return true;
-    blocked.push(`${what} ${ds} ${x.name || ""}`.trim());
+    blocked.push(`${what} ${ds}${isDone(ds) ? "(기록 끝)" : ""} ${x.name || ""}`.trim());
     return false;
   });
   // 인바디는 잠그지 않는다. 하루 한 줄이고 비어 있는 칸만 채우는 구조라 몇 번을
