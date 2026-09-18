@@ -1171,9 +1171,11 @@ async function apiOnce(params) {
       : /찾을 수 없|not found|NoSuchDeployment/i.test(txt) ? "배포를 못 찾음 — 주소 확인"
       : "JSON 아님";
     const err = new Error(`${kind} (HTTP ${res.status}${res.redirected ? " 리다이렉트" : ""}) ${one}`);
-    // 우리 스크립트가 말을 한 게 아니라 구글 프런트엔드가 막은 것이다. 로그인·승인
-    // 문제는 다시 보내도 똑같으니 빼고, 404·5xx 만 일시적인 것으로 본다
-    err.retryable = res.status === 404 || res.status >= 500;
+    // JSON 이 아니면 우리 스크립트가 말을 한 게 아니라 구글이 HTML 을 내민 것이다.
+    // 로그인·승인만 빼고 전부 다시 시도한다 — 404 로 오기도 하고 200 에 오류
+    // 페이지를 실어 오기도 해서 상태코드로 가르면 절반을 놓친다.
+    // 로그인·승인은 다시 보내도 똑같고, 내가 손대야 하는 것이라 덮으면 안 된다.
+    err.retryable = !/로그인|승인/.test(kind);
     throw err;
   }
   if (!j.ok) throw new Error(j.error || "api-error");

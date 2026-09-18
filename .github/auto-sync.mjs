@@ -51,6 +51,19 @@ try {
   logs.push("[실패] " + (e && e.message || e));
   code = 1;
 }
+// 왜 못 닿았는지가 남아야 한다. "시트를 못 읽어서 건너뜀" 한 줄만으로는 구글이
+// 404 를 준 건지, 승인이 풀린 건지, 주소가 틀린 건지 구분이 안 된다 — 그걸
+// 모르면 재실행만 되풀이하게 된다. fullSync 가 잡아둔 메시지를 그대로 꺼낸다.
+try {
+  const why = await page.evaluate(() => ({
+    err: typeof lastSyncErr === "string" ? lastSyncErr : "",
+    hasCfg: !!(typeof cfg !== "undefined" && cfg),
+    days: Object.keys(typeof cache !== "undefined" && cache || {}).length,
+  }));
+  if (!why.hasCfg) logs.push("[동기화] 설정(cfg)이 없다");
+  if (why.err) logs.push("[동기화 실패] " + why.err);
+  logs.push(`[캐시] 시트에서 읽은 날짜 ${why.days}일치`);
+} catch (e) { logs.push("[동기화 확인 실패] " + (e && e.message || e)); }
 // 시트에 못 닿으면 applyInbox 는 아무 말 없이 한 건도 안 넣고 끝난다
 // (markInboxDone 이 setMeta 실패로 false 를 주고 break). 그걸 성공으로 넘기면
 // 나는 반영된 줄 알고 있는데 시트는 비어 있다. 그래서 남은 id 를 직접 세어본다
