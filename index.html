@@ -3706,9 +3706,16 @@ async function applyPayload(o) {
     const ci = a.ci || "", cp = a.cp || {};
     const e = { steps: +a.steps || 0, wh: +a.wh || 0, ch: cardioHours(ci, cp, +a.ch || 0), ci, cp };
     if (a.refeed) e.refeed = 1;
-    act[ds] = (!e.steps && !e.wh && !e.ch) ? { ...e, rest: 1 } : e;
+    // 걸음·웨이트·유산소로 안 잡히는 소모는 xk 에 넣는다 (xl 이 이름).
+    // 지시가 xk 를 안 적었으면 그 날에 있던 값을 지켜서 넘긴다 — saveAct 가
+    // 폼에서 하는 것과 같다. 안 그러면 걸음 수만 고치는 지시가 쌓아둔 상쇄를
+    // 조용히 날린다. 지우려면 "xk": 0 을 일부러 적는다.
+    const xk = a.xk === undefined ? +(act[ds] || {}).xk || 0 : +a.xk || 0;
+    if (xk > 0) { e.xk = xk; e.xl = (a.xk === undefined ? (act[ds] || {}).xl : a.xl) || "추가"; }
+    act[ds] = (!e.steps && !e.wh && !e.ch && !e.xk) ? { ...e, rest: 1 } : e;
     done.push(`활동 ${ds} · 걸음 ${num(e.steps)}${e.wh ? ` · 웨이트 ${durLabel(e.wh)}` : ""}`
-      + (e.ch ? ` · ${cardioLabel(ci, cp)}` : ""));
+      + (e.ch ? ` · ${cardioLabel(ci, cp)}` : "")
+      + (e.xk ? ` · ${e.xl} (+${num(Math.round(e.xk))})` : ""));
   }
   if (actDays.length) pushAct();
   const newP = (o.presets || []).filter(x => x && x.name && !presets.some(z => z.name === x.name));
