@@ -1,0 +1,22 @@
+# 시트를 읽어서 그대로 찍는다. clean=1 로 돌릴 때만 정해둔 중복 줄을 지운다.
+name: 시트 덤프
+on:
+  push:
+    branches: ["claude/**"]
+    paths: [".github/dump.mjs", ".github/workflows/dump.yml"]
+  workflow_dispatch:
+    inputs:
+      clean:
+        description: "1 이면 중복 줄을 지운다"
+        default: "0"
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - run: node .github/dump.mjs
+        env:
+          CLEAN: ${{ inputs.clean }}
