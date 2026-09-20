@@ -99,6 +99,10 @@ function sheetOf(name) {
   const missing = SHEETS[name].filter(function (h) { return have.indexOf(h) < 0; });
   if (missing.length) {
     sh.getRange(1, have.length + 1, 1, missing.length).setValues([missing]);
+    // flush 를 안 하면 바로 뒤의 getLastColumn() 이 아직 옛 값을 준다. 그러면 이
+    // 요청만 새 칸을 모르는 채로 돌아서 방금 만든 칸에 값이 안 들어간다 — 화면에
+    // 안 보이는 값이면 조용히 사라진다. 실제로 time·src 를 붙인 첫 요청이 그랬다.
+    SpreadsheetApp.flush();
   }
   return sh;
 }
