@@ -1037,6 +1037,10 @@ let presetQ = "";                             // 음식 검색어
 function todayStr(d = new Date()) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
+// 기록에 박는 시각은 언제나 한국시각이다. GitHub Action 은 UTC 로 돌아서 그냥
+// new Date() 를 쓰면 액션이 넣은 줄만 9시간 어긋난다 — 시간표로 읽히는 값이라 안 된다.
+// sv-SE 로케일이 "2026-09-20 22:30:15" 모양을 준다.
+function nowKst() { return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul" }); }
 function addDays(ds, n) { const d = new Date(ds + "T00:00:00"); d.setDate(d.getDate() + n); return todayStr(d); }
 function weekStart(ds) { const d = new Date(ds + "T00:00:00"); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return todayStr(d); }
 function monthRange(ym) { const [y, m] = ym.split("-").map(Number); return [ym + "-01", ym + "-" + String(new Date(y, m, 0).getDate()).padStart(2, "0")]; }
@@ -1442,35 +1446,50 @@ function totals(list) {
   list.forEach(x => KEYS.forEach(k => a[k] += (+x[k] || 0)));
   return a;
 }
-async function pushItem(item) {
+// src = "앱"(내가 화면에서 눌렀다) 또는 "지시"(inbox.json 이 넣었다).
+// 화면에는 안 띄운다 — 시트에만 남겨서 나중에 "이 줄이 어디서 왔나" 를 볼 수 있게 한다.
+async function pushItem(item, src) {
   if (!guardDone(item.date || todayStr())) return;
+  const rec = { ...item, time: nowKst(), src: src || "앱" };
   const tmpId = "tmp-" + Date.now() + "-" + Math.floor(Math.random() * 1e5);
-  (cache[item.date] = cache[item.date] || []).push({ ...item, id: tmpId });
+  (cache[rec.date] = cache[rec.date] || []).push({ ...rec, id: tmpId });
   save("dt_cache", cache); render();
   try {
-    const r = await api({ action: "add", item });
-    const list = cache[item.date];
+    const r = await api({ action: "add", item: rec });
+    const list = cache[rec.date];
     const idx = list.findIndex(x => x.id === tmpId);
     // 백엔드가 meal/na/fib 컬럼을 아직 모르면 응답에서 빠지므로 로컬 값을 유지한다
-    if (idx >= 0) list[idx] = { ...item, ...r.item };
+    if (idx >= 0) list[idx] = { ...rec, ...r.item };
+    // time·src 를 되돌려주지 않으면 시트에 그 칸이 없는 것이다. 화면에 안 보이는
+    // 값이라 조용히 버려져도 눈에 안 띈다 — 콘솔에 남겨 액션 로그로 잡히게 한다
+    if (r.item && r.item.src === undefined)
+      console.warn("[백엔드] time·src 칸을 모른다 — Code.gs 를 다시 배포해야 기록이 남는다");
     save("dt_cache", cache); setStatus("● 동기화됨", "var(--green)");
   } catch (e) {
-    pending.push({ ...item, tmpId }); save("dt_pending", pending);
+    pending.push({ ...rec, tmpId }); save("dt_pending", pending);
     setStatus(`● 오프라인 (대기 ${pending.length})`, "var(--red)");
   }
 }
-async function delItem(ds, id) {
+async function delItem(ds, id, src) {
   if (!guardDone(ds)) return;
   const list = cache[ds] || [];
   const idx = list.findIndex(x => x.id === id);
   if (idx < 0) return;
+  const gone = list[idx];
   list.splice(idx, 1); save("dt_cache", cache); render();
   if (String(id).startsWith("tmp-")) {
     const pi = pending.findIndex(x => x.tmpId === id);
     if (pi >= 0) { pending.splice(pi, 1); save("dt_pending", pending); }
-  } else {
-    api({ action: "del", id }).catch(() => setStatus("● 삭제 동기화 실패", "var(--red)"));
+    return;                       // 시트에 닿은 적 없는 줄이라 남길 것도 없다
   }
+  api({ action: "del", id }).catch(() => setStatus("● 삭제 동기화 실패", "var(--red)"));
+  // 지운 줄은 시트에서 사라져 흔적이 안 남는다. 무엇을 언제 누가 지웠는지
+  // log 시트에 한 줄 남긴다 — 이것까지 있어야 이력이 끊기지 않는다.
+  api({ action: "add", type: "log", item: {
+    at: nowKst(), act: "지움", type: "food",
+    date: ds, meal: mealOf(gone) || "", name: gone.name || "",
+    kcal: gone.kcal || 0, src: src || "앱",
+  } }).catch(e => console.warn("[log] 삭제 기록 실패 —", e && e.message || e));
 }
 // 수량 칸을 없앴다 — 칩은 한 번에 1인분씩 들어가고, 양은 기록 후 탭해서 고친다
 function qtyVal() { return 1; }
@@ -3651,7 +3670,7 @@ async function applyPayload(o) {
     // 끼니 이름은 정규화해서 비교한다 — 지시가 "아침"이고 기록이 "1끼"여도 같은 끼니다
     const dm = d.meal ? mealOf({ meal: d.meal }) : "";
     const hits = dayLog(ds).filter(x => x.name === d.name && (!dm || mealOf(x) === dm));
-    for (const h of hits) { await delItem(ds, h.id); done.push(`🗑 ${ds} ${h.name}`); }
+    for (const h of hits) { await delItem(ds, h.id, "지시"); done.push(`🗑 ${ds} ${h.name}`); }
     if (!hits.length) done.push(`🗑 ${d.name} (없어서 건너뜀)`);
   }
   // 인바디는 여러 건이 한꺼번에 올 수 있다 (결과지 일괄 판독). 건별 알림 대신
@@ -3692,7 +3711,7 @@ async function applyPayload(o) {
     const d = it.date || todayStr(), m = mealOf({ meal: it.meal || guessMeal() });
     if (dayLog(d).some(x => mealOf(x) === m && x.name === it.name
                             && Math.abs((+x.kcal || 0) - (+it.kcal || 0)) < 1)) { skipped++; continue; }
-    await pushItem({ ...it, date: d, meal: m });
+    await pushItem({ ...it, date: d, meal: m }, "지시");
     done.push(`${d} ${m} · ${it.name}`);
   }
   if (skipped) done.push(`(중복 ${skipped}건 건너뜀)`);

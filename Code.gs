@@ -22,13 +22,18 @@ const SHEETS = {
   // 한국 영양성분표 의무 표시 9종 + 식이섬유
   //  kcal 열량 / p 단백질 / c 탄수화물 / f 지방 / na 나트륨 / sug 당류
   //  sat 포화지방 / trans 트랜스지방 / chol 콜레스테롤 / fib 식이섬유
-  food:   ["id", "date", "meal", "name", "kcal", "p", "c", "f", "na", "fib", "sug", "sat", "trans", "chol"],
+  //  time 넣은 시각(한국시각) / src 어떻게 들어왔나 — "앱" 이면 손으로, "지시" 면 inbox.json
+  food:   ["id", "date", "meal", "name", "kcal", "p", "c", "f", "na", "fib", "sug", "sat", "trans", "chol",
+           "time", "src"],
   // pa = 위상각(Phase Angle). 수분 이동에 안 흔들려서 진짜 근손실인지 가리는 값
   //  pa 위상각 / ecw 세포외수분비 / vfl 내장지방레벨
   //  tbw 체수분 / prot 단백질 / min 무기질 — 셋에 체지방량을 더하면 체중이 된다
   inbody: ["id", "date", "weight", "smm", "bfm", "pbf", "bmi", "bmr", "score",
-           "tbw", "prot", "min", "pa", "ecw", "vfl", "waist", "whr", "note"],
+           "tbw", "prot", "min", "pa", "ecw", "vfl", "waist", "whr", "note", "time", "src"],
   meta:   ["key", "value"],
+  // 지운 줄은 시트에서 사라지므로 따로 남긴다. 남은 줄은 자기 time·src 를 들고 있고,
+  // 지워진 줄은 여기에만 있어서 둘을 합치면 전체 이력이 된다.
+  log:    ["id", "at", "act", "type", "date", "meal", "name", "kcal", "src"],
 };
 // list 응답에 함께 실어 보낼 meta 키 (앱이 기대하는 것)
 const META_KEYS = ["goals", "presets", "plan", "calc", "act", "sets"];
@@ -43,7 +48,7 @@ function doPost(e) {
     if (!req || !req.action) return out({ ok: false, error: "no-action" });
     if (req.secret !== SECRET) return out({ ok: false, error: "bad-secret" });
 
-    const type = req.type === "inbody" ? "inbody" : "food";
+    const type = (req.type === "inbody" || req.type === "log") ? req.type : "food";
     switch (req.action) {
       case "list":    return out(Object.assign({ ok: true }, listItems(type, req.from, req.to)));
       case "add":     return out({ ok: true, item: addItem(type, req.item) });
