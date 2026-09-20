@@ -27,6 +27,17 @@ async function api(body) {
 }
 
 const sheet = (await api({ action: "list", from: "2026-01-01", to: "2026-12-31" })).items;
+
+// 재배포가 됐는지부터 본다 — time·src 칸이 없으면 백엔드가 옛 버전이다
+const cols = Object.keys(sheet[0] || {});
+const ready = cols.indexOf("time") >= 0 && cols.indexOf("src") >= 0;
+console.log(`### 백엔드 time·src 칸: ${ready ? "있음 ✅ (재배포 완료)" : "없음 ❌ (아직 옛 버전)"}`);
+console.log(`### food 시트 칸: ${cols.join(", ")}`);
+try {
+  const lg = await api({ action: "list", type: "log", from: "2000-01-01", to: "2100-01-01" });
+  console.log(`### log 시트: 있음 ✅ (${lg.items.length}줄)`);
+} catch (e) { console.log(`### log 시트: ${e.message}`); }
+console.log("");
 console.log(`### 시트 식단 줄 수: ${sheet.length}\n`);
 
 // ── 지시가 만든 (날짜|끼니|이름) 집합. del 로 지운 것은 빼준다
