@@ -82,3 +82,20 @@ for (const d of Object.keys(byDate).sort()) {
   console.log(`  ${d}  ${String(rows.length).padStart(2)}줄  ${String(kcal).padStart(5)}kcal`
               + (hand ? `   ← 손으로 넣은 것 ${hand}건` : ""));
 }
+
+// ── 5. 최근 4일은 줄마다 탄단지·나트륨까지 찍는다. 앱에서 손으로 넣은 줄은
+//    kcal 만 있고 나머지가 비어 있을 수 있어서, 하루 합계를 네 칸으로 맞추려면
+//    줄 전체를 봐야 한다 (2026-10-11 — 이름만 적힌 줄을 채운 뒤 확인하려고 붙였다)
+const recent = Object.keys(byDate).sort().slice(-4);
+const n1 = v => (Math.round((+v || 0) * 10) / 10);
+console.log(`\n## 최근 ${recent.length}일 줄 전체 (kcal · 탄 · 단 · 지 · Na · 당 · 섬유)`);
+for (const d of recent) {
+  const rows = byDate[d].slice().sort((a, b) => String(a.meal).localeCompare(String(b.meal), "ko", { numeric: true }));
+  const sum = { kcal: 0, c: 0, p: 0, f: 0, na: 0, sug: 0, fib: 0 };
+  console.log(`  ${d}`);
+  for (const r of rows) {
+    Object.keys(sum).forEach(k => sum[k] += +r[k] || 0);
+    console.log(`    ${r.meal} · ${r.name} — ${Math.round(+r.kcal || 0)} · 탄 ${n1(r.c)} · 단 ${n1(r.p)} · 지 ${n1(r.f)} · Na ${Math.round(+r.na || 0)} · 당 ${n1(r.sug)} · 섬유 ${n1(r.fib)}`);
+  }
+  console.log(`    = 합 ${Math.round(sum.kcal)} · 탄 ${n1(sum.c)} · 단 ${n1(sum.p)} · 지 ${n1(sum.f)} · Na ${Math.round(sum.na)} · 당 ${n1(sum.sug)} · 섬유 ${n1(sum.fib)}`);
+}
